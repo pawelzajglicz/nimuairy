@@ -6,6 +6,8 @@ spring:
   servlet:
     multipart:
       max-file-size: 50MB
+  liquibase:
+    change-log: classpath:/db/changelog/changelog-master.xml
 springdoc:
   default-produces-media-type: application/yaml
 server:
