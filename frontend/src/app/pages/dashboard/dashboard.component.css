@@ -1,0 +1,49 @@
+.dashboard {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.card {
+  display: block;
+  padding: 1.25rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+}
+
+.card:hover {
+  border-color: #2563eb;
+}
+
+.card h2 {
+  margin: 0 0 0.5rem;
+}
+
+.card p {
+  margin: 0;
+  color: #555;
+}

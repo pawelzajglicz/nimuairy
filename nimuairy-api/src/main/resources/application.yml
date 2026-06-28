@@ -1,6 +1,6 @@
 spring:
   application:
-    -name: nimuairy-api
+    name: nimuairy-api
   profiles:
     active: dev
   servlet:
@@ -8,6 +8,14 @@ spring:
       max-file-size: 50MB
   liquibase:
     change-log: classpath:/db/changelog/changelog-master.xml
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+jwt:
+  secret: nimuairy-jwt-secret-key-change-in-production-min-32-chars
+  expiration-ms: 86400000
+
 springdoc:
   default-produces-media-type: application/yaml
 server:

@@ -1,0 +1,27 @@
+<div class="page">
+  <a routerLink="/characters">← Back to list</a>
+  <h1>{{ isEditMode ? 'Edit character' : 'New character' }}</h1>
+
+  @if (errorMessage) {
+    <p class="error">{{ errorMessage }}</p>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <label>
+      Name
+      <input type="text" formControlName="name" />
+    </label>
+
+    <label>
+      Description
+      <textarea rows="4" formControlName="description"></textarea>
+    </label>
+
+    <div class="actions">
+      <button type="submit" [disabled]="form.invalid">
+        {{ isEditMode ? 'Save changes' : 'Create' }}
+      </button>
+      <a routerLink="/characters">Cancel</a>
+    </div>
+  </form>
+</div>

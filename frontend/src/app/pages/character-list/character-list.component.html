@@ -1,0 +1,41 @@
+<div class="page">
+  <header>
+    <div>
+      <a routerLink="/dashboard">← Dashboard</a>
+      <h1>Characters</h1>
+    </div>
+    <a routerLink="/characters/new" class="btn-primary">Add character</a>
+  </header>
+
+  @if (errorMessage) {
+    <p class="error">{{ errorMessage }}</p>
+  }
+
+  @if (characters.length === 0) {
+    <p class="empty">No characters yet.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (character of characters; track character.id) {
+          <tr>
+            <td>{{ character.name }}</td>
+            <td>{{ character.description || '—' }}</td>
+            <td>{{ character.createdAt | date: 'short' }}</td>
+            <td class="actions">
+              <a [routerLink]="['/characters', character.id, 'edit']">Edit</a>
+              <button type="button" (click)="deleteCharacter(character.id)">Delete</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>
