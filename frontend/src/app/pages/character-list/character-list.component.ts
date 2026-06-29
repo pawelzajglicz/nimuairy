@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { CharacterService } from '../../services/character.service';
@@ -8,6 +8,7 @@ import { Character } from '../../models/character.model';
   selector: 'app-character-list',
   imports: [RouterLink, DatePipe],
   templateUrl: './character-list.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './character-list.component.css'
 })
 export class CharacterListComponent implements OnInit {

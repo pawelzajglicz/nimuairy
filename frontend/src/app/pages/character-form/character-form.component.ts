@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CharacterService } from '../../services/character.service';
@@ -7,6 +7,7 @@ import { CharacterService } from '../../services/character.service';
   selector: 'app-character-form',
   imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './character-form.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './character-form.component.css'
 })
 export class CharacterFormComponent implements OnInit {
