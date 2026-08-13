@@ -1,8 +1,6 @@
 spring:
   application:
     name: nimuairy-api
-  profiles:
-    active: dev
   servlet:
     multipart:
       max-file-size: 50MB
