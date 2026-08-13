@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { Character, CharacterRequest } from '../models/character.model';
+import { Page } from '../models/page.model';
 
 @Injectable({ providedIn: 'root' })
 export class CharacterService {
@@ -10,7 +11,9 @@ export class CharacterService {
   private readonly baseUrl = `${environment.apiUrl}/characters`;
 
   getAll(): Observable<Character[]> {
-    return this.http.get<Character[]>(this.baseUrl);
+    return this.http.get<Page<Character>>(this.baseUrl).pipe(
+      map((page) => page.content)
+    );
   }
 
   get(id: number): Observable<Character> {

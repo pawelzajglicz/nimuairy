@@ -6,10 +6,10 @@ import com.nimuairy.nimuairy.exception.ResourceNotFoundException;
 import com.nimuairy.nimuairy.model.Character;
 import com.nimuairy.nimuairy.repository.CharacterRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -18,10 +18,9 @@ public class CharacterService {
     private final CharacterRepository characterRepository;
 
     @Transactional(readOnly = true)
-    public List<CharacterResponse> findAll() {
-        return characterRepository.findAll().stream()
-                .map(CharacterResponse::from)
-                .toList();
+    public Page<CharacterResponse> findAll(Pageable pageable) {
+        return characterRepository.findAll(pageable)
+                .map(CharacterResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -32,8 +31,8 @@ public class CharacterService {
     @Transactional
     public CharacterResponse create(CharacterRequest request) {
         Character character = Character.builder()
-                .name(request.getName())
-                .description(request.getDescription())
+                .name(request.name())
+                .description(request.description())
                 .build();
 
         return CharacterResponse.from(characterRepository.save(character));
@@ -42,8 +41,8 @@ public class CharacterService {
     @Transactional
     public CharacterResponse update(Long id, CharacterRequest request) {
         Character character = getCharacter(id);
-        character.setName(request.getName());
-        character.setDescription(request.getDescription());
+        character.setName(request.name());
+        character.setDescription(request.description());
 
         return CharacterResponse.from(characterRepository.save(character));
     }
