@@ -4,3 +4,6 @@
 *.iml
 *.ipr
 .uploads
+
+### Claude Code ###
+.claude/settings.local.json
