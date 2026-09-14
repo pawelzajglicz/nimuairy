@@ -40,4 +40,15 @@ The battle system is currently a frontend prototype.
 - Prefer immutable state transitions.
 - Keep the battle domain model independent from HTTP and Angular.
 
+## API client
+
+The Angular API client is generated using Orval from the OpenAPI contract.
+
+Generated code must not be edited manually.
+
+Use the generated API types and clients instead of creating duplicate
+request/response models.
+
+Keep generated API code separate from application/domain code.
+
 ## My preferences

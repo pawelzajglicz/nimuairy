@@ -69,6 +69,19 @@ Do not implement multiple battle milestones in one change unless explicitly requ
 
 Prefer small, reviewable commits over large feature implementations.
 
+## API contract and code generation
+
+OpenAPI is the source of truth for the REST API contract.
+
+The Angular API client is generated from OpenAPI using Orval.
+
+Do not manually create or maintain TypeScript models that duplicate
+OpenAPI response/request models.
+
+Generated API code must not be edited manually.
+
+When an API contract changes, regenerate the Angular API client.
+
 ## My preferences
 
 <!-- Project-wide rules. e.g. commit message style, when to plan before coding,
