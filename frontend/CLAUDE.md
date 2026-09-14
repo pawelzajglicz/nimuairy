@@ -8,7 +8,7 @@ Generate files with `ng generate`, not by hand.
 - `inject()` on `private readonly` fields, not constructor injection.
 - Components never call `HttpClient` — services in `services/` do, one method per endpoint,
   returning `Observable`, URLs built from `environment.apiUrl`.
-- `models/` holds plain interfaces mirroring backend DTOs field-for-field. No `any`.
+- `models/` holds API models mirroring backend DTOs field-for-field. Battle domain models may live separately from API models when their responsibilities differ. No `any`.
 - Templates use `@if` / `@for` (with `track`), not `*ngIf` / `*ngFor`.
 - `pages/` = routed components.
 
@@ -24,7 +24,20 @@ Generate files with `ng generate`, not by hand.
 
 The `angular-developer` skill in `.claude/skills/` has the detailed guidance.
 
-## My preferences
+## Battle system
 
-<!-- Style, component size limits, styling approach (plain CSS / Tailwind / SCSS),
-     testing rules, state management. -->
+The battle system is currently a frontend prototype.
+
+- `BattleEngine` contains battle rules and state transitions.
+- Battle rules must not live in Angular components.
+- Battle rules should be framework-independent TypeScript.
+- The engine follows the conceptual model `(state, action) -> state`.
+- Angular components are responsible for presentation and user interaction.
+- Angular services are responsible for communication with the backend.
+- The backend currently provides only the initial `BattleState`.
+- Do not add multiplayer communication yet.
+- Do not introduce NgRx or another state-management library for the battle system unless explicitly requested.
+- Prefer immutable state transitions.
+- Keep the battle domain model independent from HTTP and Angular.
+
+## My preferences

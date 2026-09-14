@@ -19,10 +19,55 @@ Implemented: register/login with JWT, character CRUD. Not built yet: the turn/ba
 - Backend needs the `dev` profile to start: `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev`
 - `jwt.secret` in `application.yml` is a dev placeholder — don't commit real secrets.
 
+### Battle development phase
+
+The battle system is currently being developed as a prototype.
+
+During the current prototype phase:
+
+- The backend provides the initial battle state through an API.
+- Battle rules and battle state transitions temporarily run on the frontend.
+- Battle logic must still be implemented as a separate, framework-independent domain module.
+- Battle logic must not be placed directly inside Angular components or templates.
+- The frontend battle engine should follow the pure `(state, action) -> state` model.
+- The architecture must make it possible to move the battle engine to the backend later.
+- Do not implement multiplayer networking yet.
+
+The future target architecture is:
+
+    Angular
+      -> BattleAction
+      -> Backend
+      -> BattleEngine
+      -> new BattleState
+      -> Angular
+
+The current prototype intentionally uses:
+
+    Backend
+      -> initial BattleState
+      -> Angular BattleEngine
+      -> new BattleState
+
 ## Working with me
 
 This project is also how I'm learning — explain why when you introduce a new pattern.
 Ask before adding a dependency. Prefer small changes over big refactors.
+
+### Working on the battle system
+
+Work on the battle system in small milestones.
+
+Before implementing a milestone:
+
+1. Inspect the existing code and relevant documentation.
+2. Explain the proposed approach briefly.
+3. Identify files that will be changed.
+4. Wait for approval if the task contains architectural ambiguity.
+
+Do not implement multiple battle milestones in one change unless explicitly requested.
+
+Prefer small, reviewable commits over large feature implementations.
 
 ## My preferences
 

@@ -28,11 +28,52 @@ Spring Boot 4.1, Java 25. Runs on :8000 under `/api`. Needs the `dev` profile:
 
 ## Battle engine (when I build it)
 
-Keep the rules in plain Java — pure `(state, action) -> state`, no Spring or JPA. Easy to
-unit-test, and it's where the game actually lives. Services wrap it with loading, persisting
-and permission checks. Sealed interface for action types so `switch` stays exhaustive.
-Validate every request server-side: is it that character's turn, is the action legal, is the
-battle still open, has this turn already been applied.
+## Battle system
+
+### Current prototype phase
+
+The backend does not execute battle rules yet.
+
+For the current prototype:
+
+- Provide a hard-coded initial `BattleState` through the REST API.
+- Do not add database persistence for battle state.
+- Do not implement battle actions on the backend yet.
+- Do not add WebSocket or multiplayer support.
+- Keep the API contract independent from future persistence details.
+
+The demo battle should contain:
+
+- the board definition,
+- one orb,
+- walls,
+- four units for each player,
+- unit type,
+- HP,
+- defense,
+- attack,
+- player ownership,
+- position.
+
+The initial state may be hard-coded in a service.
+
+### Future battle engine
+
+The future authoritative battle engine will live in plain Java:
+
+    (state, action) -> state
+
+It must not depend on Spring or JPA.
+
+Services will later be responsible for:
+
+- loading the battle,
+- validating permissions,
+- passing the action to the battle engine,
+- persisting the resulting state,
+- returning the result to the clients.
+
+The backend will eventually become authoritative for all battle rules.
 
 ## My preferences
 
