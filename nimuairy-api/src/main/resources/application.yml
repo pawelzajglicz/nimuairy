@@ -14,7 +14,5 @@ jwt:
   secret: nimuairy-jwt-secret-key-change-in-production-min-32-chars
   expiration-ms: 86400000
 
-springdoc:
-  default-produces-media-type: application/yaml
 server:
   port: 8000
