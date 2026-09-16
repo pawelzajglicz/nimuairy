@@ -11,9 +11,9 @@ export class CharacterService {
   private readonly baseUrl = `${environment.apiUrl}/characters`;
 
   getAll(): Observable<Character[]> {
-    return this.http.get<Page<Character>>(this.baseUrl).pipe(
-      map((page) => page.content)
-    );
+    return this.http
+      .get<Page<Character>>(this.baseUrl)
+      .pipe(map((page) => page.content));
   }
 
   get(id: number): Observable<Character> {

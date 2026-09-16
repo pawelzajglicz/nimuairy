@@ -6,6 +6,6 @@ import { RouterOutlet } from '@angular/router';
   imports: [RouterOutlet],
   template: '<router-outlet />',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styles: []
+  styles: [],
 })
 export class AppComponent {}

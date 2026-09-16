@@ -31,7 +31,9 @@
             <td>{{ character.createdAt | date: 'short' }}</td>
             <td class="actions">
               <a [routerLink]="['/characters', character.id, 'edit']">Edit</a>
-              <button type="button" (click)="deleteCharacter(character.id)">Delete</button>
+              <button type="button" (click)="deleteCharacter(character.id)">
+                Delete
+              </button>
             </td>
           </tr>
         }

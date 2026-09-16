@@ -7,7 +7,7 @@ import { AuthService } from '../../services/auth.service';
   imports: [RouterLink],
   templateUrl: './dashboard.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './dashboard.component.css'
+  styleUrl: './dashboard.component.css',
 })
 export class DashboardComponent {
   private readonly authService = inject(AuthService);

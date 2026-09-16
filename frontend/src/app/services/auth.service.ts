@@ -3,7 +3,11 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AuthResponse, LoginRequest, RegisterRequest } from '../models/auth.model';
+import {
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+} from '../models/auth.model';
 
 const TOKEN_KEY = 'auth_token';
 
@@ -13,15 +17,15 @@ export class AuthService {
   private readonly router = inject(Router);
 
   register(request: RegisterRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/register`, request).pipe(
-      tap(response => this.saveToken(response.token))
-    );
+    return this.http
+      .post<AuthResponse>(`${environment.apiUrl}/auth/register`, request)
+      .pipe(tap((response) => this.saveToken(response.token)));
   }
 
   login(request: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/login`, request).pipe(
-      tap(response => this.saveToken(response.token))
-    );
+    return this.http
+      .post<AuthResponse>(`${environment.apiUrl}/auth/login`, request)
+      .pipe(tap((response) => this.saveToken(response.token)));
   }
 
   logout(): void {

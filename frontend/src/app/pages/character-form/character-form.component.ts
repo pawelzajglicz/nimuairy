@@ -1,4 +1,9 @@
-import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  inject,
+  OnInit,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CharacterService } from '../../services/character.service';
@@ -8,7 +13,7 @@ import { CharacterService } from '../../services/character.service';
   imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './character-form.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './character-form.component.css'
+  styleUrl: './character-form.component.css',
 })
 export class CharacterFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
@@ -22,7 +27,7 @@ export class CharacterFormComponent implements OnInit {
 
   form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(255)]],
-    description: ['', Validators.maxLength(2000)]
+    description: ['', Validators.maxLength(2000)],
   });
 
   ngOnInit(): void {
@@ -42,18 +47,21 @@ export class CharacterFormComponent implements OnInit {
 
     const payload = {
       name: this.form.controls.name.value,
-      description: this.form.controls.description.value || null
+      description: this.form.controls.description.value || null,
     };
 
-    const request$ = this.isEditMode && this.characterId != null
-      ? this.characterService.update(this.characterId, payload)
-      : this.characterService.create(payload);
+    const request$ =
+      this.isEditMode && this.characterId != null
+        ? this.characterService.update(this.characterId, payload)
+        : this.characterService.create(payload);
 
     request$.subscribe({
       next: () => this.router.navigate(['/characters']),
       error: () => {
-        this.errorMessage = this.isEditMode ? 'Failed to update character' : 'Failed to create character';
-      }
+        this.errorMessage = this.isEditMode
+          ? 'Failed to update character'
+          : 'Failed to create character';
+      },
     });
   }
 
@@ -62,12 +70,12 @@ export class CharacterFormComponent implements OnInit {
       next: (character) => {
         this.form.patchValue({
           name: character.name,
-          description: character.description ?? ''
+          description: character.description ?? '',
         });
       },
       error: () => {
         this.errorMessage = 'Character not found';
-      }
+      },
     });
   }
 }

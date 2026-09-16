@@ -1,4 +1,9 @@
-import { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  inject,
+  OnInit,
+  ChangeDetectionStrategy,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { CharacterService } from '../../services/character.service';
@@ -9,7 +14,7 @@ import { Character } from '../../models/character.model';
   imports: [RouterLink, DatePipe],
   templateUrl: './character-list.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './character-list.component.css'
+  styleUrl: './character-list.component.css',
 })
 export class CharacterListComponent implements OnInit {
   private readonly characterService = inject(CharacterService);
@@ -30,7 +35,7 @@ export class CharacterListComponent implements OnInit {
       next: () => this.loadCharacters(),
       error: () => {
         this.errorMessage = 'Failed to delete character';
-      }
+      },
     });
   }
 
@@ -41,7 +46,7 @@ export class CharacterListComponent implements OnInit {
       },
       error: () => {
         this.errorMessage = 'Failed to load characters';
-      }
+      },
     });
   }
 }

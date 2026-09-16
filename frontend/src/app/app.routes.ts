@@ -10,9 +10,25 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: 'login', component: LoginComponent, canActivate: [guestGuard] },
   { path: 'register', component: RegisterComponent, canActivate: [guestGuard] },
-  { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
-  { path: 'characters', component: CharacterListComponent, canActivate: [authGuard] },
-  { path: 'characters/new', component: CharacterFormComponent, canActivate: [authGuard] },
-  { path: 'characters/:id/edit', component: CharacterFormComponent, canActivate: [authGuard] },
-  { path: '**', redirectTo: 'dashboard' }
+  {
+    path: 'dashboard',
+    component: DashboardComponent,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'characters',
+    component: CharacterListComponent,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'characters/new',
+    component: CharacterFormComponent,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'characters/:id/edit',
+    component: CharacterFormComponent,
+    canActivate: [authGuard],
+  },
+  { path: '**', redirectTo: 'dashboard' },
 ];

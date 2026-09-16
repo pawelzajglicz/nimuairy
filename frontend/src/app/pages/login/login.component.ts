@@ -8,7 +8,7 @@ import { AuthService } from '../../services/auth.service';
   imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './login.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './login.component.css'
+  styleUrl: './login.component.css',
 })
 export class LoginComponent {
   private readonly fb = inject(FormBuilder);
@@ -19,7 +19,7 @@ export class LoginComponent {
 
   form = this.fb.nonNullable.group({
     username: ['', Validators.required],
-    password: ['', Validators.required]
+    password: ['', Validators.required],
   });
 
   onSubmit(): void {
@@ -33,7 +33,7 @@ export class LoginComponent {
       next: () => this.router.navigate(['/dashboard']),
       error: () => {
         this.errorMessage = 'Invalid username or password';
-      }
+      },
     });
   }
 }
