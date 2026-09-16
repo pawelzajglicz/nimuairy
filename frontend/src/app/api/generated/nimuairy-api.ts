@@ -5,17 +5,30 @@
  * OpenAPI spec version: v0
  */
 import {
-  HttpClient
+  HttpClient,
+  HttpHeaders,
+  httpResource
 } from '@angular/common/http';
 import type {
   HttpContext,
   HttpEvent,
-  HttpParams
+  HttpParams,
+  HttpResourceOptions,
+  HttpResourceRef,
+  HttpResourceRequest
+} from '@angular/common/http';
+
+import type {
+  HttpResponse as AngularHttpResponse
 } from '@angular/common/http';
 
 import {
   Injectable,
   inject
+} from '@angular/core';
+import type {
+  ResourceStatus,
+  Signal
 } from '@angular/core';
 
 import type {
@@ -32,47 +45,84 @@ import type {
   RegisterRequest
 } from './model';
 
-import type {
-  HttpHeaders,
-  HttpResponse as AngularHttpResponse
-} from '@angular/common/http';
+import {
+  map
+} from 'rxjs';
 
-interface HttpClientOptions {
-  readonly headers?: HttpHeaders | Record<string, string | string[]>;
-  readonly context?: HttpContext;
-  readonly params?:
-        | HttpParams
-      | Record<string, string | number | boolean | Array<string | number | boolean>>;
-  readonly reportProgress?: boolean;
-  readonly withCredentials?: boolean;
-  readonly credentials?: RequestCredentials;
-  readonly keepalive?: boolean;
-  readonly priority?: RequestPriority;
-  readonly cache?: RequestCache;
-  readonly mode?: RequestMode;
-  readonly redirect?: RequestRedirect;
-  readonly referrer?: string;
-  readonly integrity?: string;
-  readonly referrerPolicy?: ReferrerPolicy;
-  readonly transferCache?: {includeHeaders?: string[]} | boolean;
-  readonly timeout?: number;
+export interface OrvalHttpResourceRequestExtension {
+  /** Extra headers merged over generated headers. Pass a function to read signals reactively. */
+  headers?: HttpResourceRequest['headers'] | (() => HttpResourceRequest['headers']);
+  /** Angular HttpContext forwarded to the underlying request. Pass a function to derive it reactively. */
+  context?: HttpContext | (() => HttpContext);
+  /** Last-resort escape hatch: transform the final request descriptor. Runs inside the resource's reactive context. */
+  request?: (request: HttpResourceRequest) => HttpResourceRequest;
 }
 
-type HttpClientBodyOptions = HttpClientOptions & {
-  readonly observe?: 'body';
-};
+export type OrvalHttpResourceOptions<TValue, TRaw = unknown, TOmitParse extends boolean = false> =
+  (TOmitParse extends true
+    ? Omit<HttpResourceOptions<TValue, TRaw>, 'parse'>
+    : HttpResourceOptions<TValue, TRaw>) &
+  OrvalHttpResourceRequestExtension;
 
-type HttpClientEventOptions = HttpClientOptions & {
-  readonly observe: 'events';
-};
+function mergeOrvalResourceHeaders(
+  base: HttpResourceRequest['headers'],
+  extra: NonNullable<HttpResourceRequest['headers']>,
+): NonNullable<HttpResourceRequest['headers']> {
+  if (!base) return extra;
+  if (base instanceof HttpHeaders || extra instanceof HttpHeaders) {
+    const toHeaderValue = (
+      value: string | readonly string[],
+    ): string | string[] =>
+      Array.isArray(value) ? Array.from(value, String) : String(value);
+    let merged =
+      base instanceof HttpHeaders
+        ? base
+        : Object.entries(base).reduce(
+            (headers, [key, value]) => headers.set(key, toHeaderValue(value)),
+            new HttpHeaders(),
+          );
+    const extraRecord =
+      extra instanceof HttpHeaders
+        ? extra.keys().reduce<Record<string, string[]>>((record, key) => {
+            const values = extra.getAll(key);
+            if (values) record[key] = values;
+            return record;
+          }, {})
+        : extra;
+    for (const [key, value] of Object.entries(extraRecord)) {
+      merged = merged.set(key, toHeaderValue(value));
+    }
+    return merged;
+  }
+  return { ...base, ...extra };
+}
 
-type HttpClientResponseOptions = HttpClientOptions & {
-  readonly observe: 'response';
-};
-
-type HttpClientObserveOptions = HttpClientOptions & {
-  readonly observe?: 'body' | 'events' | 'response';
-};
+export function applyOrvalRequestExtension(
+  request: string | HttpResourceRequest,
+  options?: OrvalHttpResourceRequestExtension,
+): HttpResourceRequest {
+  const base: HttpResourceRequest = typeof request === 'string' ? { url: request } : request;
+  if (
+    !options ||
+    (options.headers === undefined &&
+      options.context === undefined &&
+      options.request === undefined)
+  ) {
+    return base;
+  }
+  let next: HttpResourceRequest = { ...base };
+  const extraHeaders =
+    typeof options.headers === 'function' ? options.headers() : options.headers;
+  if (extraHeaders) {
+    next = { ...next, headers: mergeOrvalResourceHeaders(next.headers, extraHeaders) };
+  }
+  const context =
+    typeof options.context === 'function' ? options.context() : options.context;
+  if (context !== undefined) {
+    next = { ...next, context };
+  }
+  return options.request ? options.request(next) : next;
+}
 
 type AngularHttpParamValue = string | number | boolean | Array<string | number | boolean>;
 type AngularHttpParamValueWithNullable = AngularHttpParamValue | null;
@@ -218,6 +268,74 @@ function filterParams(
   }
   return filteredParams;
 }
+/**
+ * @remarks httpResource is available in Angular 19.2 and later.
+ */
+export function getByIdResource(id: Signal<number>,
+  options: OrvalHttpResourceOptions<CharacterResponse, unknown> & { defaultValue: NoInfer<CharacterResponse> }): HttpResourceRef<CharacterResponse>;
+export function getByIdResource(id: Signal<number>,
+  options?: OrvalHttpResourceOptions<CharacterResponse, unknown>): HttpResourceRef<CharacterResponse | undefined>;
+export function getByIdResource(id: Signal<number>,
+  options?: OrvalHttpResourceOptions<CharacterResponse, unknown>): HttpResourceRef<CharacterResponse | undefined> {
+  return httpResource<CharacterResponse>(() => applyOrvalRequestExtension(`/api/characters/${id()}`, options), options);
+}
+
+/**
+ * @remarks httpResource is available in Angular 19.2 and later.
+ */
+export function getAllResource(params: Signal<GetAllParams>,
+  options: OrvalHttpResourceOptions<PageCharacterResponse, unknown> & { defaultValue: NoInfer<PageCharacterResponse> }): HttpResourceRef<PageCharacterResponse>;
+export function getAllResource(params: Signal<GetAllParams>,
+  options?: OrvalHttpResourceOptions<PageCharacterResponse, unknown>): HttpResourceRef<PageCharacterResponse | undefined>;
+export function getAllResource(params: Signal<GetAllParams>,
+  options?: OrvalHttpResourceOptions<PageCharacterResponse, unknown>): HttpResourceRef<PageCharacterResponse | undefined> {
+  return httpResource<PageCharacterResponse>(() => {
+
+    const request = ({
+      url: `/api/characters`,
+      params: filterParams(params?.() ?? {}, new Set<string>([]), false, new Set<string>([]), {"pageable":"flatten"} as const)
+    });
+    return applyOrvalRequestExtension(request, options);
+  }, options);
+}
+
+
+interface HttpClientOptions {
+  readonly headers?: HttpHeaders | Record<string, string | string[]>;
+  readonly context?: HttpContext;
+  readonly params?:
+        | HttpParams
+      | Record<string, string | number | boolean | Array<string | number | boolean>>;
+  readonly reportProgress?: boolean;
+  readonly withCredentials?: boolean;
+  readonly credentials?: RequestCredentials;
+  readonly keepalive?: boolean;
+  readonly priority?: RequestPriority;
+  readonly cache?: RequestCache;
+  readonly mode?: RequestMode;
+  readonly redirect?: RequestRedirect;
+  readonly referrer?: string;
+  readonly integrity?: string;
+  readonly referrerPolicy?: ReferrerPolicy;
+  readonly transferCache?: {includeHeaders?: string[]} | boolean;
+  readonly timeout?: number;
+}
+
+type HttpClientBodyOptions = HttpClientOptions & {
+  readonly observe?: 'body';
+};
+
+type HttpClientEventOptions = HttpClientOptions & {
+  readonly observe: 'events';
+};
+
+type HttpClientResponseOptions = HttpClientOptions & {
+  readonly observe: 'response';
+};
+
+type HttpClientObserveOptions = HttpClientOptions & {
+  readonly observe?: 'body' | 'events' | 'response';
+};
 
 
 
@@ -226,36 +344,6 @@ function filterParams(
 @Injectable({ providedIn: 'root' })
 export class OpenAPIDefinitionService {
   private readonly http = inject(HttpClient);
- getById<TData = CharacterResponse>(id: number, options?: HttpClientBodyOptions): Observable<TData>;
- getById<TData = CharacterResponse>(id: number, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
- getById<TData = CharacterResponse>(id: number, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
-  getById<TData = CharacterResponse>(
-    id: number, options?: HttpClientObserveOptions): Observable<TData | HttpEvent<TData> | AngularHttpResponse<TData>> {
-    if (options?.observe === 'events') {
-      return this.http.get<TData>(
-      `/api/characters/${id}`,{
-        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'events',
-      }
-    );
-    }
-
-    if (options?.observe === 'response') {
-      return this.http.get<TData>(
-      `/api/characters/${id}`,{
-        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'response',
-      }
-    );
-    }
-
-    return this.http.get<TData>(
-      `/api/characters/${id}`,{
-        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'body',
-      }
-    );
-  }
 
  update<TData = CharacterResponse>(id: number,
     characterRequest: CharacterRequest, options?: HttpClientBodyOptions): Observable<TData>;
@@ -323,39 +411,6 @@ export class OpenAPIDefinitionService {
         ...(options as Omit<NonNullable<typeof options>, 'observe'>),
         observe: 'body',
       }
-    );
-  }
-
- getAll<TData = PageCharacterResponse>(params: GetAllParams, options?: HttpClientBodyOptions): Observable<TData>;
- getAll<TData = PageCharacterResponse>(params: GetAllParams, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
- getAll<TData = PageCharacterResponse>(params: GetAllParams, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
-  getAll<TData = PageCharacterResponse>(
-    params: GetAllParams, options?: HttpClientObserveOptions): Observable<TData | HttpEvent<TData> | AngularHttpResponse<TData>> {
-    const filteredParams = filterParams({...params, ...options?.params}, new Set<string>([]), false, new Set<string>([]), {"pageable":"flatten"} as const);
-
-    if (options?.observe === 'events') {
-      return this.http.get<TData>(
-      `/api/characters`,{
-    ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'events',
-        params: filteredParams,}
-    );
-    }
-
-    if (options?.observe === 'response') {
-      return this.http.get<TData>(
-      `/api/characters`,{
-    ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'response',
-        params: filteredParams,}
-    );
-    }
-
-    return this.http.get<TData>(
-      `/api/characters`,{
-    ...(options as Omit<NonNullable<typeof options>, 'observe'>),
-        observe: 'body',
-        params: filteredParams,}
     );
   }
 
@@ -462,3 +517,62 @@ export class OpenAPIDefinitionService {
   }
 
 };
+
+export type GetByIdResourceResult = NonNullable<CharacterResponse>
+export type GetAllResourceResult = NonNullable<PageCharacterResponse>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export type UpdateClientResult = NonNullable<CharacterResponse>
+export type _DeleteClientResult = NonNullable<void>
+export type CreateClientResult = NonNullable<CharacterResponse>
+export type RegisterClientResult = NonNullable<AuthResponse>
+export type LoginClientResult = NonNullable<AuthResponse>
+
+/**
+ * Utility type for httpResource results with status tracking.
+ * Inspired by @angular-architects/ngrx-toolkit withResource pattern.
+ *
+ * Uses `globalThis.Error` to avoid collision with API model types named `Error`.
+ */
+export interface ResourceState<T> {
+  readonly value: Signal<T | undefined>;
+  readonly status: Signal<ResourceStatus>;
+  readonly error: Signal<globalThis.Error | undefined>;
+  readonly isLoading: Signal<boolean>;
+  /** Guard reads of `value()` with this call: `value()` throws in the error state. */
+  readonly hasValue: () => this is ResolvedResourceState<T>;
+  readonly reload: () => boolean;
+}
+
+export interface ResolvedResourceState<T> extends ResourceState<T> {
+  readonly value: Signal<Exclude<T, undefined>>;
+}
+
+/**
+ * Wraps an HttpResourceRef to expose a consistent ResourceState interface.
+ * Useful when integrating with NgRx SignalStore via withResource().
+ */
+export function toResourceState<T>(ref: HttpResourceRef<T>): ResourceState<T> {
+  return {
+    value: ref.value,
+    status: ref.status,
+    error: ref.error,
+    isLoading: ref.isLoading,
+    hasValue(this: ResourceState<T>): this is ResolvedResourceState<T> {
+      return ref.hasValue();
+    },
+    reload: () => ref.reload(),
+  };
+}

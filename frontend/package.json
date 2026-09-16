@@ -10,6 +10,10 @@
     "api:generate": "orval"
   },
   "private": true,
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "@angular/common": "^22.0.4",
     "@angular/compiler": "^22.0.4",

@@ -18,6 +18,12 @@ export default defineConfig({
       client: 'angular',
       target: 'src/app/api/generated/nimuairy-api.ts',
       schemas: 'src/app/api/generated/model',
+      override: {
+        angular: {
+          // GET endpoints -> httpResource() signals, everything else -> HttpClient service.
+          client: 'httpResource',
+        },
+      },
     },
   },
 });
