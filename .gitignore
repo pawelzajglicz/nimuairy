@@ -7,3 +7,6 @@
 
 ### Claude Code ###
 .claude/settings.local.json
+
+### Local MCP configuration
+.mcp.json

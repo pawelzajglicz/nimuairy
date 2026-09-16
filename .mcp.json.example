@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "angular-cli": {
+      "command": "C:\\PATH\\TO\\YOUR\\node.exe",
+      "args": [
+        "node_modules/@angular/cli/bin/ng.js",
+        "mcp"
+      ],
+      "cwd": "frontend"
+    }
+  }
+}
