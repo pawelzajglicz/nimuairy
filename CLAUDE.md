@@ -86,3 +86,9 @@ When an API contract changes, regenerate the Angular API client.
 
 <!-- Project-wide rules. e.g. commit message style, when to plan before coding,
      whether to write tests by default. -->
+
+## Learning Goals
+
+Nimuairy is also a learning project focused on AI-assisted software development and modern Angular, Java, and Spring Boot practices.
+
+See [docs/LEARNING_GOALS.md](docs/LEARNING_GOALS.md) for details.
