@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap } from 'rxjs';
@@ -16,6 +16,10 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
 
+  readonly token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
+
+  readonly isLoggedIn = computed(() => this.token() !== null);
+
   register(request: RegisterRequest): Observable<AuthResponse> {
     return this.http
       .post<AuthResponse>(`${environment.apiUrl}/auth/register`, request)
@@ -30,18 +34,16 @@ export class AuthService {
 
   logout(): void {
     localStorage.removeItem(TOKEN_KEY);
+    this.token.set(null);
     this.router.navigate(['/login']);
   }
 
   getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
-  }
-
-  isLoggedIn(): boolean {
-    return !!this.getToken();
+    return this.token();
   }
 
   private saveToken(token: string): void {
     localStorage.setItem(TOKEN_KEY, token);
+    this.token.set(token);
   }
 }

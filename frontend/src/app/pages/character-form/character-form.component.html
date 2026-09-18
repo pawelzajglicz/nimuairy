@@ -1,9 +1,9 @@
 <div class="page">
   <a routerLink="/characters">← Back to list</a>
-  <h1>{{ isEditMode ? 'Edit character' : 'New character' }}</h1>
+  <h1>{{ isEditMode() ? 'Edit character' : 'New character' }}</h1>
 
-  @if (errorMessage) {
-    <p class="error">{{ errorMessage }}</p>
+  @if (errorMessage()) {
+    <p class="error">{{ errorMessage() }}</p>
   }
 
   <form [formGroup]="form" (ngSubmit)="onSubmit()">
@@ -19,7 +19,7 @@
 
     <div class="actions">
       <button type="submit" [disabled]="form.invalid">
-        {{ isEditMode ? 'Save changes' : 'Create' }}
+        {{ isEditMode() ? 'Save changes' : 'Create' }}
       </button>
       <a routerLink="/characters">Cancel</a>
     </div>

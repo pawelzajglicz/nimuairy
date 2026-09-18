@@ -1,4 +1,4 @@
-import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -7,7 +7,6 @@ import { AuthService } from '../../services/auth.service';
   selector: 'app-login',
   imports: [ReactiveFormsModule, RouterLink],
   templateUrl: './login.component.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './login.component.css',
 })
 export class LoginComponent {
@@ -15,7 +14,7 @@ export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
-  errorMessage = '';
+  readonly errorMessage = signal('');
 
   form = this.fb.nonNullable.group({
     username: ['', Validators.required],
@@ -28,11 +27,11 @@ export class LoginComponent {
       return;
     }
 
-    this.errorMessage = '';
+    this.errorMessage.set('');
     this.authService.login(this.form.getRawValue()).subscribe({
       next: () => this.router.navigate(['/dashboard']),
       error: () => {
-        this.errorMessage = 'Invalid username or password';
+        this.errorMessage.set('Invalid username or password');
       },
     });
   }

@@ -1,8 +1,8 @@
 <div class="auth-card">
   <h1>Register</h1>
 
-  @if (errorMessage) {
-    <p class="error">{{ errorMessage }}</p>
+  @if (errorMessage()) {
+    <p class="error">{{ errorMessage() }}</p>
   }
 
   <form [formGroup]="form" (ngSubmit)="onSubmit()">
