@@ -37,6 +37,7 @@ import type {
 
 import type {
   AuthResponse,
+  BattleStateResponse,
   CharacterRequest,
   CharacterResponse,
   GetAllParams,
@@ -299,6 +300,15 @@ export function getAllResource(params: Signal<GetAllParams>,
   }, options);
 }
 
+/**
+ * @remarks httpResource is available in Angular 19.2 and later.
+ */
+export function getDemoBattleResource(options: OrvalHttpResourceOptions<BattleStateResponse, unknown> & { defaultValue: NoInfer<BattleStateResponse> }): HttpResourceRef<BattleStateResponse>;
+export function getDemoBattleResource(options?: OrvalHttpResourceOptions<BattleStateResponse, unknown>): HttpResourceRef<BattleStateResponse | undefined>;
+export function getDemoBattleResource(options?: OrvalHttpResourceOptions<BattleStateResponse, unknown>): HttpResourceRef<BattleStateResponse | undefined> {
+  return httpResource<BattleStateResponse>(() => applyOrvalRequestExtension(`/api/v1/battles/demo`, options), options);
+}
+
 
 interface HttpClientOptions {
   readonly headers?: HttpHeaders | Record<string, string | string[]>;
@@ -520,6 +530,9 @@ export class OpenAPIDefinitionService {
 
 export type GetByIdResourceResult = NonNullable<CharacterResponse>
 export type GetAllResourceResult = NonNullable<PageCharacterResponse>
+export type GetDemoBattleResourceResult = NonNullable<BattleStateResponse>
+
+
 
 
 

@@ -6,12 +6,24 @@
  */
 
 export * from './authResponse';
+export * from './battleStateResponse';
+export * from './boardDto';
 export * from './characterRequest';
 export * from './characterResponse';
 export * from './getAllParams';
 export * from './loginRequest';
+export * from './orbDto';
+export * from './orbDtoOwner';
 export * from './pageable';
 export * from './pageableObject';
 export * from './pageCharacterResponse';
+export * from './positionDto';
 export * from './registerRequest';
 export * from './sortObject';
+export * from './terrainCellDto';
+export * from './terrainCellDtoType';
+export * from './unitDto';
+export * from './unitDtoOwner';
+export * from './unitDtoUnitType';
+export * from './wallDto';
+export * from './wallDtoOwner';
