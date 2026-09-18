@@ -3,7 +3,7 @@
 A turn-based game. Java/Spring Boot backend (`nimuairy-api/`), Angular frontend (`frontend/`),
 PostgreSQL via `docker compose up -d`. Each subproject has its own CLAUDE.md.
 
-Implemented: register/login with JWT, character CRUD. Not built yet: the turn/battle engine.
+Implemented: register/login with JWT, character CRUD. The battle system is under incremental development.
 
 ## Terms
 
@@ -21,7 +21,7 @@ Implemented: register/login with JWT, character CRUD. Not built yet: the turn/ba
 
 ### Battle development phase
 
-The battle system is currently being developed as a prototype.
+The battle system is currently being developed incrementally as a prototype.
 
 During the current prototype phase:
 
@@ -30,6 +30,8 @@ During the current prototype phase:
 - Battle logic must still be implemented as a separate, framework-independent domain module.
 - Battle logic must not be placed directly inside Angular components or templates.
 - The frontend battle engine should follow the pure `(state, action) -> state` model.
+- The frontend battle feature uses SignalStore for battle state management.
+- SignalStore is a state-management boundary, not the location for battle rules.
 - The architecture must make it possible to move the battle engine to the backend later.
 - Do not implement multiplayer networking yet.
 
