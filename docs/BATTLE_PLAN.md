@@ -31,6 +31,11 @@ not duplicate the full game design.
         v
     new BattleState
 
+During M2, the Angular battle feature introduces a SignalStore as the
+frontend state-management boundary for the battle screen. The store owns the
+currently loaded `BattleState` and request lifecycle; it does not contain
+battle rules.
+
 ## Future architecture
 
     Angular
@@ -89,10 +94,45 @@ Load the battle from the backend and render the complete 21 × 11 board:
 - both walls,
 - units.
 
-Orbs and walls use the same grid coordinate system as units.
+M2 is a read-only rendering milestone. It does not implement selection,
+movement, combat, turns, or other gameplay actions.
 
-The UI must render unit footprints rather than assuming that every unit
-occupies exactly one cell.
+The intended frontend structure is:
+
+    BattleDemoPage
+        |
+        v
+    BattleBoard
+        |
+        +-- BoardGrid
+        |     +-- CellComponent × 231
+        |
+        +-- EntityLayer
+              +-- Wall visuals
+              +-- Orb visuals
+              +-- Unit visuals
+
+Use one CSS Grid as the board's screen coordinate system. The board grid and
+entity layer share the same board rectangle and the same domain-to-screen
+coordinate mapping.
+
+The domain coordinate system remains Cartesian with `(0,0)` at the
+bottom-left. Inverting the Y axis for CSS/DOM rendering is a frontend
+presentation concern.
+
+Object rendering uses `position` as the anchor and `footprint` as relative
+offsets. The UI must not assume that an object always occupies one cell.
+
+`CellComponent` represents one terrain cell. 231 cells are intentionally
+acceptable for this board size; M2 should not introduce canvas, SVG, or other
+rendering infrastructure solely for premature performance optimization.
+
+Battle state is managed by a SignalStore scoped to `BattleDemoPage`. This
+allows the page and future child components around the board to consume the
+same battle state without making the store a root-level singleton.
+
+Keep terrain, structures, objectives, and units conceptually distinct even
+though M2 uses a shared entity layer for their DOM rendering.
 
 ### M3 — Unit Selection
 
