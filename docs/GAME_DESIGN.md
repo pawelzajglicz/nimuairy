@@ -30,7 +30,7 @@ The entire game area is represented by a single rectangular grid.
 
 Objects that were visually outside the grid in the old prototype, such as walls and orbs, are now part of the grid and use the same coordinate system as all other game objects.
 
-The initial board planned for M1 is 19 x 11 cells.
+The initial board planned for M1 is 21 x 11 cells.
 
 The exact initial placement of all objects is part of the M1 demo battle state.
 
@@ -266,7 +266,7 @@ M1 provides a deterministic, hard-coded initial battle.
 
 The initial battle should contain:
 
-- a 19 x 11 board,
+- a 21 x 11 board,
 - two player orbs,
 - two player walls,
 - four units for player 1,

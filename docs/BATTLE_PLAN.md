@@ -56,7 +56,7 @@ Backend returns a deterministic, hard-coded initial `BattleState`.
 
 Contains:
 
-- a 19 × 11 board,
+- a 21 × 11 board,
 - terrain information for the board,
 - one orb for each player,
 - one wall protecting each player's orb,
@@ -82,7 +82,7 @@ No database.
 
 ### M2 — Battle Board
 
-Load the battle from the backend and render the complete 19 × 11 board:
+Load the battle from the backend and render the complete 21 × 11 board:
 
 - terrain,
 - both orbs,
