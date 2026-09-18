@@ -46,6 +46,7 @@ Areas of interest include:
 
 - modern standalone Angular applications
 - signals and modern reactive APIs
+- SignalStore and signal-based state management
 - `httpResource` and modern HTTP patterns
 - Angular routing
 - dependency injection with `inject()`
@@ -57,6 +58,9 @@ Areas of interest include:
 - Angular performance considerations
 - integration with OpenAPI-generated API clients
 - current Angular architecture and recommended practices
+- provider scopes and hierarchical dependency injection for feature state
+
+SignalStore is an intentional learning topic in the battle system. It should be introduced where it provides a useful state-management boundary, even when a smaller feature could technically work without a dedicated store.
 
 When implementing new Angular functionality, prefer current, documented Angular approaches over patterns kept only for backward compatibility, unless there is a specific reason to use the older approach.
 
@@ -138,6 +142,7 @@ Important principles include:
 - avoiding premature abstraction
 - keeping current requirements separate from future requirements
 - designing for future server-authoritative multiplayer without implementing unnecessary complexity prematurely
+- using feature-scoped state where the lifetime of state belongs to a feature rather than the whole application
 
 Architecture should evolve incrementally as the application grows.
 
