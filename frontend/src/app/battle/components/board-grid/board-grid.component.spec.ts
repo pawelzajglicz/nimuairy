@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { describe, expect, it } from 'vitest';
 import type { BoardDto, TerrainCellDto } from '../../../api/generated/model';
 import { BoardGridComponent } from './board-grid.component';
 

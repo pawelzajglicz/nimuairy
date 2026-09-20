@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { toGridPosition } from './coordinate-mapper';
 
 describe('toGridPosition', () => {
