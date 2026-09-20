@@ -1,5 +1,9 @@
 import { Component, computed, input } from '@angular/core';
-import type { BoardDto, PositionDto, TerrainCellDtoType } from '../../../api/generated/model';
+import type {
+  BoardDto,
+  PositionDto,
+  TerrainCellDtoType,
+} from '../../../api/generated/model';
 import { toGridPosition } from '../../utils/coordinate-mapper';
 import { CellComponent } from '../cell/cell.component';
 

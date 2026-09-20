@@ -37,13 +37,34 @@ export class EntityLayerComponent {
     // Walls first, then orbs, then units, so units render on top when footprints overlap.
     return [
       ...(state?.walls ?? []).flatMap((wall) =>
-        footprintCells('wall', wall.owner, wall.id, wall.position, wall.footprint, height),
+        footprintCells(
+          'wall',
+          wall.owner,
+          wall.id,
+          wall.position,
+          wall.footprint,
+          height,
+        ),
       ),
       ...(state?.orbs ?? []).flatMap((orb) =>
-        footprintCells('orb', orb.owner, orb.id, orb.position, orb.footprint, height),
+        footprintCells(
+          'orb',
+          orb.owner,
+          orb.id,
+          orb.position,
+          orb.footprint,
+          height,
+        ),
       ),
       ...(state?.units ?? []).flatMap((unit) =>
-        footprintCells('unit', unit.owner, unit.id, unit.position, unit.footprint, height),
+        footprintCells(
+          'unit',
+          unit.owner,
+          unit.id,
+          unit.position,
+          unit.footprint,
+          height,
+        ),
       ),
     ];
   });

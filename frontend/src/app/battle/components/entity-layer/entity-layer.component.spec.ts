@@ -1,11 +1,16 @@
 import { TestBed } from '@angular/core/testing';
-import type { BattleStateResponse, PositionDto } from '../../../api/generated/model';
+import type {
+  BattleStateResponse,
+  PositionDto,
+} from '../../../api/generated/model';
 import { toGridPosition } from '../../utils/coordinate-mapper';
 import { EntityLayerComponent } from './entity-layer.component';
 
 const BOARD_HEIGHT = 11;
 
-function buildBattleState(overrides: Partial<BattleStateResponse> = {}): BattleStateResponse {
+function buildBattleState(
+  overrides: Partial<BattleStateResponse> = {},
+): BattleStateResponse {
   return {
     board: { width: 21, height: BOARD_HEIGHT, terrain: [] },
     units: [],
@@ -25,8 +30,22 @@ function render(battleState: BattleStateResponse) {
 describe('EntityLayerComponent', () => {
   it('renders one cell per footprint offset across units, orbs and walls', () => {
     const battleState = buildBattleState({
-      units: [{ id: 'u1', owner: 'LEFT', position: { x: 3, y: 2 }, footprint: [{ x: 0, y: 0 }] }],
-      orbs: [{ id: 'o1', owner: 'RIGHT', position: { x: 20, y: 5 }, footprint: [{ x: 0, y: 0 }] }],
+      units: [
+        {
+          id: 'u1',
+          owner: 'LEFT',
+          position: { x: 3, y: 2 },
+          footprint: [{ x: 0, y: 0 }],
+        },
+      ],
+      orbs: [
+        {
+          id: 'o1',
+          owner: 'RIGHT',
+          position: { x: 20, y: 5 },
+          footprint: [{ x: 0, y: 0 }],
+        },
+      ],
       walls: [
         {
           id: 'w1',
@@ -50,7 +69,14 @@ describe('EntityLayerComponent', () => {
 
   it('positions a unit cell using CoordinateMapper for its anchor position', () => {
     const battleState = buildBattleState({
-      units: [{ id: 'u1', owner: 'LEFT', position: { x: 3, y: 2 }, footprint: [{ x: 0, y: 0 }] }],
+      units: [
+        {
+          id: 'u1',
+          owner: 'LEFT',
+          position: { x: 3, y: 2 },
+          footprint: [{ x: 0, y: 0 }],
+        },
+      ],
     });
 
     const fixture = render(battleState);
@@ -66,8 +92,18 @@ describe('EntityLayerComponent', () => {
   it('tags each entity cell with its owner so LEFT and RIGHT can be styled distinctly', () => {
     const battleState = buildBattleState({
       units: [
-        { id: 'u1', owner: 'LEFT', position: { x: 3, y: 2 }, footprint: [{ x: 0, y: 0 }] },
-        { id: 'u2', owner: 'RIGHT', position: { x: 17, y: 2 }, footprint: [{ x: 0, y: 0 }] },
+        {
+          id: 'u1',
+          owner: 'LEFT',
+          position: { x: 3, y: 2 },
+          footprint: [{ x: 0, y: 0 }],
+        },
+        {
+          id: 'u2',
+          owner: 'RIGHT',
+          position: { x: 17, y: 2 },
+          footprint: [{ x: 0, y: 0 }],
+        },
       ],
     });
 
@@ -91,7 +127,14 @@ describe('EntityLayerComponent', () => {
       { x: 1, y: 0 },
     ];
     const battleState = buildBattleState({
-      walls: [{ id: 'w1', owner: 'RIGHT', position: { x: 18, y: 0 }, footprint: lShapeOffsets }],
+      walls: [
+        {
+          id: 'w1',
+          owner: 'RIGHT',
+          position: { x: 18, y: 0 },
+          footprint: lShapeOffsets,
+        },
+      ],
     });
 
     const fixture = render(battleState);
@@ -108,7 +151,10 @@ describe('EntityLayerComponent', () => {
 
     const expected = lShapeOffsets
       .map((offset) =>
-        toGridPosition({ x: 18 + (offset.x ?? 0), y: 0 + (offset.y ?? 0) }, BOARD_HEIGHT),
+        toGridPosition(
+          { x: 18 + (offset.x ?? 0), y: 0 + (offset.y ?? 0) },
+          BOARD_HEIGHT,
+        ),
       )
       .sort((a, b) => a.gridColumn - b.gridColumn || a.gridRow - b.gridRow);
 
@@ -123,11 +169,20 @@ describe('EntityLayerComponent', () => {
       }
     }
     const battleState = buildBattleState({
-      walls: [{ id: 'wall-left', owner: 'LEFT', position: { x: 1, y: 0 }, footprint: offsets }],
+      walls: [
+        {
+          id: 'wall-left',
+          owner: 'LEFT',
+          position: { x: 1, y: 0 },
+          footprint: offsets,
+        },
+      ],
     });
 
     const fixture = render(battleState);
-    const cells = fixture.nativeElement.querySelectorAll('.entity-cell[data-kind="wall"]');
+    const cells = fixture.nativeElement.querySelectorAll(
+      '.entity-cell[data-kind="wall"]',
+    );
 
     expect(cells.length).toBe(22);
   });

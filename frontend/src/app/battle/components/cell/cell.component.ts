@@ -1,5 +1,8 @@
 import { Component, input } from '@angular/core';
-import type { PositionDto, TerrainCellDtoType } from '../../../api/generated/model';
+import type {
+  PositionDto,
+  TerrainCellDtoType,
+} from '../../../api/generated/model';
 
 @Component({
   selector: 'app-cell',
