@@ -157,6 +157,7 @@ The project should provide opportunities to learn:
 - frontend testing
 - backend testing
 - API testing
+- end-to-end testing with Playwright
 - testing domain logic independently from frameworks
 - CI-based verification
 - reviewing AI-generated code through tests
@@ -175,6 +176,7 @@ The project should also be used to learn modern development tooling, including:
 - Maven
 - ESLint
 - Prettier
+- Playwright
 - OpenAPI tooling
 - MCP
 - IDE-integrated AI agents

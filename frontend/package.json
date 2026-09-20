@@ -7,10 +7,11 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "e2e": "playwright test",
     "api:generate": "orval",
     "lint": "ng lint",
-    "format": "prettier --write \"src/**/*.{ts,html,scss,css,json}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,html,scss,css,json}\""
+    "format": "prettier --write \"src/**/*.{ts,html,scss,css,json}\" \"e2e/**/*.ts\" \"playwright.config.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,html,scss,css,json}\" \"e2e/**/*.ts\" \"playwright.config.ts\""
   },
   "private": true,
   "engines": {
@@ -34,6 +35,8 @@
     "@angular/cli": "^22.0.4",
     "@angular/compiler-cli": "^22.0.4",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
     "angular-eslint": "22.5.0",
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
