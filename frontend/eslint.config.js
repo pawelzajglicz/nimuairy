@@ -1,16 +1,18 @@
 // @ts-check
-const eslint = require("@eslint/js");
-const { defineConfig } = require("eslint/config");
-const tseslint = require("typescript-eslint");
-const angular = require("angular-eslint");
-const eslintConfigPrettier = require("eslint-config-prettier");
+const eslint = require('@eslint/js');
+const { defineConfig } = require('eslint/config');
+const tseslint = require('typescript-eslint');
+const angular = require('angular-eslint');
+const eslintConfigPrettier = require('eslint-config-prettier');
+const prettierPlugin = require('eslint-plugin-prettier');
 
 module.exports = defineConfig([
   {
-    ignores: ["src/app/api/generated/**"],
+    ignores: ['src/app/api/generated/**'],
   },
+
   {
-    files: ["**/*.ts"],
+    files: ['**/*.ts'],
     extends: [
       eslint.configs.recommended,
       tseslint.configs.recommended,
@@ -19,32 +21,55 @@ module.exports = defineConfig([
       eslintConfigPrettier,
     ],
     processor: angular.processInlineTemplates,
+
+    plugins: {
+      prettier: prettierPlugin,
+    },
+
     rules: {
-      "@angular-eslint/prefer-on-push-component-change-detection": "warn",
-      "@angular-eslint/directive-selector": [
-        "error",
+      'prettier/prettier': 'error',
+
+      '@angular-eslint/prefer-on-push-component-change-detection': 'warn',
+
+      '@angular-eslint/directive-selector': [
+        'error',
         {
-          type: "attribute",
-          prefix: "app",
-          style: "camelCase",
+          type: 'attribute',
+          prefix: 'app',
+          style: 'camelCase',
         },
       ],
-      "@angular-eslint/component-selector": [
-        "error",
+
+      '@angular-eslint/component-selector': [
+        'error',
         {
-          type: "element",
-          prefix: "app",
-          style: "kebab-case",
+          type: 'element',
+          prefix: 'app',
+          style: 'kebab-case',
         },
       ],
     },
   },
+
   {
-    files: ["**/*.html"],
+    files: ['**/*.html'],
     extends: [
       angular.configs.templateRecommended,
       angular.configs.templateAccessibility,
+      eslintConfigPrettier,
     ],
-    rules: {},
-  }
+
+    plugins: {
+      prettier: prettierPlugin,
+    },
+
+    rules: {
+      'prettier/prettier': [
+        'error',
+        {
+          parser: 'angular',
+        },
+      ],
+    },
+  },
 ]);

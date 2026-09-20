@@ -1,5 +1,7 @@
 ### IntelliJ IDEA ###
-.idea
+.idea/*
+!.idea/prettier.xml
+!.idea/inspectionProfiles
 *.iws
 *.iml
 *.ipr
