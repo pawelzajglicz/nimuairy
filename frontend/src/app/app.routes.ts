@@ -30,5 +30,12 @@ export const routes: Routes = [
     component: CharacterFormComponent,
     canActivate: [authGuard],
   },
+  {
+    path: 'battle/demo',
+    loadComponent: () =>
+      import('./battle/pages/battle-demo-page/battle-demo-page').then(
+        (m) => m.BattleDemoPage,
+      ),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

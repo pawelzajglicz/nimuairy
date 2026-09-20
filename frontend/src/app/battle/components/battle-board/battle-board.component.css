@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  max-width: 1050px;
+}
+
+.battle-board-stack {
+  display: grid;
+}
+
+.battle-board-stack > * {
+  grid-area: 1 / 1;
+}

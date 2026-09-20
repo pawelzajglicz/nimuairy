@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+.entity-layer {
+  display: grid;
+  width: 100%;
+  pointer-events: none;
+}
+
+.entity-cell {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.entity-cell[data-kind='wall'][data-owner='LEFT'] {
+  background: rgba(37, 99, 235, 0.55);
+}
+
+.entity-cell[data-kind='wall'][data-owner='RIGHT'] {
+  background: rgba(220, 38, 38, 0.55);
+}
+
+.entity-cell[data-kind='orb'][data-owner='LEFT'] {
+  background: #1d4ed8;
+  border-radius: 50%;
+}
+
+.entity-cell[data-kind='orb'][data-owner='RIGHT'] {
+  background: #b91c1c;
+  border-radius: 50%;
+}
+
+.entity-cell[data-kind='unit'][data-owner='LEFT'] {
+  background: #60a5fa;
+  border: 2px solid #1d4ed8;
+  border-radius: 4px;
+}
+
+.entity-cell[data-kind='unit'][data-owner='RIGHT'] {
+  background: #f87171;
+  border: 2px solid #b91c1c;
+  border-radius: 4px;
+}
