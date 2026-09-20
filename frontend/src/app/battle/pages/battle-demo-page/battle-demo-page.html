@@ -2,6 +2,6 @@
   <p>Loading battle…</p>
 } @else if (store.error()) {
   <p>Failed to load the demo battle.</p>
-} @else if (store.battleState()) {
-  <p>Demo battle loaded. Board rendering is added in the next milestone.</p>
+} @else if (store.battleState(); as battleState) {
+  <app-battle-board [battleState]="battleState" />
 }

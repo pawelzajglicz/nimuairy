@@ -1,0 +1,17 @@
+@if (board(); as board) {
+  <div
+    class="board-grid"
+    [style.grid-template-columns]="'repeat(' + board.width + ', 1fr)'"
+    [style.grid-template-rows]="'repeat(' + board.height + ', 1fr)'"
+    [style.aspect-ratio]="board.width + ' / ' + board.height"
+  >
+    @for (cell of cells(); track cell.key) {
+      <app-cell
+        [position]="cell.position"
+        [terrainType]="cell.terrainType"
+        [style.grid-column]="cell.gridColumn"
+        [style.grid-row]="cell.gridRow"
+      />
+    }
+  </div>
+}
