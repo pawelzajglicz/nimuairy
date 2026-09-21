@@ -94,3 +94,23 @@ When an API contract changes, regenerate the Angular API client.
 Nimuairy is also a learning project focused on AI-assisted software development and modern Angular, Java, and Spring Boot practices.
 
 See [docs/LEARNING_GOALS.md](docs/LEARNING_GOALS.md) for details.
+
+## Comments
+
+Keep comments concise and intentional.
+
+- Prefer self-explanatory code over comments describing what the code does.
+- Use comments primarily to explain **why** something is implemented in a particular way, especially for:
+  - non-obvious domain rules,
+  - architectural constraints,
+  - important technical decisions,
+  - workarounds for framework or library behavior,
+  - constraints that are not apparent from the code itself.
+- Do not add comments that merely restate the code.
+- Do not add comments to every method, variable, branch, or obvious operation.
+- Avoid comments that duplicate information already expressed by names, types, tests, or documentation.
+- Keep comments close to the code they explain.
+- If a rule or decision applies across the project, prefer documenting it in the appropriate project documentation or `CLAUDE.md` rather than repeating the same comment throughout the codebase.
+- Comments must be kept accurate when the code changes; remove or update stale comments.
+
+Because this project is developed with AI coding agents, comments should provide stable context that may not be obvious from the code itself, rather than narrating the implementation.
