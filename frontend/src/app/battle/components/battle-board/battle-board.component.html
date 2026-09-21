@@ -1,4 +1,13 @@
 <div class="battle-board-stack">
-  <app-board-grid [board]="battleState()?.board" />
-  <app-entity-layer [battleState]="battleState()" />
+  <app-board-grid
+    [board]="battleState()?.board"
+    [unitPositions]="unitPositions()"
+    (cellClick)="onCellClick($event)"
+  />
+  <app-entity-layer
+    [battleState]="battleState()"
+    [selectedUnitId]="selectedUnitId()"
+    [interactionMode]="interactionMode()"
+    (unitClick)="onUnitClick($event)"
+  />
 </div>

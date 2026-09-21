@@ -26,4 +26,14 @@ describe('BoardGridComponent', () => {
     const cells = fixture.nativeElement.querySelectorAll('app-cell');
     expect(cells.length).toBe(231);
   });
+
+  it('renders every cell not covered by a unit as a button', async () => {
+    const fixture = TestBed.createComponent(BoardGridComponent);
+    fixture.componentRef.setInput('board', buildDemoBoard());
+    fixture.componentRef.setInput('unitPositions', new Set(['3,2', '17,2']));
+    await fixture.whenStable();
+
+    const buttons = fixture.nativeElement.querySelectorAll('button.cell');
+    expect(buttons.length).toBe(231 - 2);
+  });
 });

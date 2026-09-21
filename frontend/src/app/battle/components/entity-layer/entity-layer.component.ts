@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import type {
   BattleStateResponse,
   OrbDtoOwner,
@@ -7,12 +7,15 @@ import type {
   WallDtoOwner,
 } from '../../../api/generated/model';
 import { toGridPosition } from '../../utils/coordinate-mapper';
+import { footprintPositions } from '../../utils/footprint';
+import { InteractionMode } from '../../interaction-mode';
 
 type EntityKind = 'unit' | 'orb' | 'wall';
 type EntityOwner = UnitDtoOwner | OrbDtoOwner | WallDtoOwner;
 
 interface RenderedEntityCell {
   key: string;
+  id: string | undefined;
   kind: EntityKind;
   owner: EntityOwner | undefined;
   gridColumn: number;
@@ -27,8 +30,26 @@ interface RenderedEntityCell {
 })
 export class EntityLayerComponent {
   readonly battleState = input<BattleStateResponse>();
+  readonly selectedUnitId = input<string>();
+  readonly interactionMode = input<InteractionMode>(InteractionMode.MOVE);
+
+  readonly unitClick = output<string>();
 
   protected readonly board = computed(() => this.battleState()?.board);
+
+  protected isSelected(cell: RenderedEntityCell): boolean {
+    return cell.id !== undefined && cell.id === this.selectedUnitId();
+  }
+
+  /** The mode the selection is shown in; only the selected unit carries it. */
+  protected selectionMode(cell: RenderedEntityCell): InteractionMode | null {
+    return this.isSelected(cell) ? this.interactionMode() : null;
+  }
+
+  /** Other units step back while one is selected, so the selection stands out without extra colour. */
+  protected isDimmed(cell: RenderedEntityCell): boolean {
+    return this.selectedUnitId() !== undefined && !this.isSelected(cell);
+  }
 
   protected readonly entityCells = computed<RenderedEntityCell[]>(() => {
     const state = this.battleState();
@@ -68,6 +89,12 @@ export class EntityLayerComponent {
       ),
     ];
   });
+
+  protected onEntityCellClick(cell: RenderedEntityCell): void {
+    if (cell.kind === 'unit' && cell.id) {
+      this.unitClick.emit(cell.id);
+    }
+  }
 }
 
 function footprintCells(
@@ -78,16 +105,12 @@ function footprintCells(
   footprint: PositionDto[] | undefined,
   boardHeight: number,
 ): RenderedEntityCell[] {
-  const anchorX = anchor?.x ?? 0;
-  const anchorY = anchor?.y ?? 0;
-
-  return (footprint ?? []).map((offset, index) => {
-    const x = anchorX + (offset.x ?? 0);
-    const y = anchorY + (offset.y ?? 0);
+  return footprintPositions(anchor, footprint).map(({ x, y }, index) => {
     const { gridColumn, gridRow } = toGridPosition({ x, y }, boardHeight);
 
     return {
       key: `${kind}-${id ?? index}-${x},${y}`,
+      id,
       kind,
       owner,
       gridColumn,

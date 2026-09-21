@@ -1,0 +1,36 @@
+:host {
+  display: block;
+}
+
+.mode-controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Inactive: outlined. Active: filled with a heavier border, so the state reads from structure as well as colour. */
+.mode-button {
+  min-width: 6rem;
+  padding: 0.4rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #111827;
+  background: #ffffff;
+  border: 2px solid #9ca3af;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mode-button[aria-pressed='true'] {
+  color: #ffffff;
+  background: #111827;
+  border-color: #111827;
+  border-width: 3px;
+  padding: calc(0.4rem - 1px) calc(1rem - 1px);
+}
+
+.mode-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
