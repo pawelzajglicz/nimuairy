@@ -1,0 +1,13 @@
+<div class="mode-controls" role="group" aria-label="Interaction mode">
+  @for (candidate of modes; track candidate) {
+    <button
+      type="button"
+      class="mode-button"
+      [attr.data-mode]="candidate"
+      [attr.aria-pressed]="mode() === candidate"
+      (click)="modeChange.emit(candidate)"
+    >
+      {{ candidate }}
+    </button>
+  }
+</div>

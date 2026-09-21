@@ -1,17 +1,107 @@
+/* The host covers the whole board on top of the grid; it must let pointer events fall through to the terrain buttons, otherwise it swallows every click on an empty cell. pointer-events inherits, so only unit buttons opt back in. */
 :host {
   display: block;
+  pointer-events: none;
 }
 
 .entity-layer {
   display: grid;
   width: 100%;
-  pointer-events: none;
 }
 
 .entity-cell {
+  display: block;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+.entity-cell[data-kind='unit'] {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.entity-cell:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 1px;
+}
+
+/* Selection is a halo ring (white gap + dark ring) drawn outside the box, so it adds a shape cue on top of the owner colour and never reflows the grid. The pulse only breathes the outer ring; the static halo is the real indicator.
+   MOVE = one ring. ATTACK = two concentric rings, so the modes differ in shape, not just colour. */
+.entity-cell.selected {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 5px #111827;
+  z-index: 1;
+  animation: selection-pulse 1.8s ease-in-out infinite;
+}
+
+.entity-cell.selected[data-selection-mode='ATTACK'] {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #111827,
+    0 0 0 6px #ffffff,
+    0 0 0 8px #111827;
+  animation-name: selection-pulse-attack;
+}
+
+@keyframes selection-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 0 0 5px #111827;
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 0 0 7px rgba(17, 24, 39, 0.55);
+  }
+}
+
+@keyframes selection-pulse-attack {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 0 0 4px #111827,
+      0 0 0 6px #ffffff,
+      0 0 0 8px #111827;
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 0 0 4px #111827,
+      0 0 0 6px #ffffff,
+      0 0 0 10px rgba(17, 24, 39, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entity-cell.selected,
+  .entity-cell.selected[data-selection-mode='ATTACK'] {
+    animation: none;
+  }
+}
+
+/* Keep the focus ring visible outside the selection halo when both apply. */
+.entity-cell.selected:focus-visible {
+  outline-offset: 8px;
+}
+
+.entity-cell.selected[data-selection-mode='ATTACK']:focus-visible {
+  outline-offset: 11px;
+}
+
+/* Non-selected units step back while a selection exists; opacity keeps the owner colour readable. */
+.entity-cell.dimmed {
+  opacity: 0.6;
 }
 
 .entity-cell[data-kind='wall'][data-owner='LEFT'] {

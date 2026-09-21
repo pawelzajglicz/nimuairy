@@ -6,13 +6,29 @@
     [style.aspect-ratio]="board.width + ' / ' + board.height"
   >
     @for (cell of entityCells(); track cell.key) {
-      <div
-        class="entity-cell"
-        [attr.data-kind]="cell.kind"
-        [attr.data-owner]="cell.owner"
-        [style.grid-column]="cell.gridColumn"
-        [style.grid-row]="cell.gridRow"
-      ></div>
+      @if (cell.kind === 'unit') {
+        <button
+          type="button"
+          class="entity-cell"
+          [class.selected]="isSelected(cell)"
+          [class.dimmed]="isDimmed(cell)"
+          [attr.data-selection-mode]="selectionMode(cell)"
+          [attr.data-kind]="cell.kind"
+          [attr.data-owner]="cell.owner"
+          [attr.aria-label]="(cell.owner ?? 'Unknown') + ' unit'"
+          [style.grid-column]="cell.gridColumn"
+          [style.grid-row]="cell.gridRow"
+          (click)="onEntityCellClick(cell)"
+        ></button>
+      } @else {
+        <div
+          class="entity-cell"
+          [attr.data-kind]="cell.kind"
+          [attr.data-owner]="cell.owner"
+          [style.grid-column]="cell.gridColumn"
+          [style.grid-row]="cell.gridRow"
+        ></div>
+      }
     }
   </div>
 }

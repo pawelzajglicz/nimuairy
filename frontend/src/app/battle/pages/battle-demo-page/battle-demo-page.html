@@ -3,5 +3,16 @@
 } @else if (store.error()) {
   <p>Failed to load the demo battle.</p>
 } @else if (store.battleState(); as battleState) {
-  <app-battle-board [battleState]="battleState" />
+  <div class="battle-layout">
+    <app-interaction-mode-controls
+      [mode]="store.interactionMode()"
+      (modeChange)="store.setInteractionMode($event)"
+    />
+    <app-battle-board
+      [battleState]="battleState"
+      [selectedUnitId]="store.selectedUnitId()"
+      [interactionMode]="store.interactionMode()"
+      (interaction)="onBoardInteraction($event)"
+    />
+  </div>
 }
