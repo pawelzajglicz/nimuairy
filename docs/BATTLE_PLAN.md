@@ -146,8 +146,7 @@ Implement:
 
 - selecting a destination,
 - validating movement,
-- moving a unit,
-- changing turns where appropriate.
+- moving a unit.
 
 Movement rules live in `BattleEngine`.
 
@@ -155,7 +154,21 @@ Movement validation operates on the complete unit footprint, not only on the
 unit's anchor cell. A move is valid only when all cells covered by the unit's
 footprint satisfy the movement rules.
 
-### M5 — Combat
+M4 does not implement turn switching. Turn ownership and legal-action rules
+are introduced in M5.
+
+### M5 — Turns
+
+Implement:
+
+- current player,
+- legal actions,
+- ending a turn,
+- switching players.
+
+Turn rules determine which player may currently perform gameplay actions.
+
+### M6 — Combat
 
 Implement:
 
@@ -174,15 +187,6 @@ winner, regardless of the number or state of the remaining units.
 Initial damage formula:
 
     damage = max(0, attacker.attack - defender.defense)
-
-### M6 — Turns
-
-Implement:
-
-- current player,
-- legal actions,
-- ending a turn,
-- switching players.
 
 ### M7 — Victory
 
