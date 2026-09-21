@@ -25,7 +25,7 @@ describe('BattleStore', () => {
 
   it('starts loading the demo battle with no state yet', () => {
     const store = TestBed.inject(BattleStore);
-    TestBed.flushEffects();
+    TestBed.tick();
 
     expect(store.loading()).toBe(true);
     expect(store.battleState()).toBeUndefined();
@@ -36,7 +36,7 @@ describe('BattleStore', () => {
 
   it('exposes the loaded battle state once the request succeeds', async () => {
     const store = TestBed.inject(BattleStore);
-    TestBed.flushEffects();
+    TestBed.tick();
     const response: BattleStateResponse = {
       board: { width: 21, height: 11, terrain: [] },
       orbs: [],
@@ -53,7 +53,7 @@ describe('BattleStore', () => {
 
   it('exposes an error when the request fails', async () => {
     const store = TestBed.inject(BattleStore);
-    TestBed.flushEffects();
+    TestBed.tick();
 
     httpMock
       .expectOne('/api/v1/battles/demo')
@@ -67,7 +67,7 @@ describe('BattleStore', () => {
   describe('selection and interaction mode', () => {
     it('starts with currentPlayer as LEFT', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(store.currentPlayer()).toBe('LEFT');
 
@@ -76,7 +76,7 @@ describe('BattleStore', () => {
 
     it('starts with no selected unit', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(store.selectedUnitId()).toBeUndefined();
 
@@ -85,7 +85,7 @@ describe('BattleStore', () => {
 
     it('starts in MOVE interaction mode', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       expect(store.interactionMode()).toBe(InteractionMode.MOVE);
 
@@ -94,7 +94,7 @@ describe('BattleStore', () => {
 
     it('selectUnit sets the selected unit', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.selectUnit('left-unit-1');
 
@@ -105,7 +105,7 @@ describe('BattleStore', () => {
 
     it('selectUnit replaces the previous selection', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.selectUnit('left-unit-1');
       store.selectUnit('left-unit-2');
@@ -117,7 +117,7 @@ describe('BattleStore', () => {
 
     it('allows selecting an opponent unit', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.selectUnit('right-unit-1');
 
@@ -128,7 +128,7 @@ describe('BattleStore', () => {
 
     it('clearSelection removes the selection', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.selectUnit('left-unit-1');
       store.clearSelection();
@@ -140,7 +140,7 @@ describe('BattleStore', () => {
 
     it('clearSelection preserves the interaction mode', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.setInteractionMode(InteractionMode.ATTACK);
       store.clearSelection();
@@ -152,7 +152,7 @@ describe('BattleStore', () => {
 
     it('setInteractionMode changes the mode', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.setInteractionMode(InteractionMode.ATTACK);
 
@@ -163,7 +163,7 @@ describe('BattleStore', () => {
 
     it('changing interaction mode preserves the selected unit', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.selectUnit('left-unit-1');
       store.setInteractionMode(InteractionMode.ATTACK);
@@ -175,7 +175,7 @@ describe('BattleStore', () => {
 
     it('selecting another unit preserves the current interaction mode', () => {
       const store = TestBed.inject(BattleStore);
-      TestBed.flushEffects();
+      TestBed.tick();
 
       store.setInteractionMode(InteractionMode.ATTACK);
       store.selectUnit('left-unit-1');
