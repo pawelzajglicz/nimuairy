@@ -16,6 +16,13 @@
         "@upstash/context7-mcp"
       ],
       "env": {}
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PAT}"
+      }
     }
   }
 }
