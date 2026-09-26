@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Keeps .claude/skills and .junie/skills in sync with .agents/skills
+# after switching branches or cloning. See scripts/sync-skills.sh.
+exec "$(git rev-parse --show-toplevel)/scripts/sync-skills.sh"
