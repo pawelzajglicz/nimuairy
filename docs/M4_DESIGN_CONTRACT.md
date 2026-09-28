@@ -17,6 +17,7 @@ future mechanics merely because they may eventually be useful.
 
 - [`GAME_DESIGN.md`](./GAME_DESIGN.md) is the source of truth for general gameplay concepts.
 - [`BATTLE_PLAN.md`](./BATTLE_PLAN.md) is the source of truth for milestone order and scope.
+- [`M4.1_DESIGN_CONTRACT.md`](./M4.1_DESIGN_CONTRACT.md) defines the M4.1 movement-domain foundation.
 - This document is the source of truth for M4's concrete movement rules and acceptance criteria.
 
 If a conflict is found, do not silently choose an interpretation. Raise it and
@@ -39,20 +40,32 @@ The demo remains intentionally simplified:
 The temporary LEFT-player rule is a demo/testing convenience, not the final
 turn model.
 
+`currentPlayer` is part of `BattleState`, even though M4 uses a fixed LEFT value.
+M5 will introduce the actual turn transitions and rules for changing it.
+
 ## 4. Movement Command
 
-Movement is requested through the battle engine using a command-oriented API:
+Movement is requested through the battle engine using a command-oriented API.
+The command contains the exact path selected by the caller:
 
 ```text
 engine.execute(state, {
     type: 'MOVE_UNIT',
     unitId,
-    destination
+    destination,
+    path
 })
 ```
 
-The exact TypeScript types and command representation should follow the
-existing project conventions.
+The path does not contain the starting position and its final cell must equal
+the requested destination.
+
+The command therefore expresses:
+
+> Move this unit to this destination using this exact path.
+
+The engine remains authoritative and must validate the supplied path rather than
+trusting it.
 
 Angular components and SignalStore must not implement movement rules directly.
 They may request a movement and present the engine's results.
@@ -67,7 +80,8 @@ M4 introduces a separate remaining-movement value:
 remainingMovement = moveRange
 ```
 
-A successful move consumes movement according to the minimum-cost valid path.
+A successful move consumes movement according to the cost of the submitted,
+validated path.
 
 `moveRange` must not be mutated as a consequence of movement.
 
@@ -89,7 +103,7 @@ remainingMovement = moveRange
 
 This is a development aid, not yet a gameplay action.
 
-## 6. Grid Movement
+## 6. Grid Movement and Movement Cost
 
 The board is a square grid with eight possible adjacent moves:
 
@@ -99,14 +113,14 @@ The board is a square grid with eight possible adjacent moves:
 ↙  ↓  ↘
 ```
 
-Movement costs are:
+For the M4 MVP, movement costs are:
 
 | Step | Cost |
 |------|------|
 | orthogonal | `1` |
 | diagonal | `√2` |
 
-A multi-step path has the sum of the costs of all its steps.
+A path's cost is the sum of the costs of its individual steps.
 
 For example:
 
@@ -120,9 +134,20 @@ costs:
 1 + 1 + √2 ≈ 3.414
 ```
 
+The authoritative concept is **per-step movement cost**, not a count of
+orthogonal and diagonal steps. The current MVP happens to derive the step cost
+from the step direction.
+
+This distinction is intentional so that future terrain or movement modifiers
+can change the cost of an individual step without redesigning the path model.
+For example, a future terrain such as SWAMP may make entering a cell more
+expensive. Such terrain movement costs are out of scope for M4, but the M4
+architecture must not assume that total path cost can always be reconstructed
+from only `orthogonalSteps` and `diagonalSteps`.
+
 The implementation should avoid unnecessary floating-point equality checks.
-Use an appropriate comparison/tolerance strategy or another representation
-that preserves the intended movement semantics.
+Use an appropriate comparison/tolerance strategy or another representation that
+preserves the intended movement semantics.
 
 ## 7. Reachability Is Path-Based
 
@@ -139,7 +164,12 @@ A destination may be close to the unit but unreachable because obstacles force
 the available path to be too expensive or because no valid path exists.
 
 When multiple valid paths exist, the relevant movement cost and preview path
-use the minimum-cost valid path.
+use the minimum-cost valid path for reachability and preview purposes.
+
+When the player explicitly selects a path, `MOVE_UNIT` carries that path and
+the engine validates and charges the cost of that submitted path. The selected
+path is expected to be a minimum-cost valid path produced by the movement UI,
+but the engine remains authoritative and validates it independently.
 
 ## 8. Standard Traversability Rules
 
@@ -203,7 +233,7 @@ Diagonal movement is allowed, but the unit must not cut through a blocked
 corner.
 
 For a diagonal anchor transition from `(x,y)` to `(x+dx,y+dy)`, where both
-`dx` and `dy` are non-zero, the movement must have sufficient clearance through
+dx and dy are non-zero, the movement must have sufficient clearance through
 both corresponding orthogonal transitions as well as the diagonal destination.
 
 Conceptually, this configuration is blocked:
@@ -243,7 +273,9 @@ have different costs.
 The algorithm must:
 
 - explore the eight neighboring cells;
-- use step cost `1` or `√2`;
+- use step cost `1` or `√2` for the current MVP;
+- obtain the cost of each transition through a domain-level movement-cost rule,
+  rather than hard-coding total path cost as step counts;
 - reject invalid footprint positions;
 - reject blocked diagonal transitions;
 - respect board boundaries;
@@ -282,7 +314,8 @@ When the pointer hovers a reachable destination:
 
 The path is only a preview.
 
-Clicking the destination executes the `MOVE_UNIT` command.
+Clicking the destination executes the `MOVE_UNIT` command with the selected
+path.
 
 Hovering an invalid or unreachable cell must not produce a misleading valid
 path. The previous preview should be cleared or replaced according to the
@@ -325,12 +358,15 @@ A successful `MOVE_UNIT` command must:
 
 1. identify the requested unit;
 2. validate that the unit may move in the current demo context;
-3. calculate/retrieve the minimum-cost valid path;
-4. reject the command if no valid path exists within the remaining movement;
-5. move the unit anchor to the requested destination;
-6. preserve the unit footprint unchanged;
-7. reduce `remainingMovement` by the path cost;
-8. return a new immutable `BattleState`.
+3. validate the submitted path according to all movement rules;
+4. calculate the submitted path's cost using the domain movement-cost rule;
+5. reject the command if the path is invalid or exceeds remaining movement;
+6. move the unit anchor to the requested destination;
+7. preserve the unit footprint unchanged;
+8. reduce `remainingMovement` by the validated path cost;
+9. return a new immutable `BattleState` together with the executed path and cost.
+
+The submitted path must end at `destination`.
 
 An invalid command must not partially mutate the battle state.
 
@@ -351,8 +387,7 @@ remaining ≈ 1.586
 The second movement is evaluated from the unit's new position and against its
 new remaining movement.
 
-The movement path cost is based on the actual minimum valid path for that
-individual move.
+The movement path cost is based on the validated path for that individual move.
 
 ## 18. Current Player Restriction
 
@@ -360,15 +395,15 @@ M4 does not implement the full turn system.
 
 For the demo only:
 
-- LEFT is the current player;
+- `BattleState.currentPlayer` is `LEFT`;
 - LEFT units can be moved;
 - RIGHT units can be selected;
 - RIGHT unit movement is rejected.
 
-The engine should keep this restriction explicit rather than pretending that
-M4 already has the final turn model.
+The engine must read the current player from `BattleState` rather than depending
+on Angular store state or another hidden external value.
 
-M5 will introduce the actual current-player/turn rules.
+M5 will introduce the actual turn transitions and rules for changing it.
 
 ## 19. Invalid Movement
 
@@ -381,6 +416,8 @@ The following must be rejected:
 - destination where any footprint cell is invalid;
 - destination requiring more movement than remains;
 - destination with no valid path;
+- submitted path that is not valid;
+- submitted path that does not end at the destination;
 - diagonal movement through a blocked corner;
 - movement of a RIGHT unit in the M4 demo context.
 
@@ -406,6 +443,14 @@ The domain movement implementation must not depend on:
 
 Prefer immutable state transitions, consistent with the existing battle
 architecture.
+
+The frontend domain model is intentionally a separate architectural boundary
+from generated API DTOs. The API DTO is mapped into the framework-independent
+domain model before domain logic uses it. No broad DTO/domain alignment refactor
+is required as part of M4.1.
+
+The backend and frontend models may be aligned further in a later milestone
+when the authoritative battle engine moves toward the backend.
 
 Do not introduce persistence or event sourcing in M4.
 
@@ -486,7 +531,7 @@ M4 is complete when:
 1. A LEFT unit can be selected and its reachable cells are derived from the
    movement engine.
 2. Reachability uses path cost rather than direct origin/destination distance.
-3. Orthogonal steps cost `1` and diagonal steps cost `√2`.
+3. Orthogonal steps cost `1` and diagonal steps cost `√2` in the M4 MVP.
 4. Obstacles, board boundaries, and complete unit footprints are respected.
 5. Diagonal corner cutting is rejected.
 6. A minimum-cost path can be reconstructed for a reachable destination.
