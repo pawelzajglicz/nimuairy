@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.angular/
+coverage/
+playwright-report/
+test-results/
+.idea/
+.claude/
+*.iml
+.git
+.gitignore

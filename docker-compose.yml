@@ -1,16 +1,72 @@
 services:
   postgres:
     container_name: postgres-nimuairy
-    image: postgres
+    # Docker Hardened Image (dhi.io) build. Requires `docker login dhi.io`
+    # (free Community tier: docker.com/products/hardened-images).
+    #
+    # The 18-alpine3.23 tag's entrypoint is currently broken (exec format
+    # error) - verified, so this uses the debian-13-based tag instead.
+    # PG 18 also switched to a version-scoped data directory
+    # (/var/lib/postgresql/18/data), so the volume is mounted at the parent
+    # /var/lib/postgresql per upstream's own guidance, rather than directly
+    # at .../data like the old layout.
+    image: dhi.io/postgres:18-debian13
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: user
-      PGDATA: /var/lib/postgresql/data
-      POSTGRES_DB: nimuairy
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-user}
+      POSTGRES_DB: ${POSTGRES_DB:-nimuairy}
     volumes:
-      - postgres:/data/postgres
+      - postgres:/var/lib/postgresql
     ports:
+      # Kept so the backend can also be run outside Docker via
+      # `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev`, which
+      # connects to Postgres at localhost:5432 (see application-dev.yml).
       - 5432:5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-nimuairy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nimuairy
+    restart: unless-stopped
+
+  backend:
+    container_name: backend-nimuairy
+    build:
+      context: ./nimuairy-api
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-nimuairy}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-user}
+      JWT_SECRET: ${JWT_SECRET:-nimuairy-jwt-secret-key-change-in-production-min-32-chars}
+    ports:
+      # Not required by the frontend (nginx proxies /api/ internally); kept
+      # exposed for local debugging against the backend directly.
+      - 8000:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No container-level healthcheck: the hardened runtime image has no
+    # shell/curl to run one against. Nothing else in this file gates on the
+    # backend's health (only frontend->backend start order, not readiness).
+    networks:
+      - nimuairy
+    restart: unless-stopped
+
+  frontend:
+    container_name: frontend-nimuairy
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      # nginx listens on 8080 inside the container: the hardened image runs
+      # as non-root, which can't bind the privileged port 80.
+      - 4200:8080
+    depends_on:
+      - backend
     networks:
       - nimuairy
     restart: unless-stopped
