@@ -17,6 +17,10 @@ The gameplay model and domain design are defined in [`GAME_DESIGN.md`](./GAME_DE
 `BATTLE_PLAN.md` defines implementation order and milestone scope. It should
 not duplicate the full game design.
 
+For milestones with substantial domain rules, a dedicated design contract may
+also be created. The contract defines the concrete rules and acceptance
+criteria for that milestone and should be kept consistent with this plan.
+
 ## Current architecture
 
     Backend
@@ -140,22 +144,55 @@ Allow selecting a unit belonging to the current player.
 
 The selected unit is visually distinguished.
 
+### M3.5 — Movement Test Fixture
+
+Prepare the demo battle for movement development without implementing movement.
+
+The fixture contains, for each player:
+
+- one 1×1 unit,
+- one horizontal 2×1 unit,
+- one 2×2 unit,
+- one vertical 1×3 unit.
+
+The demo board also contains a small deterministic set of ROCK terrain cells
+that can be used for future movement tests, including a compact obstacle, a
+narrow passage, and a diagonal/corner configuration.
+
+ROCK is non-traversable terrain and PLAIN is traversable terrain.
+
+M3.5 does not implement movement, pathfinding, movement cost, turn switching,
+or other M4 behaviour.
+
 ### M4 — Movement
 
-Implement:
+M4 implements movement as a path-based reachability problem on the square grid.
 
-- selecting a destination,
-- validating movement,
-- moving a unit.
+The detailed movement rules and acceptance criteria are defined in
+[`M4_DESIGN_CONTRACT.md`](./M4_DESIGN_CONTRACT.md).
 
-Movement rules live in `BattleEngine`.
+At a high level, M4 introduces:
 
-Movement validation operates on the complete unit footprint, not only on the
-unit's anchor cell. A move is valid only when all cells covered by the unit's
-footprint satisfy the movement rules.
+- a `MOVE_UNIT` engine command;
+- remaining movement separate from the initial `moveRange` allowance;
+- orthogonal movement cost `1` and diagonal movement cost `√2`;
+- minimum-cost reachability/pathfinding;
+- terrain, walls, orbs, and units as blocking objects for standard units;
+- footprint-aware movement;
+- diagonal corner blocking / no corner cutting;
+- reachable-cell highlighting;
+- hovered minimum-cost path preview;
+- movement-cost and remaining-movement information;
+- a temporary technical movement reset control.
 
-M4 does not implement turn switching. Turn ownership and legal-action rules
-are introduced in M5.
+M4 does not implement the real turn system or combat. For the demo, LEFT is
+treated as the current player: LEFT units can move, while RIGHT units may be
+selected and inspected but cannot be moved. Full turn ownership and legal
+action rules remain an M5 responsibility.
+
+M4 should be implemented in small, reviewable steps rather than as one large
+frontend/backend change. Domain movement rules should be tested independently
+from Angular.
 
 ### M5 — Turns
 
@@ -212,6 +249,10 @@ Review the battle domain and prepare it for moving the engine to Java.
 - army selection
 - different unit compositions
 - matchmaking / lobby
+- possible event-sourced battle history/persistence
+
+Event sourcing is a possible future architecture for storing battle history and
+reconstructing battle state, but it is not part of M4.
 
 ## Rules for implementation
 
@@ -224,3 +265,5 @@ Review the battle domain and prepare it for moving the engine to Java.
 - Do not introduce a database until persistence is actually needed.
 - Keep the domain model independent from Spring and JPA.
 - Treat `GAME_DESIGN.md` as the source of truth for gameplay concepts and rules.
+- For milestones with a design contract, treat that contract as the source of
+  truth for the milestone's concrete rules and acceptance criteria.
