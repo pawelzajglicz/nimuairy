@@ -26,7 +26,7 @@ const initialSelectionState: BattleSelectionState = {
 /**
  * Owns the demo battle's request lifecycle (loading/error/state) plus the
  * feature-level selection/interaction-mode UI state.
- * Gameplay rules belong to a future, framework-independent BattleEngine, not here.
+ * Gameplay rules belong to the framework-independent BattleEngine (domain/), not here.
  */
 export const BattleStore = signalStore(
   withState(initialSelectionState),
