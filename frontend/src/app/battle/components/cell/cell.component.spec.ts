@@ -1,17 +1,41 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type { PositionDto } from '../../../api/generated/model';
+import type {
+  PositionDto,
+  TerrainCellDtoType,
+} from '../../../api/generated/model';
 import { CellComponent } from './cell.component';
 
-function render(position: PositionDto, occupiedByUnit = false) {
+function render(
+  position: PositionDto,
+  occupiedByUnit = false,
+  terrainType?: TerrainCellDtoType,
+) {
   const fixture = TestBed.createComponent(CellComponent);
   fixture.componentRef.setInput('position', position);
   fixture.componentRef.setInput('occupiedByUnit', occupiedByUnit);
+  if (terrainType !== undefined) {
+    fixture.componentRef.setInput('terrainType', terrainType);
+  }
   fixture.detectChanges();
   return fixture;
 }
 
 describe('CellComponent', () => {
+  describe('terrain rendering', () => {
+    it('exposes the terrain type as a data-terrain attribute, distinguishing ROCK from PLAIN', () => {
+      const plain = render({ x: 3, y: 2 }, false, 'PLAIN');
+      const rock = render({ x: 3, y: 2 }, false, 'ROCK');
+
+      expect(
+        plain.nativeElement.querySelector('.cell').getAttribute('data-terrain'),
+      ).toBe('PLAIN');
+      expect(
+        rock.nativeElement.querySelector('.cell').getAttribute('data-terrain'),
+      ).toBe('ROCK');
+    });
+  });
+
   describe('when not covered by a unit', () => {
     it('renders as a native button, so it is keyboard operable by construction', () => {
       const fixture = render({ x: 3, y: 2 });

@@ -10,4 +10,5 @@ export type TerrainCellDtoType = typeof TerrainCellDtoType[keyof typeof TerrainC
 
 export const TerrainCellDtoType = {
   PLAIN: 'PLAIN',
+  ROCK: 'ROCK',
 } as const;

@@ -23,13 +23,12 @@ class BattleServiceTest {
     private final BattleService battleService = new BattleService();
 
     @Test
-    void board_is21x11WithAllPlainTerrainCells() {
+    void board_is21x11WithNoDuplicatePositions() {
         Board board = battleService.getDemoBattle().board();
 
         assertThat(board.width()).isEqualTo(21);
         assertThat(board.height()).isEqualTo(11);
         assertThat(board.terrain()).hasSize(231);
-        assertThat(board.terrain()).allMatch(terrain -> terrain.type() == TerrainType.PLAIN);
 
         Set<Position> positions = new HashSet<>();
         for (Terrain terrain : board.terrain()) {
@@ -41,6 +40,79 @@ class BattleServiceTest {
                 assertThat(positions).contains(new Position(x, y));
             }
         }
+    }
+
+    @Test
+    void board_containsRockTerrainThatIsNonTraversable() {
+        Board board = battleService.getDemoBattle().board();
+
+        List<Terrain> rockCells = board.terrain().stream()
+                .filter(terrain -> terrain.type() == TerrainType.ROCK)
+                .toList();
+
+        assertThat(rockCells).isNotEmpty();
+        assertThat(rockCells).allMatch(terrain -> !terrain.type().isTraversable());
+    }
+
+    @Test
+    void board_plainTerrainRemainsTraversableAndIsTheVastMajority() {
+        Board board = battleService.getDemoBattle().board();
+
+        List<Terrain> plainCells = board.terrain().stream()
+                .filter(terrain -> terrain.type() == TerrainType.PLAIN)
+                .toList();
+
+        assertThat(plainCells).allMatch(terrain -> terrain.type().isTraversable());
+        // The ROCK fixture is intentionally small and easy to read, not maze-like.
+        assertThat(plainCells.size()).isGreaterThan(board.terrain().size() - 20);
+    }
+
+    @Test
+    void board_isDeterministicAcrossCalls() {
+        Board first = battleService.getDemoBattle().board();
+        Board second = battleService.getDemoBattle().board();
+
+        assertThat(second.terrain()).isEqualTo(first.terrain());
+    }
+
+    @Test
+    void board_narrowPassageLetsA1x1UnitThroughButNotA2x1() {
+        Board board = battleService.getDemoBattle().board();
+
+        // Gap column between the two flanking rock columns: open for a 1x1 unit.
+        assertThat(terrainTypeAt(board, 9, 4)).isEqualTo(TerrainType.PLAIN);
+        // Either neighbour is ROCK, so a 2x1 unit spanning the gap cannot fit.
+        assertThat(terrainTypeAt(board, 8, 4)).isEqualTo(TerrainType.ROCK);
+        assertThat(terrainTypeAt(board, 10, 4)).isEqualTo(TerrainType.ROCK);
+    }
+
+    @Test
+    void board_hasADiagonalCornerRockPairTouchingOnlyAtTheCorner() {
+        Board board = battleService.getDemoBattle().board();
+
+        assertThat(terrainTypeAt(board, 9, 0)).isEqualTo(TerrainType.ROCK);
+        assertThat(terrainTypeAt(board, 10, 1)).isEqualTo(TerrainType.ROCK);
+        assertThat(terrainTypeAt(board, 9, 1)).isEqualTo(TerrainType.PLAIN);
+        assertThat(terrainTypeAt(board, 10, 0)).isEqualTo(TerrainType.PLAIN);
+    }
+
+    @Test
+    void board_hasACompactRockBlock() {
+        Board board = battleService.getDemoBattle().board();
+
+        for (int x = 9; x <= 11; x++) {
+            for (int y = 7; y <= 8; y++) {
+                assertThat(terrainTypeAt(board, x, y)).isEqualTo(TerrainType.ROCK);
+            }
+        }
+    }
+
+    private TerrainType terrainTypeAt(Board board, int x, int y) {
+        return board.terrain().stream()
+                .filter(terrain -> terrain.position().equals(new Position(x, y)))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing terrain cell: " + x + "," + y))
+                .type();
     }
 
     @Test
@@ -91,7 +163,7 @@ class BattleServiceTest {
     }
 
     @Test
-    void units_matchContract() {
+    void units_hasExactlyEightUnitsFourPerSide() {
         BattleState battleState = battleService.getDemoBattle();
         List<Unit> units = battleState.units();
 
@@ -102,22 +174,91 @@ class BattleServiceTest {
             assertThat(unit.attack()).isEqualTo(200);
             assertThat(unit.defense()).isEqualTo(50);
             assertThat(unit.moveRange()).isEqualTo(3);
-            assertThat(unit.footprint().occupiedCells(unit.position())).containsExactly(unit.position());
         });
 
-        assertThat(unitById(units, "unit-left-1").position()).isEqualTo(new Position(3, 2));
-        assertThat(unitById(units, "unit-left-2").position()).isEqualTo(new Position(3, 4));
-        assertThat(unitById(units, "unit-left-3").position()).isEqualTo(new Position(3, 6));
-        assertThat(unitById(units, "unit-left-4").position()).isEqualTo(new Position(3, 8));
-        assertThat(unitById(units, "unit-right-1").position()).isEqualTo(new Position(17, 2));
-        assertThat(unitById(units, "unit-right-2").position()).isEqualTo(new Position(17, 4));
-        assertThat(unitById(units, "unit-right-3").position()).isEqualTo(new Position(17, 6));
-        assertThat(unitById(units, "unit-right-4").position()).isEqualTo(new Position(17, 8));
+        assertThat(units.stream().map(Unit::id)).containsExactlyInAnyOrder(
+                "unit-left-1", "unit-left-2", "unit-left-3", "unit-left-4",
+                "unit-right-1", "unit-right-2", "unit-right-3", "unit-right-4");
 
-        assertThat(units.stream().filter(u -> u.owner() == PlayerSide.LEFT).map(Unit::id))
-                .containsExactlyInAnyOrder("unit-left-1", "unit-left-2", "unit-left-3", "unit-left-4");
-        assertThat(units.stream().filter(u -> u.owner() == PlayerSide.RIGHT).map(Unit::id))
-                .containsExactlyInAnyOrder("unit-right-1", "unit-right-2", "unit-right-3", "unit-right-4");
+        assertThat(units.stream().filter(u -> u.owner() == PlayerSide.LEFT))
+                .as("LEFT units").hasSize(4);
+        assertThat(units.stream().filter(u -> u.owner() == PlayerSide.RIGHT))
+                .as("RIGHT units").hasSize(4);
+    }
+
+    @Test
+    void units_eachSideHasExactlyOneUnitOfEachFootprintSize() {
+        List<Unit> units = battleService.getDemoBattle().units();
+
+        assertFootprintCellCounts(units, PlayerSide.LEFT);
+        assertFootprintCellCounts(units, PlayerSide.RIGHT);
+    }
+
+    private void assertFootprintCellCounts(List<Unit> units, PlayerSide side) {
+        List<Integer> footprintCellCounts = units.stream()
+                .filter(unit -> unit.owner() == side)
+                .map(unit -> unit.footprint().occupiedCells(unit.position()).size())
+                .toList();
+
+        assertThat(footprintCellCounts)
+                .as("%s footprint cell counts (1x1, 2x1, 2x2, 1x3)", side)
+                .containsExactlyInAnyOrder(1, 2, 4, 3);
+    }
+
+    @Test
+    void units_footprintsHaveTheExpectedDimensionsAndOrientation() {
+        List<Unit> units = battleService.getDemoBattle().units();
+
+        // 1x1: a single cell.
+        assertOccupiedCells(units, "unit-left-1", new Position(5, 2));
+        assertOccupiedCells(units, "unit-right-1", new Position(15, 2));
+
+        // 2x1: two cells side by side on the same row (horizontal).
+        assertOccupiedCells(units, "unit-left-2", new Position(5, 4), new Position(6, 4));
+        assertOccupiedCells(units, "unit-right-2", new Position(14, 4), new Position(15, 4));
+
+        // 2x2: a full two-by-two block.
+        assertOccupiedCells(units, "unit-left-3",
+                new Position(5, 6), new Position(6, 6), new Position(5, 7), new Position(6, 7));
+        assertOccupiedCells(units, "unit-right-3",
+                new Position(14, 6), new Position(15, 6), new Position(14, 7), new Position(15, 7));
+
+        // 1x3: three cells stacked in the same column (vertical).
+        assertOccupiedCells(units, "unit-left-4",
+                new Position(5, 8), new Position(5, 9), new Position(5, 10));
+        assertOccupiedCells(units, "unit-right-4",
+                new Position(15, 8), new Position(15, 9), new Position(15, 10));
+    }
+
+    @Test
+    void units_haveValidNonOverlappingStartingPositionsInsideTheBoard() {
+        BattleState battleState = battleService.getDemoBattle();
+        Board board = battleState.board();
+        List<Unit> units = battleState.units();
+
+        Set<Position> occupied = new HashSet<>();
+        for (Unit unit : units) {
+            List<Position> cells = unit.footprint().occupiedCells(unit.position());
+
+            assertThat(cells).allSatisfy(cell -> {
+                assertThat(cell.x()).isBetween(0, board.width() - 1);
+                assertThat(cell.y()).isBetween(0, board.height() - 1);
+                assertThat(terrainTypeAt(board, cell.x(), cell.y())).isEqualTo(TerrainType.PLAIN);
+            });
+
+            for (Position cell : cells) {
+                assertThat(occupied).as("cell %s not already occupied by another unit", cell)
+                        .doesNotContain(cell);
+                occupied.add(cell);
+            }
+        }
+    }
+
+    private void assertOccupiedCells(List<Unit> units, String id, Position... expectedCells) {
+        Unit unit = unitById(units, id);
+        assertThat(unit.footprint().occupiedCells(unit.position()))
+                .as("occupied cells for %s", id)
+                .containsExactlyInAnyOrder(expectedCells);
     }
 
     private Unit unitById(List<Unit> units, String id) {

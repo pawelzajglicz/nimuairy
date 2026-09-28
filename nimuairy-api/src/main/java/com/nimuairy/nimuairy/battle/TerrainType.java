@@ -1,5 +1,16 @@
 package com.nimuairy.nimuairy.battle;
 
 public enum TerrainType {
-    PLAIN
+    PLAIN(true),
+    ROCK(false);
+
+    private final boolean traversable;
+
+    TerrainType(boolean traversable) {
+        this.traversable = traversable;
+    }
+
+    public boolean isTraversable() {
+        return traversable;
+    }
 }
