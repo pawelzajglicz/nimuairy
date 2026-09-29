@@ -9,3 +9,8 @@
 
 ### Claude Code ###
 .claude/settings.local.json
+
+### Environment ###
+.env
+.env.*
+!.env.example

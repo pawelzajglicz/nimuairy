@@ -9,3 +9,11 @@ test-results/
 *.iml
 .git
 .gitignore
+.env
+.env.*
+.agents/
+.vscode/
+e2e/
+playwright.config.ts
+*.md
+skills-lock.json

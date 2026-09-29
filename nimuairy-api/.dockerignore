@@ -9,3 +9,5 @@ target/
 .gitattributes
 CLAUDE.md
 HELP.md
+.env
+.env.*
