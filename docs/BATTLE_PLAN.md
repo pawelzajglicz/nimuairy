@@ -173,10 +173,11 @@ The detailed movement rules and acceptance criteria are defined in
 
 At a high level, M4 introduces:
 
-- a `MOVE_UNIT` engine command;
+- a `MOVE_UNIT` engine command that executes any valid simple path within the
+  unit's remaining movement and charges that path's actual cost;
 - remaining movement separate from the initial `moveRange` allowance;
 - orthogonal movement cost `1` and diagonal movement cost `√2`;
-- minimum-cost reachability/pathfinding;
+- minimum-cost reachability/pathfinding for reachable cells and path previews;
 - terrain, walls, orbs, and units as blocking objects for standard units;
 - footprint-aware movement;
 - diagonal corner blocking / no corner cutting;
@@ -190,9 +191,44 @@ treated as the current player: LEFT units can move, while RIGHT units may be
 selected and inspected but cannot be moved. Full turn ownership and legal
 action rules remain an M5 responsibility.
 
+`currentPlayer` is part of the domain `BattleState`. Because the demo API does
+not carry it yet, the frontend mapper initializes it to LEFT during M4 as a
+temporary fixture. This is not frontend ownership of turn state.
+
 M4 should be implemented in small, reviewable steps rather than as one large
 frontend/backend change. Domain movement rules should be tested independently
 from Angular.
+
+#### M4 steps
+
+- **M4.1 — Movement domain foundation** (done). Movement state, command,
+  result, and error contracts; see
+  [`M4.1_DESIGN_CONTRACT.md`](./M4.1_DESIGN_CONTRACT.md).
+- **M4.2 — Movement rules, reachability, and execution.** Domain only; no UI
+  changes. Key decisions:
+  - `currentPlayer` is added to the domain `BattleState`, with a temporary
+    mapper default of LEFT;
+  - one domain movement-rules module owns footprint validity, step legality
+    (adjacency, obstacles, no corner cutting), and per-step movement cost;
+    reachability and execution both use it;
+  - movement cost stays a `number`; budget comparisons use a single
+    tolerance, and remaining movement is clamped at `0`;
+  - reachability uses Dijkstra from the unit's anchor, limited by its
+    remaining movement, with deterministic tie-breaking; it produces
+    minimum-cost paths for reachable cells and path previews;
+  - execution validates the caller-selected path and charges its actual cost.
+    It does not require a minimum-cost path and does not run pathfinding;
+  - a path is valid for a single `MOVE_UNIT` only if it is non-empty, ends at
+    the destination, is a simple path (distinct positions, start position not
+    included), and every step is legal for the complete footprint;
+  - commands carry the chosen cells as `readonly Position[]`; engine outputs
+    (movement result and path preview) use `MovementStep { from, to, cost }`
+    transitions, so per-step costs remain available for future terrain costs;
+  - `INVALID_PATH` reasons become a small literal union.
+- **M4.3 — Battle feature integration.** The store holds the domain
+  `BattleState` (via the mapper); reachable-cell highlighting, hover path and
+  cost preview, click-to-move, movement information, and the temporary reset
+  control. To be split further when planned.
 
 ### M5 — Turns
 
@@ -204,6 +240,10 @@ Implement:
 - switching players.
 
 Turn rules determine which player may currently perform gameplay actions.
+
+`currentPlayer` becomes part of the backend/API battle state: the Java
+`BattleState`, `BattleStateResponse`, the OpenAPI contract, and the regenerated
+client. The frontend mapper then maps it instead of defaulting to LEFT.
 
 ### M6 — Combat
 
