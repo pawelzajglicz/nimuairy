@@ -4,6 +4,7 @@ import type {
   MoveUnitCommand,
   MovementError,
   MovementResult,
+  MovementStep,
 } from './movement';
 import { ok } from './result';
 
@@ -25,6 +26,7 @@ const state: BattleState = {
   orbs: [],
   walls: [],
   units: [unit],
+  currentPlayer: 'LEFT',
 };
 
 describe('MoveUnitCommand', () => {
@@ -45,17 +47,17 @@ describe('MoveUnitCommand', () => {
 });
 
 describe('MovementResult', () => {
-  it('carries the resulting state, executed path and cost as a successful result', () => {
-    const path = [
-      { x: 3, y: 3 },
-      { x: 4, y: 4 },
+  it('carries the resulting state, executed steps and total cost as a successful result', () => {
+    const steps: MovementStep[] = [
+      { from: { x: 2, y: 3 }, to: { x: 3, y: 3 }, cost: 1 },
+      { from: { x: 3, y: 3 }, to: { x: 4, y: 4 }, cost: Math.SQRT2 },
     ];
 
-    const result = ok<MovementResult>({ state, path, cost: 1 + Math.SQRT2 });
+    const result = ok<MovementResult>({ state, steps, cost: 1 + Math.SQRT2 });
 
     expect(result).toEqual({
       ok: true,
-      value: { state, path, cost: 1 + Math.SQRT2 },
+      value: { state, steps, cost: 1 + Math.SQRT2 },
     });
   });
 });

@@ -78,6 +78,10 @@ describe('toBattleState', () => {
     expect(unit.remainingMovement).toBe(unit.moveRange);
   });
 
+  it('starts the demo battle with LEFT as the current player', () => {
+    expect(toBattleState(response()).currentPlayer).toBe('LEFT');
+  });
+
   it('rejects a response with a missing required field', () => {
     const incomplete = response();
     delete incomplete.units![0].position;

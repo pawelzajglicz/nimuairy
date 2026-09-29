@@ -31,6 +31,10 @@ export function toBattleState(response: BattleStateResponse): BattleState {
     orbs: required(response.orbs, 'orbs').map(toOrb),
     walls: required(response.walls, 'walls').map(toWall),
     units: required(response.units, 'units').map(toUnit),
+    // Temporary M4 fixture: the demo API does not carry the current player
+    // yet. This is not frontend ownership of turn state; M5 adds the field to
+    // the API and this mapping reads it from the response instead.
+    currentPlayer: 'LEFT',
   };
 }
 
