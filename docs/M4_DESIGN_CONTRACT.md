@@ -43,6 +43,12 @@ turn model.
 `currentPlayer` is part of `BattleState`, even though M4 uses a fixed LEFT value.
 M5 will introduce the actual turn transitions and rules for changing it.
 
+Because the demo API does not carry `currentPlayer` yet, the frontend mapper
+(`battle-state.mapper.ts`) initializes it to `LEFT` during M4. This is a
+temporary fixture default, not frontend ownership of turn state. In M5,
+`currentPlayer` becomes part of the backend/API battle state and the mapper
+maps it instead.
+
 ## 4. Movement Command
 
 Movement is requested through the battle engine using a command-oriented API.
@@ -145,9 +151,31 @@ expensive. Such terrain movement costs are out of scope for M4, but the M4
 architecture must not assume that total path cost can always be reconstructed
 from only `orthogonalSteps` and `diagonalSteps`.
 
-The implementation should avoid unnecessary floating-point equality checks.
-Use an appropriate comparison/tolerance strategy or another representation that
-preserves the intended movement semantics.
+Movement costs are represented as `number`. Because floating-point sums of `1`
+and `√2` depend on summation order, the domain never compares costs directly:
+
+- all cost comparisons go through a single tolerance (`COST_EPSILON`) defined
+  in the domain movement-cost module;
+- a move is within budget when `cost <= remainingMovement + COST_EPSILON`, so
+  a move that uses exactly the remaining movement is allowed;
+- after a move, `remainingMovement` is clamped at `0`, so the tolerance cannot
+  break the invariant `0 <= remainingMovement`;
+- a path's cost is summed step by step from the start, both in pathfinding and
+  in execution, so a previewed cost equals the executed cost exactly.
+
+Future step costs must be greater than `0`; pathfinding and the simple-path
+rule rely on it.
+
+Engine outputs represent a path as engine-evaluated transitions:
+
+```text
+MovementStep { from, to, cost }
+```
+
+The movement result and the path preview therefore keep the cost of every
+individual step, which remains available when future terrain makes steps cost
+differently (`A --1--> B --2--> C`). Commands still carry only positions; costs
+are always computed by the engine.
 
 ## 7. Reachability Is Path-Based
 
@@ -166,10 +194,19 @@ the available path to be too expensive or because no valid path exists.
 When multiple valid paths exist, the relevant movement cost and preview path
 use the minimum-cost valid path for reachability and preview purposes.
 
-When the player explicitly selects a path, `MOVE_UNIT` carries that path and
-the engine validates and charges the cost of that submitted path. The selected
-path is expected to be a minimum-cost valid path produced by the movement UI,
-but the engine remains authoritative and validates it independently.
+Reachability/pathfinding and movement execution are separate responsibilities:
+
+- **reachability/pathfinding** calculates minimum-cost paths. The movement UI
+  uses them for reachable cells and path previews;
+- **movement execution** validates the path selected by the caller and
+  charges that path's actual cost.
+
+When the player selects a path, `MOVE_UNIT` carries that path. Execution
+accepts any valid path (see §16) whose actual cost is within
+`remainingMovement`. It does not require the path to be a minimum-cost path and
+does not run pathfinding to compare against one. The movement UI normally
+submits a minimum-cost path taken from reachability; since both use the same
+domain movement rules, such a path always passes validation.
 
 ## 8. Standard Traversability Rules
 
@@ -200,7 +237,11 @@ A position is invalid when any footprint cell:
 2. is on non-traversable terrain;
 3. overlaps a wall;
 4. overlaps an orb;
-5. overlaps another unit.
+5. overlaps another unit;
+6. has no terrain entry.
+
+A cell without a terrain entry is treated as non-traversable rather than
+assumed to be PLAIN. The backend always provides terrain for every cell.
 
 All footprint cells must therefore be valid simultaneously.
 
@@ -265,6 +306,27 @@ A practical domain interpretation is:
 This intentionally uses a conservative no-corner-cutting rule and keeps the
 movement behaviour deterministic.
 
+The rule is exactly the area swept by the footprint. When a footprint slides
+diagonally from `A` to `B`, each of its cells passes only through itself, its
+two orthogonal neighbours in the direction of movement, and its diagonal
+neighbour. The union of the footprint placed at `A`, `A + (dx, 0)`,
+`A + (0, dy)`, and `B` is therefore precisely the area the unit touches during
+the move. The moving unit's own current cells are not obstacles.
+
+For a `↗` move from anchor `(x, y)`, the checked area and the cells that block
+the move without being part of the start or destination footprint are:
+
+| Footprint | Checked area | Blocking corner cells |
+|---|---|---|
+| 1×1 | `x..x+1 × y..y+1` | `(x+1, y)`, `(x, y+1)`: one blocked corner is enough |
+| 2×1 | `x..x+2 × y..y+1` | `(x+2, y)`, `(x, y+1)` |
+| 2×2 | `x..x+2 × y..y+2` | `(x+2, y)`, `(x, y+2)` |
+| 1×3 | `x..x+1 × y..y+3` | `(x+1, y)`, `(x, y+3)` |
+
+A consequence is that one-cell-wide diagonal corridors cannot be passed, and a
+multi-cell unit may need two orthogonal steps where a diagonal step would clip
+a corner.
+
 ## 12. Pathfinding and Reachability Algorithm
 
 M4 needs a weighted shortest-path search because orthogonal and diagonal steps
@@ -287,6 +349,23 @@ Dijkstra's algorithm is sufficient for these requirements. A* is also valid if
 implemented clearly and tested equivalently, but M4 should not introduce a
 more complex algorithm solely for hypothetical performance needs.
 
+M4 uses Dijkstra's algorithm, searching from the unit's current anchor. A* is
+not needed: reachability needs every reachable destination in one pass, not a
+path to a single target, and the board is small.
+
+The search must be deterministic:
+
+- neighbours are explored in the fixed order E, N, W, S, NE, NW, SW, SE;
+- among equally cheap candidates (within `COST_EPSILON`), the one discovered
+  first is settled first;
+- a cell's recorded path is replaced only by a strictly cheaper one, so among
+  equal-cost paths the first one found wins;
+- neighbours whose cost would exceed the remaining movement are never
+  recorded.
+
+Each destination therefore has one canonical minimum-cost path, and the same
+state always produces the same paths.
+
 The search should be implemented independently of Angular rendering.
 
 ## 13. Reachable Cells
@@ -301,6 +380,20 @@ movement destination.
 Only positions satisfying all movement rules and within the remaining movement
 budget are reachable.
 
+The reachability result maps each reachable anchor to:
+
+- its minimum movement cost from the unit's current anchor;
+- the last `MovementStep` of its canonical minimum-cost path, or none for the
+  current position.
+
+The current position is included at cost `0`. The complete path to a reachable
+cell is reconstructed by following these steps back to the current position,
+and is returned as `MovementStep`s.
+
+Requesting reachability for a unit that does not belong to the current player
+is rejected with `UNIT_CANNOT_MOVE`, so the UI never presents a movement range
+for a unit that cannot move.
+
 The frontend must not calculate reachability independently.
 
 ## 14. Hover Path Preview
@@ -312,10 +405,14 @@ When the pointer hovers a reachable destination:
 - display the path visually on the board;
 - display the path's total movement cost.
 
+The preview path is the reconstructed sequence of `MovementStep`s from the
+reachability result, so per-step costs are available without recalculating
+them.
+
 The path is only a preview.
 
 Clicking the destination executes the `MOVE_UNIT` command with the selected
-path.
+path, i.e. the `to` positions of the previewed steps.
 
 Hovering an invalid or unreachable cell must not produce a misleading valid
 path. The previous preview should be cleared or replaced according to the
@@ -364,11 +461,43 @@ A successful `MOVE_UNIT` command must:
 6. move the unit anchor to the requested destination;
 7. preserve the unit footprint unchanged;
 8. reduce `remainingMovement` by the validated path cost;
-9. return a new immutable `BattleState` together with the executed path and cost.
+9. return a new immutable `BattleState` together with the executed steps
+   (`MovementStep[]`) and the total cost charged.
 
 The submitted path must end at `destination`.
 
 An invalid command must not partially mutate the battle state.
+
+### Path validity
+
+A command is checked in the following order. The first failing rule determines
+the returned error:
+
+| # | Rule | Error |
+|---|---|---|
+| 1 | the unit exists | `UNIT_NOT_FOUND` |
+| 2 | the unit belongs to `state.currentPlayer` | `UNIT_CANNOT_MOVE` |
+| 3 | the path is not empty | `INVALID_PATH` / `EMPTY` |
+| 4 | the last path position equals `destination` | `INVALID_PATH` / `DESTINATION_MISMATCH` |
+| 5 | the unit's complete footprint is valid at `destination` (§9) | `INVALID_DESTINATION` |
+| 6 | each path position has not been visited yet in this command, including the start | `INVALID_PATH` / `REVISITED` |
+| 7 | each path position is one of the eight neighbours of the previous position | `INVALID_PATH` / `NOT_ADJACENT` |
+| 8 | the unit's complete footprint is valid at each path position | `INVALID_PATH` / `BLOCKED` |
+| 9 | each diagonal step has clearance through both orthogonal positions (§11) | `INVALID_PATH` / `CORNER_BLOCKED` |
+| 10 | the path's total cost is within `remainingMovement` (§6) | `INSUFFICIENT_MOVEMENT` |
+
+Rules 6–9 are evaluated per path position, in path order.
+
+**Simple-path invariant.** Within a single `MOVE_UNIT` command, every path
+position must be distinct and the starting position must not occur in the
+path. Loops and paths returning to the start are therefore invalid. The
+invariant applies to one command only: a later movement in the same turn may
+enter the same cells again.
+
+Adjacency requires each coordinate offset to be exactly `-1`, `0`, or `1`, so
+positions with fractional or non-numeric coordinates are rejected as well.
+
+Execution never requires the path to be a minimum-cost path (§7).
 
 ## 17. Repeated Movement
 
@@ -403,6 +532,10 @@ For the demo only:
 The engine must read the current player from `BattleState` rather than depending
 on Angular store state or another hidden external value.
 
+In M4 the frontend mapper initializes `currentPlayer` to `LEFT` as a temporary
+fixture (§3). Once `BattleStore` holds the domain `BattleState`, it must not
+keep a separate copy of the current player.
+
 M5 will introduce the actual turn transitions and rules for changing it.
 
 ## 19. Invalid Movement
@@ -420,6 +553,22 @@ The following must be rejected:
 - submitted path that does not end at the destination;
 - diagonal movement through a blocked corner;
 - movement of a RIGHT unit in the M4 demo context.
+
+These cases map to `MovementError` as follows, with the precedence defined in
+§16:
+
+| Case | Error |
+|---|---|
+| destination outside the board, on another unit, overlapping a wall or orb, on ROCK, or with any invalid footprint cell | `INVALID_DESTINATION` |
+| destination requiring more movement than remains | `INSUFFICIENT_MOVEMENT` |
+| submitted path that is not valid | `INVALID_PATH` with the reason of the failing rule |
+| submitted path that does not end at the destination | `INVALID_PATH` / `DESTINATION_MISMATCH` |
+| diagonal movement through a blocked corner | `INVALID_PATH` / `CORNER_BLOCKED` |
+| movement of a RIGHT unit | `UNIT_CANNOT_MOVE` |
+
+Execution does not search for paths, so "destination with no valid path"
+surfaces as an invalid submitted path (`INVALID_PATH`) or as
+`INSUFFICIENT_MOVEMENT`.
 
 Rejected movement must leave the `BattleState` unchanged.
 
@@ -465,8 +614,11 @@ At minimum, cover:
 - orthogonal step costs 1;
 - diagonal step costs √2;
 - multi-step costs accumulate correctly;
-- movement exactly exhausting the budget is allowed;
-- movement exceeding the budget is rejected.
+- movement exactly exhausting the budget is allowed, including when
+  floating-point summation order makes the cost differ by rounding error;
+- movement exceeding the budget is rejected;
+- the executed steps carry the cost of each step and chain from the start to
+  the destination.
 
 ### Paths
 
@@ -474,7 +626,13 @@ At minimum, cover:
 - obstacles can force a longer path;
 - unreachable destinations are rejected;
 - board boundaries are respected;
-- blocked diagonal corners are rejected.
+- blocked diagonal corners are rejected;
+- cells without a terrain entry are not traversable;
+- a valid non-minimal path is accepted and charged its actual cost;
+- paths revisiting a cell or returning to the start are rejected;
+- the canonical path among equal-cost paths is deterministic;
+- every path produced by reachability is accepted by execution with the same
+  steps and cost.
 
 ### Footprints
 
