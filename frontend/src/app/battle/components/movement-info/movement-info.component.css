@@ -41,7 +41,6 @@
   align-self: center;
 }
 
-.unavailable,
 .preview {
   grid-area: detail;
 }
@@ -65,7 +64,6 @@
 
 /* Long text wraps rather than being clipped or widening the panel. */
 .unit-movement,
-.unavailable,
 .preview,
 .last-outcome {
   overflow-wrap: anywhere;
@@ -95,10 +93,6 @@
 .dev-tag,
 .no-selection {
   color: #6b7280;
-}
-
-.unavailable {
-  color: #92400e;
 }
 
 .preview {

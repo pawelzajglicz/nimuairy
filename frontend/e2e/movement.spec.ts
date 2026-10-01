@@ -186,7 +186,33 @@ test.describe('movement with real pointer interaction', () => {
     await expect(
       page.locator('.entity-cell.selected[data-owner="RIGHT"]'),
     ).toHaveCount(1);
-    await expect(targets(page)).toHaveCount(0);
+  });
+
+  test('a RIGHT unit can be inspected but its move is rejected', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await clickCell(page, 5, 0);
+    await expect(
+      page.getByRole('button', { name: 'Move to (4, 0), cost 1' }),
+    ).toBeVisible();
+
+    await hoverCell(page, 4, 0);
+    await expect(page.locator('.preview-cost')).toHaveText('1');
+    await expect(page.locator('.movement-path polyline')).toHaveAttribute(
+      'points',
+      '5.5,3.5 4.5,3.5',
+    );
+
+    await clickCell(page, 4, 0);
+
+    await expect(page.locator('.last-outcome')).toHaveText(
+      'Move rejected: UNIT_CANNOT_MOVE',
+    );
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'right-small (RIGHT) · Move 0 / 3 · remaining 3',
+    );
+    expect(await unitCells(page)).toContain('RIGHT@5,0');
   });
 
   test('a terrain cell that is not a target still clears the selection', async ({

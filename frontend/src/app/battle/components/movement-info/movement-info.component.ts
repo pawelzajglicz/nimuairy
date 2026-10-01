@@ -7,7 +7,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import type { PlayerSide, Position, Unit } from '../../domain/battle-state';
+import type { Position, Unit } from '../../domain/battle-state';
 import type { MovementError } from '../../domain/movement';
 import type { LastMovementOutcome } from '../../movement-outcome';
 import type { MovementPreview } from '../../movement-preview';
@@ -27,9 +27,6 @@ export class MovementInfoComponent {
   private readonly locale = inject(LOCALE_ID);
 
   readonly unit = input<Unit>();
-  readonly currentPlayer = input<PlayerSide>();
-  /** Why the selected unit has no movement range, as reported by the engine. */
-  readonly unavailable = input<MovementError>();
   readonly preview = input<MovementPreview>();
   readonly lastOutcome = input<LastMovementOutcome>();
 
@@ -47,16 +44,6 @@ export class MovementInfoComponent {
     return steps.length > 0
       ? [steps[0].from, ...steps.map(({ to }) => to)].map(cell).join(' → ')
       : '';
-  });
-
-  protected readonly unavailableText = computed(() => {
-    const error = this.unavailable();
-    if (!error) {
-      return undefined;
-    }
-    return error.type === 'UNIT_CANNOT_MOVE'
-      ? `Cannot move: ${this.unit()?.owner} is not the current player (${this.currentPlayer()})`
-      : `Cannot move: ${errorText(error, this.locale)}`;
   });
 
   protected readonly lastOutcomeText = computed(() => {

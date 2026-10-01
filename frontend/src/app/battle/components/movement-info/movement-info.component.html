@@ -11,9 +11,6 @@
         Reset movement <span class="dev-tag">(dev)</span>
       </button>
     </div>
-    @if (unavailableText(); as text) {
-      <p class="unavailable">{{ text }}</p>
-    }
     @if (preview(); as preview) {
       <p class="preview">
         Preview: cost {{ preview.cost | number: '1.0-2' }} · {{ previewPath() }}

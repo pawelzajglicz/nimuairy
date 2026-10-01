@@ -1,7 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type { PlayerSide, Unit } from '../../domain/battle-state';
-import type { MovementError } from '../../domain/movement';
+import type { Unit } from '../../domain/battle-state';
 import { testUnit } from '../../domain/testing/battle-fixtures';
 import type { LastMovementOutcome } from '../../movement-outcome';
 import type { MovementPreview } from '../../movement-preview';
@@ -9,15 +8,12 @@ import { MovementInfoComponent } from './movement-info.component';
 
 interface Inputs {
   unit?: Unit;
-  currentPlayer?: PlayerSide;
-  unavailable?: MovementError;
   preview?: MovementPreview;
   lastOutcome?: LastMovementOutcome;
 }
 
 function render(inputs: Inputs = {}) {
   const fixture = TestBed.createComponent(MovementInfoComponent);
-  fixture.componentRef.setInput('currentPlayer', 'LEFT');
   for (const [name, value] of Object.entries(inputs)) {
     fixture.componentRef.setInput(name, value);
   }
@@ -74,17 +70,6 @@ describe('MovementInfoComponent', () => {
         'Reset movement (dev)',
       );
       expect(resets).toBe(1);
-    });
-
-    it('explains when the unit belongs to the other player', () => {
-      const fixture = render({
-        unit: testUnit({ id: 'unit-right-1', owner: 'RIGHT' }),
-        unavailable: { type: 'UNIT_CANNOT_MOVE', unitId: 'unit-right-1' },
-      });
-
-      expect(text(fixture, '.unavailable')).toBe(
-        'Cannot move: RIGHT is not the current player (LEFT)',
-      );
     });
 
     it('shows the previewed path from the unit and its cost', () => {

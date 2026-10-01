@@ -68,8 +68,8 @@ export const BattleStore = signalStore(
       interactionMode,
       hoveredDestination,
     }) => {
-      // Derived, never stored, so it always reflects the current state. The
-      // engine decides whether the selected unit may move at all.
+      // Derived, never stored, so it always reflects the current state. Any
+      // unit can be inspected; only execution checks whether it may move.
       const _movementRange = computed(() => {
         const state = battleState();
         const unitId = selectedUnitId();
@@ -90,11 +90,6 @@ export const BattleStore = signalStore(
           battleState()?.units.find(({ id }) => id === selectedUnitId()),
         ),
         _movementRange,
-        /** Why the selected unit has no movement range, e.g. it is not the current player's. */
-        movementUnavailable: computed(() => {
-          const range = _movementRange();
-          return range && !range.ok ? range.error : undefined;
-        }),
         /** Where the selected unit can move; its own anchor is not a destination. */
         reachableDestinations: computed(() => {
           const range = _movementRange();

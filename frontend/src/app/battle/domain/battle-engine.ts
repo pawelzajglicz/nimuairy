@@ -82,17 +82,19 @@ export class BattleEngine {
 
   /**
    * Minimum-cost paths from the unit's anchor to every cell within its
-   * remaining movement, for highlighting and path previews.
+   * remaining movement, for highlighting and path previews. An inspection
+   * query for any unit: it does not check `currentPlayer`, so it does not
+   * grant permission to move; `execute` decides that.
    */
   reachability(
     state: BattleState,
     unitId: string,
   ): Result<Reachability, MovementError> {
-    const movable = movableUnit(state, unitId);
-    if (!movable.ok) {
-      return movable;
+    const found = findUnit(state, unitId);
+    if (!found.ok) {
+      return found;
     }
-    const unit = movable.value;
+    const unit = found.value;
 
     return ok(
       findReachable(
@@ -127,16 +129,21 @@ export class BattleEngine {
   }
 }
 
-function movableUnit(
+function findUnit(
   state: BattleState,
   unitId: string,
 ): Result<Unit, MovementError> {
   const unit = state.units.find(({ id }) => id === unitId);
-  if (!unit) {
-    return err({ type: 'UNIT_NOT_FOUND', unitId });
-  }
-  if (unit.owner !== state.currentPlayer) {
+  return unit ? ok(unit) : err({ type: 'UNIT_NOT_FOUND', unitId });
+}
+
+function movableUnit(
+  state: BattleState,
+  unitId: string,
+): Result<Unit, MovementError> {
+  const found = findUnit(state, unitId);
+  if (found.ok && found.value.owner !== state.currentPlayer) {
     return err({ type: 'UNIT_CANNOT_MOVE', unitId });
   }
-  return ok(unit);
+  return found;
 }

@@ -304,12 +304,19 @@ describe('BattleStore', () => {
       expect(destinations(store)).not.toContainEqual({ x: 2, y: 2 });
     });
 
-    it('offers no destinations for a unit of the other player', async () => {
+    it("offers the other player's unit destinations and previews for inspection", async () => {
       const store = await loadedStore();
 
       store.selectUnit('right-unit-1');
+      store.hoverDestination({ x: 4, y: 2 });
 
-      expect(store.reachableDestinations()).toEqual([]);
+      expect(store.reachableDestinations()).toContainEqual(
+        expect.objectContaining({ position: { x: 4, y: 2 }, cost: 2 }),
+      );
+      expect(store.movementPreview()).toMatchObject({
+        destination: { x: 4, y: 2 },
+        cost: 2,
+      });
     });
 
     it('previews the path and cost to a hovered destination', async () => {
@@ -400,12 +407,23 @@ describe('BattleStore', () => {
 
       store.setInteractionMode(InteractionMode.ATTACK);
       store.moveSelectedUnit({ x: 2, y: 1 });
-      store.setInteractionMode(InteractionMode.MOVE);
 
+      expect(store.battleState()).toBe(before);
+    });
+
+    it("lets the engine reject moving the other player's unit, leaving the battle state untouched", async () => {
+      const store = await loadedStore();
+      const before = store.battleState();
       store.selectUnit('right-unit-1');
+
       store.moveSelectedUnit({ x: 3, y: 2 });
 
       expect(store.battleState()).toBe(before);
+      expect(store.lastOutcome()).toEqual({
+        kind: 'REJECTED',
+        action: 'MOVE',
+        error: { type: 'UNIT_CANNOT_MOVE', unitId: 'right-unit-1' },
+      });
     });
 
     it('keeps the moved state across later UI changes, leaving loading and error alone', async () => {
@@ -431,19 +449,6 @@ describe('BattleStore', () => {
 
       expect(store.selectedUnit()).toBe(leftUnit(store));
       expect(store.selectedUnit()?.position).toEqual({ x: 2, y: 1 });
-    });
-
-    it('reports why a unit of the other player has no movement range', async () => {
-      const store = await loadedStore();
-
-      store.selectUnit('right-unit-1');
-      expect(store.movementUnavailable()).toEqual({
-        type: 'UNIT_CANNOT_MOVE',
-        unitId: 'right-unit-1',
-      });
-
-      store.selectUnit('left-unit-1');
-      expect(store.movementUnavailable()).toBeUndefined();
     });
 
     describe('last outcome', () => {

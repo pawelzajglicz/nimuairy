@@ -501,13 +501,18 @@ describe('BattleDemoPage', () => {
       expect(root.querySelector('.preview-cost')).toBeNull();
     });
 
-    it('shows no movement targets for a selected RIGHT unit', async () => {
-      const { unit, targets, act } = await renderMovementBoard();
+    it('shows movement targets and a path preview for a selected RIGHT unit', async () => {
+      const { root, unit, targets, target, act } = await renderMovementBoard();
 
       act(() => unit('RIGHT').click());
-
       expect(unit('RIGHT').classList).toContain('selected');
-      expect(targets()).toHaveLength(0);
+      expect(targets().length).toBeGreaterThan(0);
+
+      act(() => target(6, 3).dispatchEvent(new MouseEvent('mouseenter')));
+      expect(root.querySelector('.movement-path polyline')).not.toBeNull();
+      expect(root.querySelector('.preview-cost')?.textContent?.trim()).toBe(
+        '1',
+      );
     });
 
     it('shows no movement targets in ATTACK mode', async () => {
@@ -561,19 +566,18 @@ describe('BattleDemoPage', () => {
       expect(text('.last-outcome')).toBe('Movement reset for unit-left-1');
     });
 
-    it('explains that a RIGHT unit cannot move, keeping the last move visible', async () => {
+    it('reports the rejected move when a RIGHT unit target is clicked, leaving the unit in place', async () => {
       const { unit, target, act, text } = await renderMovementBoard();
-      act(() => unit('LEFT').click());
-      act(() => target(2, 1).click());
-
       act(() => unit('RIGHT').click());
 
-      expect(text('.unavailable')).toBe(
-        'Cannot move: RIGHT is not the current player (LEFT)',
+      act(() => target(6, 3).click());
+
+      expect(unit('RIGHT').style.gridColumn).toBe('6');
+      expect(unit('RIGHT').style.gridRow).toBe(String(HEIGHT - 3));
+      expect(text('.unit-movement')).toBe(
+        'unit-right-1 (RIGHT) · Move 0 / 3 · remaining 3',
       );
-      expect(text('.last-outcome')).toBe(
-        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1',
-      );
+      expect(text('.last-outcome')).toBe('Move rejected: UNIT_CANNOT_MOVE');
     });
   });
 });

@@ -556,21 +556,52 @@ describe('BattleEngine reachability', () => {
     });
   });
 
-  it("rejects the other player's unit", () => {
+  describe("the other player's unit", () => {
+    // 1.59 covers one orthogonal (1) or diagonal (√2) step, but not two
+    // orthogonal steps (2), although the unit's moveRange is 3.
     const right = testUnit({
       id: 'right-1x1',
       owner: 'RIGHT',
       position: { x: 5, y: 5 },
+      moveRange: 3,
+      remainingMovement: 1.59,
+    });
+    const state = testState({ units: [testUnit(), right] });
+
+    it('can be inspected, within its remaining movement rather than its moveRange', () => {
+      const before = structuredClone(state);
+
+      const result = engine.reachability(state, 'right-1x1');
+      if (!result.ok) {
+        throw new Error(
+          `expected reachability, got ${JSON.stringify(result.error)}`,
+        );
+      }
+
+      expect(result.value.origin).toEqual({ x: 5, y: 5 });
+      expect([...result.value.cells.keys()].sort()).toEqual(
+        ['4,4', '4,5', '4,6', '5,4', '5,5', '5,6', '6,4', '6,5', '6,6'].sort(),
+      );
+      expect(result.value.cells.get('6,6')?.cost).toBe(Math.SQRT2);
+      expect(state).toEqual(before);
     });
 
-    expect(
-      engine.reachability(
-        testState({ units: [testUnit(), right] }),
-        'right-1x1',
-      ),
-    ).toEqual({
-      ok: false,
-      error: { type: 'UNIT_CANNOT_MOVE', unitId: 'right-1x1' },
+    it('is still rejected when executing a path that reachability offers', () => {
+      const reachability = engine.reachability(state, 'right-1x1');
+      if (!reachability.ok) {
+        throw new Error('expected reachability');
+      }
+      const steps = pathTo(reachability.value, { x: 6, y: 6 }) ?? [];
+      expect(steps).toHaveLength(1);
+
+      expectRejected(
+        state,
+        moveCommand(
+          steps.map(({ to }) => to),
+          { unitId: 'right-1x1' },
+        ),
+        { type: 'UNIT_CANNOT_MOVE', unitId: 'right-1x1' },
+      );
     });
   });
 });

@@ -10,8 +10,6 @@
     />
     <app-movement-info
       [unit]="store.selectedUnit()"
-      [currentPlayer]="battleState.currentPlayer"
-      [unavailable]="store.movementUnavailable()"
       [preview]="store.movementPreview()"
       [lastOutcome]="store.lastOutcome()"
       (resetMovement)="store.resetSelectedUnitMovement()"
