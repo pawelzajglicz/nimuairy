@@ -1,10 +1,10 @@
-import type { PositionDto } from '../api/generated/model';
+import type { Position } from './domain/battle-state';
 
 /**
  * A raw board click, normalized to a domain-meaningful interaction.
  * Frontend-only UI concept; not part of the backend BattleState.
  */
-export type BoardInteraction = UnitClicked | CellClicked;
+export type BoardInteraction = UnitClicked | CellClicked | DestinationClicked;
 
 export interface UnitClicked {
   kind: 'unit-clicked';
@@ -13,5 +13,11 @@ export interface UnitClicked {
 
 export interface CellClicked {
   kind: 'cell-clicked';
-  position: PositionDto;
+  position: Position;
+}
+
+/** A click on a reachable movement destination of the selected unit. */
+export interface DestinationClicked {
+  kind: 'destination-clicked';
+  position: Position;
 }

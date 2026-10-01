@@ -3,10 +3,15 @@ import type { BoardInteraction } from '../../board-interaction';
 import { BattleStore } from '../../battle.store';
 import { BattleBoardComponent } from '../../components/battle-board/battle-board.component';
 import { InteractionModeControlsComponent } from '../../components/interaction-mode-controls/interaction-mode-controls.component';
+import { MovementInfoComponent } from '../../components/movement-info/movement-info.component';
 
 @Component({
   selector: 'app-battle-demo-page',
-  imports: [BattleBoardComponent, InteractionModeControlsComponent],
+  imports: [
+    BattleBoardComponent,
+    InteractionModeControlsComponent,
+    MovementInfoComponent,
+  ],
   providers: [BattleStore],
   templateUrl: './battle-demo-page.html',
   styleUrl: './battle-demo-page.css',
@@ -21,6 +26,9 @@ export class BattleDemoPage {
         break;
       case 'cell-clicked':
         this.store.clearSelection();
+        break;
+      case 'destination-clicked':
+        this.store.moveSelectedUnit(interaction.position);
         break;
     }
   }

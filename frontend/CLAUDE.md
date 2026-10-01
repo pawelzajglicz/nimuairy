@@ -41,6 +41,10 @@ The battle system is currently a frontend prototype.
 - Do not introduce NgRx or another state-management library for the battle system unless explicitly requested.
 - Prefer immutable state transitions.
 - Keep the battle domain model independent from HTTP, Angular, and SignalStore.
+- `battle/domain/` holds the domain model (`BattleState`, `Unit`, …), engine commands/results, and `BattleEngine`. It must not import Angular, `@ngrx/signals`, or `api/generated`.
+- `battle/battle-state.mapper.ts` is the only bridge from the generated `BattleStateResponse` to the domain `BattleState`.
+- `BattleStore` holds the domain `BattleState` as a `withLinkedState` slice. The mapper seeds it from the HTTP resource, and afterwards it is updated only with `BattleEngine` results. Its computation must read nothing but the HTTP resource, because any other dependency would silently reset the battle. `loading`/`error` stay owned by the resource.
+- Battle components take domain types from `battle/domain/`, not generated DTOs.
 
 ### M2 battle board
 

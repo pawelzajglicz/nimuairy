@@ -10,4 +10,12 @@
     [interactionMode]="interactionMode()"
     (unitClick)="onUnitClick($event)"
   />
+  <app-movement-overlay
+    [board]="battleState()?.board"
+    [destinations]="reachableDestinations()"
+    [preview]="movementPreview()"
+    [unit]="selectedUnit()"
+    (destinationHover)="destinationHover.emit($event)"
+    (destinationClick)="onDestinationClick($event)"
+  />
 </div>

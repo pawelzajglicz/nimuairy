@@ -1,23 +1,20 @@
 import { Component, computed, input, output } from '@angular/core';
 import type {
-  BattleStateResponse,
-  OrbDtoOwner,
-  PositionDto,
-  UnitDtoOwner,
-  WallDtoOwner,
-} from '../../../api/generated/model';
-import { toGridPosition } from '../../utils/coordinate-mapper';
-import { footprintPositions } from '../../utils/footprint';
+  BattleState,
+  PlayerSide,
+  Position,
+} from '../../domain/battle-state';
+import { occupiedCells } from '../../domain/geometry';
 import { InteractionMode } from '../../interaction-mode';
+import { toGridPosition } from '../../utils/coordinate-mapper';
 
 type EntityKind = 'unit' | 'orb' | 'wall';
-type EntityOwner = UnitDtoOwner | OrbDtoOwner | WallDtoOwner;
 
 interface RenderedEntityCell {
   key: string;
-  id: string | undefined;
+  id: string;
   kind: EntityKind;
-  owner: EntityOwner | undefined;
+  owner: PlayerSide;
   gridColumn: number;
   gridRow: number;
 }
@@ -29,7 +26,7 @@ interface RenderedEntityCell {
   styleUrl: './entity-layer.component.css',
 })
 export class EntityLayerComponent {
-  readonly battleState = input<BattleStateResponse>();
+  readonly battleState = input<BattleState>();
   readonly selectedUnitId = input<string>();
   readonly interactionMode = input<InteractionMode>(InteractionMode.MOVE);
 
@@ -38,7 +35,7 @@ export class EntityLayerComponent {
   protected readonly board = computed(() => this.battleState()?.board);
 
   protected isSelected(cell: RenderedEntityCell): boolean {
-    return cell.id !== undefined && cell.id === this.selectedUnitId();
+    return cell.id === this.selectedUnitId();
   }
 
   /** The mode the selection is shown in; only the selected unit carries it. */
@@ -53,63 +50,46 @@ export class EntityLayerComponent {
 
   protected readonly entityCells = computed<RenderedEntityCell[]>(() => {
     const state = this.battleState();
-    const height = state?.board?.height ?? 0;
+    const height = state?.board.height ?? 0;
 
     // Walls first, then orbs, then units, so units render on top when footprints overlap.
     return [
       ...(state?.walls ?? []).flatMap((wall) =>
-        footprintCells(
-          'wall',
-          wall.owner,
-          wall.id,
-          wall.position,
-          wall.footprint,
-          height,
-        ),
+        footprintCells('wall', wall, height),
       ),
       ...(state?.orbs ?? []).flatMap((orb) =>
-        footprintCells(
-          'orb',
-          orb.owner,
-          orb.id,
-          orb.position,
-          orb.footprint,
-          height,
-        ),
+        footprintCells('orb', orb, height),
       ),
       ...(state?.units ?? []).flatMap((unit) =>
-        footprintCells(
-          'unit',
-          unit.owner,
-          unit.id,
-          unit.position,
-          unit.footprint,
-          height,
-        ),
+        footprintCells('unit', unit, height),
       ),
     ];
   });
 
   protected onEntityCellClick(cell: RenderedEntityCell): void {
-    if (cell.kind === 'unit' && cell.id) {
+    if (cell.kind === 'unit') {
       this.unitClick.emit(cell.id);
     }
   }
 }
 
+interface PlacedEntity {
+  readonly id: string;
+  readonly owner: PlayerSide;
+  readonly position: Position;
+  readonly footprint: readonly Position[];
+}
+
 function footprintCells(
   kind: EntityKind,
-  owner: EntityOwner | undefined,
-  id: string | undefined,
-  anchor: PositionDto | undefined,
-  footprint: PositionDto[] | undefined,
+  { id, owner, position, footprint }: PlacedEntity,
   boardHeight: number,
 ): RenderedEntityCell[] {
-  return footprintPositions(anchor, footprint).map(({ x, y }, index) => {
-    const { gridColumn, gridRow } = toGridPosition({ x, y }, boardHeight);
+  return occupiedCells(position, footprint).map((cell) => {
+    const { gridColumn, gridRow } = toGridPosition(cell, boardHeight);
 
     return {
-      key: `${kind}-${id ?? index}-${x},${y}`,
+      key: `${kind}-${id}-${cell.x},${cell.y}`,
       id,
       kind,
       owner,

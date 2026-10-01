@@ -8,11 +8,20 @@
       [mode]="store.interactionMode()"
       (modeChange)="store.setInteractionMode($event)"
     />
+    <app-movement-info
+      [unit]="store.selectedUnit()"
+      [preview]="store.movementPreview()"
+      [lastOutcome]="store.lastOutcome()"
+      (resetMovement)="store.resetSelectedUnitMovement()"
+    />
     <app-battle-board
       [battleState]="battleState"
       [selectedUnitId]="store.selectedUnitId()"
       [interactionMode]="store.interactionMode()"
+      [reachableDestinations]="store.reachableDestinations()"
+      [movementPreview]="store.movementPreview()"
       (interaction)="onBoardInteraction($event)"
+      (destinationHover)="store.hoverDestination($event)"
     />
   </div>
 }

@@ -1,15 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type {
-  PositionDto,
-  TerrainCellDtoType,
-} from '../../../api/generated/model';
+import type { Position, TerrainType } from '../../domain/battle-state';
 import { CellComponent } from './cell.component';
 
 function render(
-  position: PositionDto,
+  position: Position,
   occupiedByUnit = false,
-  terrainType?: TerrainCellDtoType,
+  terrainType?: TerrainType,
 ) {
   const fixture = TestBed.createComponent(CellComponent);
   fixture.componentRef.setInput('position', position);
@@ -46,7 +43,7 @@ describe('CellComponent', () => {
 
     it('emits cellClick with its position when activated', () => {
       const fixture = render({ x: 3, y: 2 });
-      const emitted: PositionDto[] = [];
+      const emitted: Position[] = [];
       fixture.componentInstance.cellClick.subscribe((position) =>
         emitted.push(position),
       );
@@ -71,7 +68,7 @@ describe('CellComponent', () => {
 
     it('does not emit cellClick when clicked', () => {
       const fixture = render({ x: 3, y: 2 }, true);
-      const emitted: PositionDto[] = [];
+      const emitted: Position[] = [];
       fixture.componentInstance.cellClick.subscribe((position) =>
         emitted.push(position),
       );

@@ -3,52 +3,199 @@ import {
   patchState,
   signalStore,
   withComputed,
+  withLinkedState,
   withMethods,
   withProps,
   withState,
 } from '@ngrx/signals';
 import { getDemoBattleResource } from '../api/generated/nimuairy-api';
-import type { UnitDtoOwner } from '../api/generated/model';
+import { toBattleState } from './battle-state.mapper';
+import { BattleEngine } from './domain/battle-engine';
+import type { BattleState, Position } from './domain/battle-state';
+import type { ReachableCell } from './domain/movement';
 import { InteractionMode } from './interaction-mode';
+import type { LastMovementOutcome } from './movement-outcome';
+import { toMovementPreview } from './movement-preview';
 
-interface BattleSelectionState {
-  currentPlayer: UnitDtoOwner;
+interface BattleUiState {
   selectedUnitId: string | undefined;
   interactionMode: InteractionMode;
+  hoveredDestination: Position | undefined;
+  /**
+   * One global slot: replaced only by the next move or reset attempt, and kept
+   * across selection and mode changes.
+   */
+  lastOutcome: LastMovementOutcome | undefined;
 }
 
-const initialSelectionState: BattleSelectionState = {
-  currentPlayer: 'LEFT',
+const initialUiState: BattleUiState = {
   selectedUnitId: undefined,
   interactionMode: InteractionMode.MOVE,
+  hoveredDestination: undefined,
+  lastOutcome: undefined,
 };
 
+const NO_DESTINATIONS: readonly ReachableCell[] = [];
+
 /**
- * Owns the demo battle's request lifecycle (loading/error/state) plus the
- * feature-level selection/interaction-mode UI state.
- * Gameplay rules belong to a future, framework-independent BattleEngine, not here.
+ * Owns the demo battle's request lifecycle (loading/error), the current domain
+ * BattleState, and the feature-level selection/interaction/hover UI state.
+ * Gameplay rules belong to the framework-independent BattleEngine (domain/), not here.
  */
 export const BattleStore = signalStore(
-  withState(initialSelectionState),
+  withState(initialUiState),
   withProps(() => ({
     _demoBattleResource: getDemoBattleResource(),
+    // Created directly rather than injected: the engine is framework-independent.
+    _engine: new BattleEngine(),
   })),
-  withComputed(({ _demoBattleResource }) => ({
-    battleState: computed(() =>
-      _demoBattleResource.hasValue() ? _demoBattleResource.value() : undefined,
-    ),
-    loading: computed(() => _demoBattleResource.isLoading()),
-    error: computed(() => _demoBattleResource.error()),
+  // Seeded from the response, then replaced only by BattleEngine results. As a
+  // linked signal it re-seeds only when the response itself changes, so this
+  // computation must read nothing but the resource: any other dependency would
+  // silently reset the battle.
+  withLinkedState(({ _demoBattleResource }) => ({
+    battleState: (): BattleState | undefined =>
+      _demoBattleResource.hasValue()
+        ? toBattleState(_demoBattleResource.value())
+        : undefined,
   })),
+  withComputed(
+    ({
+      _demoBattleResource,
+      _engine,
+      battleState,
+      selectedUnitId,
+      interactionMode,
+      hoveredDestination,
+    }) => {
+      // Derived, never stored, so it always reflects the current state. Any
+      // unit can be inspected; only execution checks whether it may move.
+      const _movementRange = computed(() => {
+        const state = battleState();
+        const unitId = selectedUnitId();
+        if (
+          !state ||
+          unitId === undefined ||
+          interactionMode() !== InteractionMode.MOVE
+        ) {
+          return undefined;
+        }
+        return _engine.reachability(state, unitId);
+      });
+
+      return {
+        loading: computed(() => _demoBattleResource.isLoading()),
+        error: computed(() => _demoBattleResource.error()),
+        selectedUnit: computed(() =>
+          battleState()?.units.find(({ id }) => id === selectedUnitId()),
+        ),
+        _movementRange,
+        /** Where the selected unit can move; its own anchor is not a destination. */
+        reachableDestinations: computed(() => {
+          const range = _movementRange();
+          return range?.ok
+            ? [...range.value.cells.values()].filter(({ via }) => via !== null)
+            : NO_DESTINATIONS;
+        }),
+        movementPreview: computed(() => {
+          const range = _movementRange();
+          const hovered = hoveredDestination();
+          return range?.ok && hovered
+            ? toMovementPreview(range.value, hovered)
+            : undefined;
+        }),
+      };
+    },
+  ),
   withMethods((store) => ({
     selectUnit(unitId: string): void {
-      patchState(store, { selectedUnitId: unitId });
+      patchState(store, {
+        selectedUnitId: unitId,
+        hoveredDestination: undefined,
+      });
     },
     clearSelection(): void {
-      patchState(store, { selectedUnitId: undefined });
+      patchState(store, {
+        selectedUnitId: undefined,
+        hoveredDestination: undefined,
+      });
     },
     setInteractionMode(mode: InteractionMode): void {
-      patchState(store, { interactionMode: mode });
+      patchState(store, {
+        interactionMode: mode,
+        hoveredDestination: undefined,
+      });
+    },
+    hoverDestination(destination: Position | undefined): void {
+      patchState(store, { hoveredDestination: destination });
+    },
+    moveSelectedUnit(destination: Position): void {
+      const state = store.battleState();
+      const unit = store.selectedUnit();
+      const range = store._movementRange();
+      if (!state || !unit || !range?.ok) {
+        return;
+      }
+      const preview = toMovementPreview(range.value, destination);
+      if (!preview) {
+        return;
+      }
+
+      const result = store._engine.execute(state, {
+        type: 'MOVE_UNIT',
+        unitId: unit.id,
+        destination,
+        // Exactly the previewed path, so the executed move is the one shown.
+        path: preview.steps.map(({ to }) => to),
+      });
+      if (!result.ok) {
+        patchState(store, {
+          lastOutcome: {
+            kind: 'REJECTED',
+            action: 'MOVE',
+            error: result.error,
+          },
+        });
+        return;
+      }
+      // A target removed under a resting pointer never fires mouseleave, so
+      // the hover is cleared here rather than left pointing at the old range.
+      patchState(store, {
+        battleState: result.value.state,
+        hoveredDestination: undefined,
+        lastOutcome: {
+          kind: 'MOVED',
+          unitId: unit.id,
+          owner: unit.owner,
+          steps: result.value.steps,
+          cost: result.value.cost,
+        },
+      });
+    },
+    /** Temporary development control; see BattleEngine.resetMovement. */
+    resetSelectedUnitMovement(): void {
+      const state = store.battleState();
+      const unitId = store.selectedUnitId();
+      if (!state || unitId === undefined) {
+        return;
+      }
+
+      const result = store._engine.resetMovement(state, unitId);
+      patchState(
+        store,
+        result.ok
+          ? {
+              battleState: result.value,
+              lastOutcome: { kind: 'MOVEMENT_RESET', unitId },
+            }
+          : {
+              lastOutcome: {
+                kind: 'REJECTED',
+                action: 'RESET',
+                error: result.error,
+              },
+            },
+      );
     },
   })),
 );

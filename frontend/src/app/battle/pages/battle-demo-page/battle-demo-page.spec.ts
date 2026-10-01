@@ -6,11 +6,27 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { BattleStateResponse } from '../../../api/generated/model';
+import type {
+  BattleStateResponse,
+  UnitDto,
+} from '../../../api/generated/model';
 import { BattleStore } from '../../battle.store';
 import { BattleBoardComponent } from '../../components/battle-board/battle-board.component';
 import { InteractionMode } from '../../interaction-mode';
 import { BattleDemoPage } from './battle-demo-page';
+
+/** A complete unit DTO, since the store maps responses into the domain model. */
+function unitDto(overrides: UnitDto): UnitDto {
+  return {
+    unitType: 'SWORDSMAN',
+    footprint: [{ x: 0, y: 0 }],
+    health: 100,
+    attack: 10,
+    defense: 5,
+    moveRange: 3,
+    ...overrides,
+  };
+}
 
 describe('BattleDemoPage', () => {
   let httpMock: HttpTestingController;
@@ -112,18 +128,18 @@ describe('BattleDemoPage', () => {
 
   it('shows selection and dimming from the store on the board, regardless of interaction mode', async () => {
     const { fixture, store } = await renderWithLoadedBattle([
-      {
+      unitDto({
         id: 'unit-left-1',
         owner: 'LEFT',
         position: { x: 3, y: 2 },
         footprint: [{ x: 0, y: 0 }],
-      },
-      {
+      }),
+      unitDto({
         id: 'unit-right-1',
         owner: 'RIGHT',
         position: { x: 17, y: 2 },
         footprint: [{ x: 0, y: 0 }],
-      },
+      }),
     ]);
     const count = (selector: string) =>
       fixture.nativeElement.querySelectorAll(selector).length;
@@ -160,18 +176,18 @@ describe('BattleDemoPage', () => {
     async function renderDemoBoard() {
       const rendered = await renderWithLoadedBattle(
         [
-          {
+          unitDto({
             id: 'unit-left-1',
             owner: 'LEFT',
             position: { x: 3, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
-          {
+          }),
+          unitDto({
             id: 'unit-left-2',
             owner: 'LEFT',
             position: { x: 3, y: 4 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
         {
           board: {
@@ -189,6 +205,7 @@ describe('BattleDemoPage', () => {
             {
               id: 'wall-left',
               owner: 'LEFT',
+              health: 100,
               position: { x: 1, y: 0 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -197,6 +214,7 @@ describe('BattleDemoPage', () => {
             {
               id: 'orb-left',
               owner: 'LEFT',
+              health: 100,
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -292,18 +310,18 @@ describe('BattleDemoPage', () => {
   describe('interaction mode controls', () => {
     async function renderWithTwoUnits() {
       const rendered = await renderWithLoadedBattle([
-        {
+        unitDto({
           id: 'unit-left-1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
-        {
+        }),
+        unitDto({
           id: 'unit-right-1',
           owner: 'RIGHT',
           position: { x: 17, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ]);
       const root: HTMLElement = rendered.fixture.nativeElement;
       const modeButton = (mode: InteractionMode): HTMLButtonElement =>
@@ -395,6 +413,171 @@ describe('BattleDemoPage', () => {
         fixture.nativeElement.querySelector('[data-selection-mode]'),
       ).toBeNull();
       expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
+    });
+  });
+
+  describe('movement', () => {
+    const HEIGHT = 5;
+
+    // A 7×5 PLAIN board: LEFT at (1,1) with 1 movement, so only its four
+    // orthogonal neighbours are reachable; RIGHT at (5,3).
+    async function renderMovementBoard() {
+      const rendered = await renderWithLoadedBattle(
+        [
+          unitDto({
+            id: 'unit-left-1',
+            owner: 'LEFT',
+            position: { x: 1, y: 1 },
+            moveRange: 1,
+          }),
+          unitDto({
+            id: 'unit-right-1',
+            owner: 'RIGHT',
+            position: { x: 5, y: 3 },
+          }),
+        ],
+        {
+          board: {
+            width: 7,
+            height: HEIGHT,
+            terrain: Array.from({ length: 7 }, (_, x) =>
+              Array.from({ length: HEIGHT }, (_, y) => ({
+                position: { x, y },
+                type: 'PLAIN' as const,
+              })),
+            ).flat(),
+          },
+        },
+      );
+      const root: HTMLElement = rendered.fixture.nativeElement;
+      const unit = (owner: 'LEFT' | 'RIGHT'): HTMLElement =>
+        root.querySelector(
+          `button.entity-cell[data-kind="unit"][data-owner="${owner}"]`,
+        )!;
+      const targets = (): HTMLElement[] =>
+        Array.from(root.querySelectorAll('button.movement-target'));
+      const target = (x: number, y: number): HTMLElement =>
+        root.querySelector(
+          `button.movement-target[aria-label^="Move to (${x}, ${y})"]`,
+        )!;
+      const act = (action: () => void) => {
+        action();
+        rendered.fixture.detectChanges();
+      };
+
+      const text = (selector: string) =>
+        root.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+
+      return { ...rendered, root, unit, targets, target, act, text };
+    }
+
+    it('shows movement targets for a selected LEFT unit and moves it when one is clicked', async () => {
+      const { unit, targets, target, act } = await renderMovementBoard();
+
+      act(() => unit('LEFT').click());
+      expect(targets()).toHaveLength(4);
+
+      act(() => target(2, 1).click());
+
+      expect(unit('LEFT').style.gridColumn).toBe('3');
+      expect(unit('LEFT').style.gridRow).toBe(String(HEIGHT - 1));
+      expect(unit('LEFT').classList).toContain('selected');
+      // The single point of movement is spent, so nothing is reachable any more.
+      expect(targets()).toHaveLength(0);
+    });
+
+    it('previews the hovered path and its cost, and removes it on leave', async () => {
+      const { root, unit, target, act } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+
+      act(() => target(2, 1).dispatchEvent(new MouseEvent('mouseenter')));
+      expect(root.querySelector('.movement-path polyline')).not.toBeNull();
+      expect(root.querySelector('.preview-cost')?.textContent?.trim()).toBe(
+        '1',
+      );
+
+      act(() => target(2, 1).dispatchEvent(new MouseEvent('mouseleave')));
+      expect(root.querySelector('.movement-path')).toBeNull();
+      expect(root.querySelector('.preview-cost')).toBeNull();
+    });
+
+    it('shows movement targets and a path preview for a selected RIGHT unit', async () => {
+      const { root, unit, targets, target, act } = await renderMovementBoard();
+
+      act(() => unit('RIGHT').click());
+      expect(unit('RIGHT').classList).toContain('selected');
+      expect(targets().length).toBeGreaterThan(0);
+
+      act(() => target(6, 3).dispatchEvent(new MouseEvent('mouseenter')));
+      expect(root.querySelector('.movement-path polyline')).not.toBeNull();
+      expect(root.querySelector('.preview-cost')?.textContent?.trim()).toBe(
+        '1',
+      );
+    });
+
+    it('shows no movement targets in ATTACK mode', async () => {
+      const { root, unit, targets, act } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+
+      act(() =>
+        root
+          .querySelector<HTMLElement>(
+            `.mode-button[data-mode="${InteractionMode.ATTACK}"]`,
+          )!
+          .click(),
+      );
+
+      expect(targets()).toHaveLength(0);
+    });
+
+    it("shows the selected unit's spent and remaining movement and the last move", async () => {
+      const { unit, target, act, text } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+      );
+
+      act(() => target(2, 1).click());
+
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 1 / 1 · remaining 0',
+      );
+      expect(text('.spent-label')).toBe('1');
+      expect(text('.last-outcome')).toBe(
+        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1',
+      );
+    });
+
+    it('restores movement with the reset control', async () => {
+      const { root, unit, targets, target, act, text } =
+        await renderMovementBoard();
+      act(() => unit('LEFT').click());
+      act(() => target(2, 1).click());
+      expect(targets()).toHaveLength(0);
+
+      act(() =>
+        root.querySelector<HTMLElement>('button.reset-button')!.click(),
+      );
+
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+      );
+      expect(targets()).toHaveLength(4);
+      expect(text('.last-outcome')).toBe('Movement reset for unit-left-1');
+    });
+
+    it('reports the rejected move when a RIGHT unit target is clicked, leaving the unit in place', async () => {
+      const { unit, target, act, text } = await renderMovementBoard();
+      act(() => unit('RIGHT').click());
+
+      act(() => target(6, 3).click());
+
+      expect(unit('RIGHT').style.gridColumn).toBe('6');
+      expect(unit('RIGHT').style.gridRow).toBe(String(HEIGHT - 3));
+      expect(text('.unit-movement')).toBe(
+        'unit-right-1 (RIGHT) · Move 0 / 3 · remaining 3',
+      );
+      expect(text('.last-outcome')).toBe('Move rejected: UNIT_CANNOT_MOVE');
     });
   });
 });

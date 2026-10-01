@@ -1,17 +1,13 @@
 import { Component, computed, input, output } from '@angular/core';
-import type {
-  BoardDto,
-  PositionDto,
-  TerrainCellDtoType,
-} from '../../../api/generated/model';
+import type { Board, Position, TerrainType } from '../../domain/battle-state';
+import { positionKey } from '../../domain/geometry';
 import { toGridPosition } from '../../utils/coordinate-mapper';
-import { positionKey } from '../../utils/footprint';
 import { CellComponent } from '../cell/cell.component';
 
 interface RenderedCell {
   key: string;
-  position: PositionDto;
-  terrainType: TerrainCellDtoType | undefined;
+  position: Position;
+  terrainType: TerrainType;
   occupiedByUnit: boolean;
   gridColumn: number;
   gridRow: number;
@@ -26,27 +22,25 @@ const NO_UNIT_POSITIONS: ReadonlySet<string> = new Set();
   styleUrl: './board-grid.component.css',
 })
 export class BoardGridComponent {
-  readonly board = input<BoardDto>();
+  readonly board = input<Board>();
   /** Keys (see positionKey) of domain positions covered by a unit footprint. */
   readonly unitPositions = input<ReadonlySet<string>>(NO_UNIT_POSITIONS);
 
-  readonly cellClick = output<PositionDto>();
+  readonly cellClick = output<Position>();
 
   protected readonly cells = computed<RenderedCell[]>(() => {
     const board = this.board();
     const height = board?.height ?? 0;
     const unitPositions = this.unitPositions();
 
-    return (board?.terrain ?? []).map((terrainCell) => {
-      const x = terrainCell.position?.x ?? 0;
-      const y = terrainCell.position?.y ?? 0;
-      const key = positionKey({ x, y });
-      const { gridColumn, gridRow } = toGridPosition({ x, y }, height);
+    return (board?.terrain ?? []).map(({ position, type }) => {
+      const key = positionKey(position);
+      const { gridColumn, gridRow } = toGridPosition(position, height);
 
       return {
         key,
-        position: { x, y },
-        terrainType: terrainCell.type,
+        position,
+        terrainType: type,
         occupiedByUnit: unitPositions.has(key),
         gridColumn,
         gridRow,

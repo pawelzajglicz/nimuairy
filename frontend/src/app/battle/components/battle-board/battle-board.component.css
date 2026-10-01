@@ -7,6 +7,8 @@
   display: grid;
 }
 
+/* Each layer is its own stacking context, so the layers paint in DOM order (terrain, units, movement overlay). Without it, the selected unit's z-index would lift it above the overlay and swallow clicks on a movement target overlapping the unit's own cells. */
 .battle-board-stack > * {
   grid-area: 1 / 1;
+  isolation: isolate;
 }

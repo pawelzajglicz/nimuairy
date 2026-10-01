@@ -2,7 +2,8 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import type { BattleStateResponse } from '../src/app/api/generated/model';
 
 // 5x3 board: units at (0,0) and (1,2), a 3-cell wall column at x=2, orb at (4,1).
-// (1,1) is an empty cell. Terrain is listed x-major, so index = x * 3 + y.
+// (3,1) is an empty cell behind the wall, outside unit-1's movement range, so
+// it offers no movement target. Terrain is listed x-major, so index = x * 3 + y.
 const battleState: BattleStateResponse = {
   board: {
     width: 5,
@@ -62,7 +63,7 @@ const battleState: BattleStateResponse = {
   ],
 };
 
-const EMPTY_CELL_INDEX = 1 * 3 + 1;
+const EMPTY_CELL_INDEX = 3 * 3 + 1;
 
 // These tests must go through real pointer hit-testing (locator.click / page.mouse),
 // not HTMLElement.click(): the bug they guard against was an overlay swallowing
