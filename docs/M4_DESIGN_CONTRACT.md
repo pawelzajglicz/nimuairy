@@ -109,6 +109,18 @@ remainingMovement = moveRange
 
 This is a development aid, not yet a gameplay action.
 
+The reset is a domain transition,
+`BattleEngine.resetMovement(state, unitId)`, returning
+`Result<BattleState, MovementError>`. It is validated like other movement
+requests: an unknown unit is rejected with `UNIT_NOT_FOUND`, and a unit that
+does not belong to `state.currentPlayer` with `UNIT_CANNOT_MOVE`. It changes
+only `remainingMovement`; position, footprint, and `moveRange` stay unchanged.
+Angular calls it rather than updating units itself.
+
+The reset exists only to support development and manual testing of movement.
+It is not part of the turn model and is expected to be removed or replaced
+when M5 defines how movement is restored.
+
 ## 6. Grid Movement and Movement Cost
 
 The board is a square grid with eight possible adjacent moves:
@@ -380,6 +392,12 @@ movement destination.
 Only positions satisfying all movement rules and within the remaining movement
 budget are reachable.
 
+Reachable cells are anchor positions. Because the moving unit's own current
+footprint is not an obstacle to itself (§8), a destination anchor may overlap
+cells the unit currently occupies. For example, a 2×1 unit at `(5,4)` can
+move to anchor `(6,4)`. The UI must keep such destinations selectable and
+hoverable even though the unit is currently drawn there.
+
 The reachability result maps each reachable anchor to:
 
 - its minimum movement cost from the unit's current anchor;
@@ -413,6 +431,9 @@ The path is only a preview.
 
 Clicking the destination executes the `MOVE_UNIT` command with the selected
 path, i.e. the `to` positions of the previewed steps.
+
+A destination is hovered and clicked at its anchor cell (§13), including when
+that cell is currently covered by the moving unit itself.
 
 Hovering an invalid or unreachable cell must not produce a misleading valid
 path. The previous preview should be cleared or replaced according to the

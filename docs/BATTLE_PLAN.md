@@ -204,8 +204,8 @@ from Angular.
 - **M4.1 — Movement domain foundation** (done). Movement state, command,
   result, and error contracts; see
   [`M4.1_DESIGN_CONTRACT.md`](./M4.1_DESIGN_CONTRACT.md).
-- **M4.2 — Movement rules, reachability, and execution.** Domain only; no UI
-  changes. Key decisions:
+- **M4.2 — Movement rules, reachability, and execution** (done). Domain only;
+  no UI changes. Key decisions:
   - `currentPlayer` is added to the domain `BattleState`, with a temporary
     mapper default of LEFT;
   - one domain movement-rules module owns footprint validity, step legality
@@ -225,10 +225,46 @@ from Angular.
     (movement result and path preview) use `MovementStep { from, to, cost }`
     transitions, so per-step costs remain available for future terrain costs;
   - `INVALID_PATH` reasons become a small literal union.
-- **M4.3 — Battle feature integration.** The store holds the domain
-  `BattleState` (via the mapper); reachable-cell highlighting, hover path and
-  cost preview, click-to-move, movement information, and the temporary reset
-  control. To be split further when planned.
+- **M4.3 — Battle feature integration.** Connects the movement domain to the
+  battle screen without re-implementing any movement rule in Angular. Split
+  into three steps:
+  - **M4.3.1 — Domain state in the store.** `BattleStore` holds the domain
+    `BattleState` instead of the API DTO, and the board components render
+    domain types. No visible change.
+  - **M4.3.2 — Reachability, hover preview, and click-to-move.** Reachable
+    destination highlighting, the hovered path and its cost, and moving by
+    clicking a destination.
+  - **M4.3.3 — Movement information and reset.** Movement information panel,
+    spent-movement label on the selected unit, the last movement outcome, and
+    the temporary reset control.
+
+  Key decisions:
+  - `battleState` is a linked store slice: the mapper seeds it from the HTTP
+    response, and afterwards it is written only with `BattleEngine` results.
+    The store keeps no separate `currentPlayer`. `loading`/`error` stay owned
+    by the HTTP resource. A new response re-seeds the state, so a reload
+    restarts the battle from server state; M4.3 has no reload path;
+  - reachable destinations and the path preview are derived from
+    `BattleEngine.reachability` and `pathTo`, never stored. Reachability is
+    requested only for the selected unit in MOVE mode. The hovered destination
+    is store state, because the movement information panel needs the preview
+    too;
+  - RIGHT units can be selected but show no movement range, because the
+    engine rejects their reachability with `UNIT_CANNOT_MOVE`;
+  - movement targets are destination anchors rendered by a separate movement
+    overlay layer above the terrain and unit layers. Each board layer is its
+    own stacking context, so a target that overlaps the moving unit's own
+    current cells stays clickable and hoverable. Wherever there is no target,
+    cells and units keep their existing interaction;
+  - clicking a destination submits `MOVE_UNIT` with the `to` positions of the
+    previewed steps, so the executed path is exactly the displayed one;
+  - the temporary reset is `BattleEngine.resetMovement`, a technical
+    transition for development and manual testing only;
+  - movement feedback is a single technical line, not a battle log:
+    `lastOutcome` is one global, replace-only slot holding the most recent
+    move or reset attempt of any unit. It is kept across selection and mode
+    changes and replaced only by the next attempt; there is no history and no
+    per-unit record.
 
 ### M5 — Turns
 
