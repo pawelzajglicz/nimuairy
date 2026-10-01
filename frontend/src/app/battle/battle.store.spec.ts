@@ -422,5 +422,128 @@ describe('BattleStore', () => {
       expect(store.loading()).toBe(false);
       expect(store.error()).toBeUndefined();
     });
+
+    it('exposes the selected unit as it is in the current battle state', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+
+      store.moveSelectedUnit({ x: 2, y: 1 });
+
+      expect(store.selectedUnit()).toBe(leftUnit(store));
+      expect(store.selectedUnit()?.position).toEqual({ x: 2, y: 1 });
+    });
+
+    it('reports why a unit of the other player has no movement range', async () => {
+      const store = await loadedStore();
+
+      store.selectUnit('right-unit-1');
+      expect(store.movementUnavailable()).toEqual({
+        type: 'UNIT_CANNOT_MOVE',
+        unitId: 'right-unit-1',
+      });
+
+      store.selectUnit('left-unit-1');
+      expect(store.movementUnavailable()).toBeUndefined();
+    });
+
+    describe('last outcome', () => {
+      it("records a move with the engine's steps and cost", async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+
+        store.moveSelectedUnit({ x: 3, y: 1 });
+
+        expect(store.lastOutcome()).toEqual({
+          kind: 'MOVED',
+          unitId: 'left-unit-1',
+          owner: 'LEFT',
+          steps: [
+            { from: { x: 1, y: 1 }, to: { x: 2, y: 1 }, cost: 1 },
+            { from: { x: 2, y: 1 }, to: { x: 3, y: 1 }, cost: 1 },
+          ],
+          cost: 2,
+        });
+      });
+
+      it('is kept across selection, mode and hover changes', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 2, y: 1 });
+        const outcome = store.lastOutcome();
+
+        store.hoverDestination({ x: 3, y: 1 });
+        store.selectUnit('right-unit-1');
+        store.setInteractionMode(InteractionMode.ATTACK);
+        store.clearSelection();
+
+        expect(store.lastOutcome()).toBe(outcome);
+      });
+
+      it('is replaced by the next attempt, whichever unit made it', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 2, y: 1 });
+
+        store.resetSelectedUnitMovement();
+        expect(store.lastOutcome()).toEqual({
+          kind: 'MOVEMENT_RESET',
+          unitId: 'left-unit-1',
+        });
+
+        store.selectUnit('right-unit-1');
+        store.resetSelectedUnitMovement();
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'RESET',
+          error: { type: 'UNIT_CANNOT_MOVE', unitId: 'right-unit-1' },
+        });
+      });
+
+      it('is not touched when a cell that is not a destination is submitted', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+
+        store.moveSelectedUnit({ x: 4, y: 1 });
+
+        expect(store.lastOutcome()).toBeUndefined();
+      });
+    });
+
+    describe('movement reset (temporary development control)', () => {
+      it("restores the selected unit's movement through the engine, keeping its position", async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 3, y: 1 });
+        expect(store.reachableDestinations()).toEqual([]);
+
+        store.resetSelectedUnitMovement();
+
+        expect(leftUnit(store)).toMatchObject({
+          position: { x: 3, y: 1 },
+          remainingMovement: 2,
+        });
+        expect(store.reachableDestinations()).not.toEqual([]);
+      });
+
+      it('leaves the battle state untouched when the engine rejects the reset', async () => {
+        const store = await loadedStore();
+        const before = store.battleState();
+        store.selectUnit('right-unit-1');
+
+        store.resetSelectedUnitMovement();
+
+        expect(store.battleState()).toBe(before);
+      });
+
+      it('does nothing without a selected unit', async () => {
+        const store = await loadedStore();
+        const before = store.battleState();
+
+        store.resetSelectedUnitMovement();
+
+        expect(store.battleState()).toBe(before);
+        expect(store.lastOutcome()).toBeUndefined();
+      });
+    });
   });
 });

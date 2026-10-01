@@ -645,3 +645,83 @@ describe('reachability and execution', () => {
     },
   );
 });
+
+describe('BattleEngine resetMovement (temporary technical transition)', () => {
+  function expectReset(state: BattleState, unitId = 'left-1x1'): BattleState {
+    const result = engine.resetMovement(state, unitId);
+    if (!result.ok) {
+      throw new Error(
+        `expected a successful reset, got ${JSON.stringify(result.error)}`,
+      );
+    }
+    return result.value;
+  }
+
+  it('restores remainingMovement to moveRange and changes nothing else', () => {
+    const other = testUnit({ id: 'left-other', position: { x: 6, y: 6 } });
+    const { state: moved } = expectMoved(
+      testState({ units: [testUnit(), other] }),
+      moveCommand([
+        { x: 3, y: 2 },
+        { x: 4, y: 3 },
+      ]),
+    );
+    const before = structuredClone(moved);
+
+    const reset = expectReset(moved);
+
+    expect(unitIn(reset)).toEqual({ ...unitIn(moved), remainingMovement: 5 });
+    expect(unitIn(reset, 'left-other')).toBe(unitIn(moved, 'left-other'));
+    expect(reset.currentPlayer).toBe(moved.currentPlayer);
+    expect(moved).toEqual(before);
+  });
+
+  it('keeps a unit that has not moved at its full movement', () => {
+    expect(unitIn(expectReset(testState()))?.remainingMovement).toBe(5);
+  });
+
+  it('lets a further move spend the restored movement', () => {
+    const { state: exhausted } = expectMoved(
+      testState(),
+      moveCommand([3, 4, 5, 6, 7].map((x) => ({ x, y: 2 }))),
+    );
+    const secondMove = moveCommand([3, 4, 5, 6, 7].map((y) => ({ x: 7, y })));
+    expectRejected(exhausted, secondMove, {
+      type: 'INSUFFICIENT_MOVEMENT',
+      required: 5,
+      available: 0,
+    });
+
+    const { state } = expectMoved(expectReset(exhausted), secondMove);
+
+    expect(unitIn(state)).toMatchObject({
+      position: { x: 7, y: 7 },
+      remainingMovement: 0,
+    });
+  });
+
+  it('rejects an unknown unit', () => {
+    expect(engine.resetMovement(testState(), 'missing')).toEqual({
+      ok: false,
+      error: { type: 'UNIT_NOT_FOUND', unitId: 'missing' },
+    });
+  });
+
+  it("rejects the other player's unit", () => {
+    const right = testUnit({
+      id: 'right-1x1',
+      owner: 'RIGHT',
+      position: { x: 5, y: 5 },
+    });
+
+    expect(
+      engine.resetMovement(
+        testState({ units: [testUnit(), right] }),
+        'right-1x1',
+      ),
+    ).toEqual({
+      ok: false,
+      error: { type: 'UNIT_CANNOT_MOVE', unitId: 'right-1x1' },
+    });
+  });
+});

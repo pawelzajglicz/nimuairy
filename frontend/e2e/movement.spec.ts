@@ -74,10 +74,10 @@ async function openBoard(page: Page) {
 // layer precedence (terrain, units, movement targets), which element.click()
 // cannot detect.
 async function cellCentre(page: Page, x: number, y: number) {
-  const box = await page
-    .locator('app-cell')
-    .nth(x * HEIGHT + y)
-    .boundingBox();
+  const cell = page.locator('app-cell').nth(x * HEIGHT + y);
+  // page.mouse works in viewport coordinates, so the cell must be on screen.
+  await cell.scrollIntoViewIfNeeded();
+  const box = await cell.boundingBox();
   if (!box) throw new Error(`Cell (${x},${y}) has no bounding box`);
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
@@ -200,5 +200,51 @@ test.describe('movement with real pointer interaction', () => {
 
     await expect(selectedCells(page)).toHaveCount(0);
     await expect(targets(page)).toHaveCount(0);
+  });
+});
+
+test.describe('movement information and reset', () => {
+  test('the panel shows the preview, spent and remaining movement, and the last move', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await clickCell(page, 0, 0);
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 0 / 2 · remaining 2',
+    );
+
+    await hoverCell(page, 2, 0);
+    await expect(page.locator('.preview')).toHaveText(
+      'Preview: cost 2 · (0,0) → (1,0) → (2,0)',
+    );
+
+    await clickCell(page, 2, 0);
+
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 2 / 2 · remaining 0',
+    );
+    await expect(page.locator('.spent-label')).toHaveText('2');
+    await expect(page.locator('.last-outcome')).toHaveText(
+      'LEFT moved left-small (0,0) → (2,0) · cost 2',
+    );
+  });
+
+  test('the reset control restores movement for a further move', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await clickCell(page, 0, 0);
+    await clickCell(page, 2, 0);
+    await expect(targets(page)).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Reset movement (dev)' }).click();
+
+    await expect(page.locator('.last-outcome')).toHaveText(
+      'Movement reset for left-small',
+    );
+    await expect(targets(page)).not.toHaveCount(0);
+
+    await clickCell(page, 3, 0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@3,0');
   });
 });

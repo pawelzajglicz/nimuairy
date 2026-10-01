@@ -203,4 +203,34 @@ describe('MovementOverlayComponent', () => {
       expect(all(fixture, '.footprint-preview')).toHaveLength(0);
     });
   });
+
+  describe('spent movement', () => {
+    it("labels the selected unit's anchor cell with the movement it has spent", () => {
+      const [label] = all(
+        render({
+          unit: testUnit({
+            position: { x: 4, y: 3 },
+            moveRange: 5,
+            remainingMovement: 5 - 1 - Math.SQRT2,
+          }),
+        }),
+        '.spent-label',
+      );
+
+      expect(label.textContent?.trim()).toBe('2.41');
+      expect(gridPosition(label)).toEqual(
+        toGridPosition({ x: 4, y: 3 }, BOARD.height),
+      );
+    });
+
+    it('shows zero for a unit that has not moved, and nothing without a unit', () => {
+      expect(
+        all(
+          render({ unit: testUnit() }),
+          '.spent-label',
+        )[0].textContent?.trim(),
+      ).toBe('0');
+      expect(all(render(), '.spent-label')).toHaveLength(0);
+    });
+  });
 });

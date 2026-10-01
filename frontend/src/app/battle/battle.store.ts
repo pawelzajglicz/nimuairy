@@ -14,18 +14,25 @@ import { BattleEngine } from './domain/battle-engine';
 import type { BattleState, Position } from './domain/battle-state';
 import type { ReachableCell } from './domain/movement';
 import { InteractionMode } from './interaction-mode';
+import type { LastMovementOutcome } from './movement-outcome';
 import { toMovementPreview } from './movement-preview';
 
 interface BattleUiState {
   selectedUnitId: string | undefined;
   interactionMode: InteractionMode;
   hoveredDestination: Position | undefined;
+  /**
+   * One global slot: replaced only by the next move or reset attempt, and kept
+   * across selection and mode changes.
+   */
+  lastOutcome: LastMovementOutcome | undefined;
 }
 
 const initialUiState: BattleUiState = {
   selectedUnitId: undefined,
   interactionMode: InteractionMode.MOVE,
   hoveredDestination: undefined,
+  lastOutcome: undefined,
 };
 
 const NO_DESTINATIONS: readonly ReachableCell[] = [];
@@ -79,7 +86,15 @@ export const BattleStore = signalStore(
       return {
         loading: computed(() => _demoBattleResource.isLoading()),
         error: computed(() => _demoBattleResource.error()),
+        selectedUnit: computed(() =>
+          battleState()?.units.find(({ id }) => id === selectedUnitId()),
+        ),
         _movementRange,
+        /** Why the selected unit has no movement range, e.g. it is not the current player's. */
+        movementUnavailable: computed(() => {
+          const range = _movementRange();
+          return range && !range.ok ? range.error : undefined;
+        }),
         /** Where the selected unit can move; its own anchor is not a destination. */
         reachableDestinations: computed(() => {
           const range = _movementRange();
@@ -121,9 +136,9 @@ export const BattleStore = signalStore(
     },
     moveSelectedUnit(destination: Position): void {
       const state = store.battleState();
-      const unitId = store.selectedUnitId();
+      const unit = store.selectedUnit();
       const range = store._movementRange();
-      if (!state || unitId === undefined || !range?.ok) {
+      if (!state || !unit || !range?.ok) {
         return;
       }
       const preview = toMovementPreview(range.value, destination);
@@ -133,19 +148,59 @@ export const BattleStore = signalStore(
 
       const result = store._engine.execute(state, {
         type: 'MOVE_UNIT',
-        unitId,
+        unitId: unit.id,
         destination,
         // Exactly the previewed path, so the executed move is the one shown.
         path: preview.steps.map(({ to }) => to),
       });
-      if (result.ok) {
-        // A target removed under a resting pointer never fires mouseleave, so
-        // the hover is cleared here rather than left pointing at the old range.
+      if (!result.ok) {
         patchState(store, {
-          battleState: result.value.state,
-          hoveredDestination: undefined,
+          lastOutcome: {
+            kind: 'REJECTED',
+            action: 'MOVE',
+            error: result.error,
+          },
         });
+        return;
       }
+      // A target removed under a resting pointer never fires mouseleave, so
+      // the hover is cleared here rather than left pointing at the old range.
+      patchState(store, {
+        battleState: result.value.state,
+        hoveredDestination: undefined,
+        lastOutcome: {
+          kind: 'MOVED',
+          unitId: unit.id,
+          owner: unit.owner,
+          steps: result.value.steps,
+          cost: result.value.cost,
+        },
+      });
+    },
+    /** Temporary development control; see BattleEngine.resetMovement. */
+    resetSelectedUnitMovement(): void {
+      const state = store.battleState();
+      const unitId = store.selectedUnitId();
+      if (!state || unitId === undefined) {
+        return;
+      }
+
+      const result = store._engine.resetMovement(state, unitId);
+      patchState(
+        store,
+        result.ok
+          ? {
+              battleState: result.value,
+              lastOutcome: { kind: 'MOVEMENT_RESET', unitId },
+            }
+          : {
+              lastOutcome: {
+                kind: 'REJECTED',
+                action: 'RESET',
+                error: result.error,
+              },
+            },
+      );
     },
   })),
 );

@@ -1,0 +1,27 @@
+<section class="movement-info" aria-label="Movement information">
+  @if (unit(); as unit) {
+    <div class="unit-row">
+      <p class="unit-movement">
+        <strong>{{ unit.id }}</strong> ({{ unit.owner }}) · Move
+        {{ spent() | number: '1.0-2' }} /
+        {{ unit.moveRange | number: '1.0-2' }} · remaining
+        {{ unit.remainingMovement | number: '1.0-2' }}
+      </p>
+      <button type="button" class="reset-button" (click)="resetMovement.emit()">
+        Reset movement <span class="dev-tag">(dev)</span>
+      </button>
+    </div>
+    @if (unavailableText(); as text) {
+      <p class="unavailable">{{ text }}</p>
+    }
+    @if (preview(); as preview) {
+      <p class="preview">
+        Preview: cost {{ preview.cost | number: '1.0-2' }} · {{ previewPath() }}
+      </p>
+    }
+  } @else {
+    <p class="no-selection">No unit selected.</p>
+  }
+  <!-- Always rendered, so screen readers announce changes to it. -->
+  <p class="last-outcome" aria-live="polite">{{ lastOutcomeText() }}</p>
+</section>

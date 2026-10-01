@@ -1,0 +1,112 @@
+:host {
+  display: block;
+}
+
+/* Fixed rows: (1) the selected unit with Reset, (2) the hover preview or why
+   the unit cannot move, which never appear together, (3) the last outcome.
+   Row 1 always has the Reset button's height, and rows 2 and 3 keep one line
+   even when empty, so neither selecting a unit nor hovering a target resizes
+   the panel and shifts the board under the pointer. */
+.movement-info {
+  --unit-row-height: 1.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'unit'
+    'detail'
+    'outcome';
+  grid-template-rows:
+    minmax(var(--unit-row-height), auto) minmax(1lh, auto)
+    minmax(1lh, auto);
+  row-gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.movement-info p {
+  margin: 0;
+}
+
+.unit-row,
+.no-selection {
+  grid-area: unit;
+}
+
+.no-selection {
+  align-self: center;
+}
+
+.unavailable,
+.preview {
+  grid-area: detail;
+}
+
+.last-outcome {
+  grid-area: outcome;
+}
+
+/* No wrapping here: Reset stays on the right of the first row, and a long
+   summary wraps within its own space instead. */
+.unit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.unit-movement {
+  min-width: 0;
+}
+
+/* Long text wraps rather than being clipped or widening the panel. */
+.unit-movement,
+.unavailable,
+.preview,
+.last-outcome {
+  overflow-wrap: anywhere;
+}
+
+/* Dashed border: a temporary technical control, visibly apart from game UI. */
+.reset-button {
+  flex: none;
+  box-sizing: border-box;
+  height: var(--unit-row-height);
+  padding: 0 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: #111827;
+  background: #ffffff;
+  border: 2px dashed #9ca3af;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.reset-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.dev-tag,
+.no-selection {
+  color: #6b7280;
+}
+
+.unavailable {
+  color: #92400e;
+}
+
+.preview {
+  color: #065f46;
+}
+
+.last-outcome {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #374151;
+}

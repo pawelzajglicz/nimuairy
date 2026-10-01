@@ -465,7 +465,10 @@ describe('BattleDemoPage', () => {
         rendered.fixture.detectChanges();
       };
 
-      return { ...rendered, root, unit, targets, target, act };
+      const text = (selector: string) =>
+        root.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+
+      return { ...rendered, root, unit, targets, target, act, text };
     }
 
     it('shows movement targets for a selected LEFT unit and moves it when one is clicked', async () => {
@@ -520,6 +523,57 @@ describe('BattleDemoPage', () => {
       );
 
       expect(targets()).toHaveLength(0);
+    });
+
+    it("shows the selected unit's spent and remaining movement and the last move", async () => {
+      const { unit, target, act, text } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+      );
+
+      act(() => target(2, 1).click());
+
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 1 / 1 · remaining 0',
+      );
+      expect(text('.spent-label')).toBe('1');
+      expect(text('.last-outcome')).toBe(
+        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1',
+      );
+    });
+
+    it('restores movement with the reset control', async () => {
+      const { root, unit, targets, target, act, text } =
+        await renderMovementBoard();
+      act(() => unit('LEFT').click());
+      act(() => target(2, 1).click());
+      expect(targets()).toHaveLength(0);
+
+      act(() =>
+        root.querySelector<HTMLElement>('button.reset-button')!.click(),
+      );
+
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+      );
+      expect(targets()).toHaveLength(4);
+      expect(text('.last-outcome')).toBe('Movement reset for unit-left-1');
+    });
+
+    it('explains that a RIGHT unit cannot move, keeping the last move visible', async () => {
+      const { unit, target, act, text } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+      act(() => target(2, 1).click());
+
+      act(() => unit('RIGHT').click());
+
+      expect(text('.unavailable')).toBe(
+        'Cannot move: RIGHT is not the current player (LEFT)',
+      );
+      expect(text('.last-outcome')).toBe(
+        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1',
+      );
     });
   });
 });

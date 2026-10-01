@@ -44,6 +44,15 @@
         <polyline [attr.points]="points" />
       </svg>
     }
+    @if (spentLabel(); as label) {
+      <span
+        class="spent-label"
+        aria-hidden="true"
+        [style.grid-column]="label.gridColumn"
+        [style.grid-row]="label.gridRow"
+        >{{ label.spent | number: '1.0-2' }}</span
+      >
+    }
     @if (costLabel(); as label) {
       <span
         class="preview-cost"

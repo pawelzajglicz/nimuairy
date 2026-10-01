@@ -26,9 +26,10 @@ interface RenderedCell {
 
 /**
  * The selected unit's movement layer, drawn above units and terrain: one target
- * per reachable destination anchor, plus the hovered path and its cost. Targets
- * live here rather than on terrain cells because a destination can overlap the
- * moving unit's own current cells, where the unit itself is the click target.
+ * per reachable destination anchor, the hovered path and its cost, and the
+ * movement the unit has already spent. Targets live here rather than on terrain
+ * cells because a destination can overlap the moving unit's own current cells,
+ * where the unit itself is the click target.
  */
 @Component({
   selector: 'app-movement-overlay',
@@ -40,7 +41,7 @@ export class MovementOverlayComponent {
   readonly board = input<Board>();
   readonly destinations = input<readonly ReachableCell[]>([]);
   readonly preview = input<MovementPreview>();
-  /** The moving unit, whose footprint is outlined at the previewed destination. */
+  /** The selected unit: its spent movement is labelled, and its footprint outlined at the previewed destination. */
   readonly unit = input<Unit>();
 
   readonly destinationHover = output<Position | undefined>();
@@ -89,6 +90,17 @@ export class MovementOverlayComponent {
       ? {
           cost: preview.cost,
           ...toGridPosition(preview.destination, this.height()),
+        }
+      : undefined;
+  });
+
+  /** Shown on the unit's anchor cell; moveRange − remainingMovement, both from the domain. */
+  protected readonly spentLabel = computed(() => {
+    const unit = this.unit();
+    return unit
+      ? {
+          spent: unit.moveRange - unit.remainingMovement,
+          ...toGridPosition(unit.position, this.height()),
         }
       : undefined;
   });

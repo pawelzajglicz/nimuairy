@@ -102,6 +102,29 @@ export class BattleEngine {
       ),
     );
   }
+
+  /**
+   * Restores the unit's remainingMovement to its moveRange. A temporary
+   * technical transition that exists only for development and manual testing
+   * of movement, not a gameplay action; it goes away or is replaced once M5
+   * defines how movement is restored.
+   */
+  resetMovement(
+    state: BattleState,
+    unitId: string,
+  ): Result<BattleState, MovementError> {
+    const movable = movableUnit(state, unitId);
+    if (!movable.ok) {
+      return movable;
+    }
+    const unit = movable.value;
+
+    const reset: Unit = { ...unit, remainingMovement: unit.moveRange };
+    return ok({
+      ...state,
+      units: state.units.map((other) => (other.id === unit.id ? reset : other)),
+    });
+  }
 }
 
 function movableUnit(

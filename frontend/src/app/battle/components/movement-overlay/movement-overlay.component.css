@@ -69,3 +69,18 @@
   background: #065f46;
   border-radius: 4px;
 }
+
+/* Movement already spent by the selected unit, tucked into the corner of its anchor cell. */
+.spent-label {
+  align-self: start;
+  justify-self: end;
+  margin: 1px;
+  padding: 0 0.25em;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #111827;
+  background: #fef3c7;
+  border: 1px solid #92400e;
+  border-radius: 3px;
+}
