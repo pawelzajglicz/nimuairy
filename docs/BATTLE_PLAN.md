@@ -178,6 +178,9 @@ At a high level, M4 introduces:
 - remaining movement separate from the initial `moveRange` allowance;
 - orthogonal movement cost `1` and diagonal movement cost `√2`;
 - minimum-cost reachability/pathfinding for reachable cells and path previews;
+- reachability as an inspection query based on the unit's current
+  `remainingMovement`, independent of whether the unit is currently allowed
+  to execute a move;
 - terrain, walls, orbs, and units as blocking objects for standard units;
 - footprint-aware movement;
 - diagonal corner blocking / no corner cutting;
@@ -188,8 +191,9 @@ At a high level, M4 introduces:
 
 M4 does not implement the real turn system or combat. For the demo, LEFT is
 treated as the current player: LEFT units can move, while RIGHT units may be
-selected and inspected but cannot be moved. Full turn ownership and legal
-action rules remain an M5 responsibility.
+selected and inspected, including their movement reachability, but movement
+execution for RIGHT units is rejected. Full turn ownership and legal action
+rules remain an M5 responsibility.
 
 `currentPlayer` is part of the domain `BattleState`. Because the demo API does
 not carry it yet, the frontend mapper initializes it to LEFT during M4 as a
@@ -216,6 +220,9 @@ from Angular.
   - reachability uses Dijkstra from the unit's anchor, limited by its
     remaining movement, with deterministic tie-breaking; it produces
     minimum-cost paths for reachable cells and path previews;
+  - reachability is an inspection query and does not enforce `currentPlayer`;
+    execution remains responsible for checking whether the unit may actually
+    move;
   - execution validates the caller-selected path and charges its actual cost.
     It does not require a minimum-cost path and does not run pathfinding;
   - a path is valid for a single `MOVE_UNIT` only if it is non-empty, ends at
@@ -241,23 +248,26 @@ from Angular.
   Key decisions:
   - `battleState` is a linked store slice: the mapper seeds it from the HTTP
     response, and afterwards it is written only with `BattleEngine` results.
-    The store keeps no separate `currentPlayer`. `loading`/`error` stay owned
-    by the HTTP resource. A new response re-seeds the state, so a reload
+    The store keeps no separate `currentPlayer`. `loading`/`error` stay
+    owned by the HTTP resource. A new response re-seeds the state, so a reload
     restarts the battle from server state; M4.3 has no reload path;
   - reachable destinations and the path preview are derived from
     `BattleEngine.reachability` and `pathTo`, never stored. Reachability is
     requested only for the selected unit in MOVE mode. The hovered destination
     is store state, because the movement information panel needs the preview
     too;
-  - RIGHT units can be selected but show no movement range, because the
-    engine rejects their reachability with `UNIT_CANNOT_MOVE`;
+  - reachability is available for selected units regardless of
+    `currentPlayer`. RIGHT units can be selected and inspected; their
+    reachable cells are calculated from their current `remainingMovement`,
+    while movement execution is rejected with `UNIT_CANNOT_MOVE` because
+    RIGHT is not the current player;
   - movement targets are destination anchors rendered by a separate movement
     overlay layer above the terrain and unit layers. Each board layer is its
     own stacking context, so a target that overlaps the moving unit's own
     current cells stays clickable and hoverable. Wherever there is no target,
     cells and units keep their existing interaction;
-  - clicking a destination submits `MOVE_UNIT` with the `to` positions of the
-    previewed steps, so the executed path is exactly the displayed one;
+  - clicking a destination submits `MOVE_UNIT` with the `to` positions of
+    the previewed steps, so the executed path is exactly the displayed one;
   - the temporary reset is `BattleEngine.resetMovement`, a technical
     transition for development and manual testing only;
   - movement feedback is a single technical line, not a battle log:
