@@ -225,9 +225,9 @@ from Angular.
     (movement result and path preview) use `MovementStep { from, to, cost }`
     transitions, so per-step costs remain available for future terrain costs;
   - `INVALID_PATH` reasons become a small literal union.
-- **M4.3 — Battle feature integration.** Connects the movement domain to the
-  battle screen without re-implementing any movement rule in Angular. Split
-  into three steps:
+- **M4.3 — Battle feature integration** (done). Connects the movement domain
+  to the battle screen without re-implementing any movement rule in Angular.
+  Split into three steps:
   - **M4.3.1 — Domain state in the store.** `BattleStore` holds the domain
     `BattleState` instead of the API DTO, and the board components render
     domain types. No visible change.
