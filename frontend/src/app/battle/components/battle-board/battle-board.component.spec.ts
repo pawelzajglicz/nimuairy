@@ -1,22 +1,22 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type { BattleStateResponse } from '../../../api/generated/model';
 import type { BoardInteraction } from '../../board-interaction';
+import type { BattleState } from '../../domain/battle-state';
+import { testUnit } from '../../domain/testing/battle-fixtures';
 import { BattleBoardComponent } from './battle-board.component';
 
-function buildBattleState(
-  overrides: Partial<BattleStateResponse> = {},
-): BattleStateResponse {
+function buildBattleState(overrides: Partial<BattleState> = {}): BattleState {
   return {
     board: { width: 21, height: 11, terrain: [] },
     units: [],
     orbs: [],
     walls: [],
+    currentPlayer: 'LEFT',
     ...overrides,
   };
 }
 
-function render(battleState: BattleStateResponse) {
+function render(battleState: BattleState) {
   const fixture = TestBed.createComponent(BattleBoardComponent);
   fixture.componentRef.setInput('battleState', battleState);
   fixture.detectChanges();
@@ -60,12 +60,12 @@ describe('BattleBoardComponent', () => {
     const fixture = render(
       buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'unit-left-1',
             owner: 'LEFT',
             position: { x: 3, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
       }),
     );
@@ -83,12 +83,12 @@ describe('BattleBoardComponent', () => {
     const fixture = render(
       buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'unit-right-1',
             owner: 'RIGHT',
             position: { x: 17, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
       }),
     );
@@ -128,12 +128,12 @@ describe('BattleBoardComponent', () => {
         buildBattleState({
           board: terrainAt([3, 2], [4, 2]),
           units: [
-            {
+            testUnit({
               id: 'unit-left-1',
               owner: 'LEFT',
               position: { x: 3, y: 2 },
               footprint: [{ x: 0, y: 0 }],
-            },
+            }),
           ],
         }),
       );
@@ -162,6 +162,7 @@ describe('BattleBoardComponent', () => {
             {
               id: 'wall-left',
               owner: 'LEFT',
+              health: 100,
               position: { x: 1, y: 0 },
               footprint: [
                 { x: 0, y: 0 },
@@ -198,6 +199,7 @@ describe('BattleBoardComponent', () => {
             {
               id: 'orb-right',
               owner: 'RIGHT',
+              health: 100,
               position: { x: 20, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },

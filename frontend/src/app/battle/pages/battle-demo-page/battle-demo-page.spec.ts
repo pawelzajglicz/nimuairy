@@ -6,11 +6,27 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { BattleStateResponse } from '../../../api/generated/model';
+import type {
+  BattleStateResponse,
+  UnitDto,
+} from '../../../api/generated/model';
 import { BattleStore } from '../../battle.store';
 import { BattleBoardComponent } from '../../components/battle-board/battle-board.component';
 import { InteractionMode } from '../../interaction-mode';
 import { BattleDemoPage } from './battle-demo-page';
+
+/** A complete unit DTO, since the store maps responses into the domain model. */
+function unitDto(overrides: UnitDto): UnitDto {
+  return {
+    unitType: 'SWORDSMAN',
+    footprint: [{ x: 0, y: 0 }],
+    health: 100,
+    attack: 10,
+    defense: 5,
+    moveRange: 3,
+    ...overrides,
+  };
+}
 
 describe('BattleDemoPage', () => {
   let httpMock: HttpTestingController;
@@ -112,18 +128,18 @@ describe('BattleDemoPage', () => {
 
   it('shows selection and dimming from the store on the board, regardless of interaction mode', async () => {
     const { fixture, store } = await renderWithLoadedBattle([
-      {
+      unitDto({
         id: 'unit-left-1',
         owner: 'LEFT',
         position: { x: 3, y: 2 },
         footprint: [{ x: 0, y: 0 }],
-      },
-      {
+      }),
+      unitDto({
         id: 'unit-right-1',
         owner: 'RIGHT',
         position: { x: 17, y: 2 },
         footprint: [{ x: 0, y: 0 }],
-      },
+      }),
     ]);
     const count = (selector: string) =>
       fixture.nativeElement.querySelectorAll(selector).length;
@@ -160,18 +176,18 @@ describe('BattleDemoPage', () => {
     async function renderDemoBoard() {
       const rendered = await renderWithLoadedBattle(
         [
-          {
+          unitDto({
             id: 'unit-left-1',
             owner: 'LEFT',
             position: { x: 3, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
-          {
+          }),
+          unitDto({
             id: 'unit-left-2',
             owner: 'LEFT',
             position: { x: 3, y: 4 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
         {
           board: {
@@ -189,6 +205,7 @@ describe('BattleDemoPage', () => {
             {
               id: 'wall-left',
               owner: 'LEFT',
+              health: 100,
               position: { x: 1, y: 0 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -197,6 +214,7 @@ describe('BattleDemoPage', () => {
             {
               id: 'orb-left',
               owner: 'LEFT',
+              health: 100,
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -292,18 +310,18 @@ describe('BattleDemoPage', () => {
   describe('interaction mode controls', () => {
     async function renderWithTwoUnits() {
       const rendered = await renderWithLoadedBattle([
-        {
+        unitDto({
           id: 'unit-left-1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
-        {
+        }),
+        unitDto({
           id: 'unit-right-1',
           owner: 'RIGHT',
           position: { x: 17, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ]);
       const root: HTMLElement = rendered.fixture.nativeElement;
       const modeButton = (mode: InteractionMode): HTMLButtonElement =>

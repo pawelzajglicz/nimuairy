@@ -1,4 +1,4 @@
-import type { PositionDto } from '../api/generated/model';
+import type { Position } from './domain/battle-state';
 
 /**
  * A raw board click, normalized to a domain-meaningful interaction.
@@ -13,5 +13,5 @@ export interface UnitClicked {
 
 export interface CellClicked {
   kind: 'cell-clicked';
-  position: PositionDto;
+  position: Position;
 }

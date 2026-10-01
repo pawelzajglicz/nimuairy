@@ -1,16 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type { BoardDto, TerrainCellDto } from '../../../api/generated/model';
+import type { Board, TerrainCell } from '../../domain/battle-state';
 import { BoardGridComponent } from './board-grid.component';
 
-function buildDemoBoard(): BoardDto {
+function buildDemoBoard(): Board {
   const width = 21;
   const height = 11;
-  const terrain: TerrainCellDto[] = [];
+  const terrain: TerrainCell[] = [];
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      terrain.push({ position: { x, y }, type: 'PLAIN' as const });
+      terrain.push({ position: { x, y }, type: 'PLAIN' });
     }
   }
 

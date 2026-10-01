@@ -15,7 +15,7 @@
           [attr.data-selection-mode]="selectionMode(cell)"
           [attr.data-kind]="cell.kind"
           [attr.data-owner]="cell.owner"
-          [attr.aria-label]="(cell.owner ?? 'Unknown') + ' unit'"
+          [attr.aria-label]="cell.owner + ' unit'"
           [style.grid-column]="cell.gridColumn"
           [style.grid-row]="cell.gridRow"
           (click)="onEntityCellClick(cell)"

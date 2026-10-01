@@ -1,11 +1,8 @@
 import { Component, computed, input, output } from '@angular/core';
-import type {
-  BattleStateResponse,
-  PositionDto,
-} from '../../../api/generated/model';
 import type { BoardInteraction } from '../../board-interaction';
+import type { BattleState, Position } from '../../domain/battle-state';
+import { occupiedCells, positionKey } from '../../domain/geometry';
 import { InteractionMode } from '../../interaction-mode';
-import { footprintPositions, positionKey } from '../../utils/footprint';
 import { BoardGridComponent } from '../board-grid/board-grid.component';
 import { EntityLayerComponent } from '../entity-layer/entity-layer.component';
 
@@ -22,7 +19,7 @@ import { EntityLayerComponent } from '../entity-layer/entity-layer.component';
   styleUrl: './battle-board.component.css',
 })
 export class BattleBoardComponent {
-  readonly battleState = input<BattleStateResponse>();
+  readonly battleState = input<BattleState>();
   readonly selectedUnitId = input<string>();
   readonly interactionMode = input<InteractionMode>(InteractionMode.MOVE);
 
@@ -40,7 +37,7 @@ export class BattleBoardComponent {
 
     return new Set(
       units.flatMap((unit) =>
-        footprintPositions(unit.position, unit.footprint).map(positionKey),
+        occupiedCells(unit.position, unit.footprint).map(positionKey),
       ),
     );
   });
@@ -49,7 +46,7 @@ export class BattleBoardComponent {
     this.interaction.emit({ kind: 'unit-clicked', unitId });
   }
 
-  protected onCellClick(position: PositionDto): void {
+  protected onCellClick(position: Position): void {
     this.interaction.emit({ kind: 'cell-clicked', position });
   }
 }

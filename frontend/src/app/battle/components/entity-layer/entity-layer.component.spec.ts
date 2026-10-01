@@ -1,29 +1,26 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type {
-  BattleStateResponse,
-  PositionDto,
-} from '../../../api/generated/model';
+import type { BattleState, Position } from '../../domain/battle-state';
+import { testUnit } from '../../domain/testing/battle-fixtures';
 import { InteractionMode } from '../../interaction-mode';
 import { toGridPosition } from '../../utils/coordinate-mapper';
 import { EntityLayerComponent } from './entity-layer.component';
 
 const BOARD_HEIGHT = 11;
 
-function buildBattleState(
-  overrides: Partial<BattleStateResponse> = {},
-): BattleStateResponse {
+function buildBattleState(overrides: Partial<BattleState> = {}): BattleState {
   return {
     board: { width: 21, height: BOARD_HEIGHT, terrain: [] },
     units: [],
     orbs: [],
     walls: [],
+    currentPlayer: 'LEFT',
     ...overrides,
   };
 }
 
 function render(
-  battleState: BattleStateResponse,
+  battleState: BattleState,
   selectedUnitId?: string,
   interactionMode: InteractionMode = InteractionMode.MOVE,
 ) {
@@ -47,17 +44,18 @@ describe('EntityLayerComponent', () => {
   it('renders one cell per footprint offset across units, orbs and walls', () => {
     const battleState = buildBattleState({
       units: [
-        {
+        testUnit({
           id: 'u1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ],
       orbs: [
         {
           id: 'o1',
           owner: 'RIGHT',
+          health: 100,
           position: { x: 20, y: 5 },
           footprint: [{ x: 0, y: 0 }],
         },
@@ -66,6 +64,7 @@ describe('EntityLayerComponent', () => {
         {
           id: 'w1',
           owner: 'LEFT',
+          health: 100,
           position: { x: 1, y: 0 },
           footprint: [
             { x: 0, y: 0 },
@@ -86,12 +85,12 @@ describe('EntityLayerComponent', () => {
   it('positions a unit cell using CoordinateMapper for its anchor position', () => {
     const battleState = buildBattleState({
       units: [
-        {
+        testUnit({
           id: 'u1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ],
     });
 
@@ -108,18 +107,18 @@ describe('EntityLayerComponent', () => {
   it('tags each entity cell with its owner so LEFT and RIGHT can be styled distinctly', () => {
     const battleState = buildBattleState({
       units: [
-        {
+        testUnit({
           id: 'u1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
-        {
+        }),
+        testUnit({
           id: 'u2',
           owner: 'RIGHT',
           position: { x: 17, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ],
     });
 
@@ -136,7 +135,7 @@ describe('EntityLayerComponent', () => {
   });
 
   it('expands a non-rectangular wall footprint into exactly its offsets, without assuming a rectangle', () => {
-    const lShapeOffsets: PositionDto[] = [
+    const lShapeOffsets: Position[] = [
       { x: 0, y: 0 },
       { x: 0, y: 1 },
       { x: 0, y: 2 },
@@ -147,6 +146,7 @@ describe('EntityLayerComponent', () => {
         {
           id: 'w1',
           owner: 'RIGHT',
+          health: 100,
           position: { x: 18, y: 0 },
           footprint: lShapeOffsets,
         },
@@ -167,10 +167,7 @@ describe('EntityLayerComponent', () => {
 
     const expected = lShapeOffsets
       .map((offset) =>
-        toGridPosition(
-          { x: 18 + (offset.x ?? 0), y: 0 + (offset.y ?? 0) },
-          BOARD_HEIGHT,
-        ),
+        toGridPosition({ x: 18 + offset.x, y: offset.y }, BOARD_HEIGHT),
       )
       .sort((a, b) => a.gridColumn - b.gridColumn || a.gridRow - b.gridRow);
 
@@ -178,7 +175,7 @@ describe('EntityLayerComponent', () => {
   });
 
   it('renders the demo 2x11 wall footprint as 22 occupied cells', () => {
-    const offsets: PositionDto[] = [];
+    const offsets: Position[] = [];
     for (let dx = 0; dx < 2; dx++) {
       for (let dy = 0; dy < BOARD_HEIGHT; dy++) {
         offsets.push({ x: dx, y: dy });
@@ -189,6 +186,7 @@ describe('EntityLayerComponent', () => {
         {
           id: 'wall-left',
           owner: 'LEFT',
+          health: 100,
           position: { x: 1, y: 0 },
           footprint: offsets,
         },
@@ -207,12 +205,12 @@ describe('EntityLayerComponent', () => {
     it('renders a unit as a native button, so it is keyboard operable by construction', () => {
       const battleState = buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'u1',
             owner: 'LEFT',
             position: { x: 3, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
       });
 
@@ -227,12 +225,12 @@ describe('EntityLayerComponent', () => {
     it('emits unitClick with the same id regardless of whether activation came from a click', () => {
       const battleState = buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'u1',
             owner: 'LEFT',
             position: { x: 3, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
       });
 
@@ -256,6 +254,7 @@ describe('EntityLayerComponent', () => {
           {
             id: 'o1',
             owner: 'RIGHT',
+            health: 100,
             position: { x: 20, y: 5 },
             footprint: [{ x: 0, y: 0 }],
           },
@@ -264,6 +263,7 @@ describe('EntityLayerComponent', () => {
           {
             id: 'w1',
             owner: 'LEFT',
+            health: 100,
             position: { x: 1, y: 0 },
             footprint: [{ x: 0, y: 0 }],
           },
@@ -288,18 +288,18 @@ describe('EntityLayerComponent', () => {
   describe('selected unit', () => {
     const twoUnits = buildBattleState({
       units: [
-        {
+        testUnit({
           id: 'unit-left-1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
-        {
+        }),
+        testUnit({
           id: 'unit-right-1',
           owner: 'RIGHT',
           position: { x: 17, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ],
     });
 
@@ -364,7 +364,7 @@ describe('EntityLayerComponent', () => {
     it('marks every footprint cell of a multi-cell selected unit and dims none of them', () => {
       const battleState = buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'big-unit',
             owner: 'LEFT',
             position: { x: 5, y: 5 },
@@ -373,13 +373,13 @@ describe('EntityLayerComponent', () => {
               { x: 1, y: 0 },
               { x: 0, y: 1 },
             ],
-          },
-          {
+          }),
+          testUnit({
             id: 'other',
             owner: 'RIGHT',
             position: { x: 17, y: 2 },
             footprint: [{ x: 0, y: 0 }],
-          },
+          }),
         ],
       });
 
@@ -404,18 +404,18 @@ describe('EntityLayerComponent', () => {
   describe('selection mode visual', () => {
     const twoUnits = buildBattleState({
       units: [
-        {
+        testUnit({
           id: 'unit-left-1',
           owner: 'LEFT',
           position: { x: 3, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
-        {
+        }),
+        testUnit({
           id: 'unit-right-1',
           owner: 'RIGHT',
           position: { x: 17, y: 2 },
           footprint: [{ x: 0, y: 0 }],
-        },
+        }),
       ],
     });
 
@@ -474,7 +474,7 @@ describe('EntityLayerComponent', () => {
     it('tags every footprint cell of a multi-cell selected unit with the mode', () => {
       const battleState = buildBattleState({
         units: [
-          {
+          testUnit({
             id: 'big-unit',
             owner: 'LEFT',
             position: { x: 5, y: 5 },
@@ -483,7 +483,7 @@ describe('EntityLayerComponent', () => {
               { x: 1, y: 0 },
               { x: 0, y: 1 },
             ],
-          },
+          }),
         ],
       });
 

@@ -9,7 +9,7 @@ import type {
 } from '../battle-state';
 import { positionKey } from '../geometry';
 
-/** Test-only builders for domain specs; never imported by application code. */
+/** Test-only builders for battle specs; never imported by application code. */
 
 export const FOOTPRINTS = {
   '1x1': [{ x: 0, y: 0 }],

@@ -6,8 +6,41 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BattleStateResponse } from '../api/generated/model';
+import { toBattleState } from './battle-state.mapper';
 import { BattleStore } from './battle.store';
 import { InteractionMode } from './interaction-mode';
+
+function demoResponse(): BattleStateResponse {
+  return {
+    board: {
+      width: 3,
+      height: 2,
+      terrain: [
+        { position: { x: 0, y: 0 }, type: 'PLAIN' },
+        { position: { x: 1, y: 0 }, type: 'PLAIN' },
+        { position: { x: 2, y: 0 }, type: 'ROCK' },
+        { position: { x: 0, y: 1 }, type: 'PLAIN' },
+        { position: { x: 1, y: 1 }, type: 'PLAIN' },
+        { position: { x: 2, y: 1 }, type: 'PLAIN' },
+      ],
+    },
+    orbs: [],
+    walls: [],
+    units: [
+      {
+        id: 'left-unit-1',
+        owner: 'LEFT',
+        unitType: 'SWORDSMAN',
+        position: { x: 0, y: 0 },
+        footprint: [{ x: 0, y: 0 }],
+        health: 10,
+        attack: 4,
+        defense: 2,
+        moveRange: 3,
+      },
+    ],
+  };
+}
 
 describe('BattleStore', () => {
   let httpMock: HttpTestingController;
@@ -34,21 +67,31 @@ describe('BattleStore', () => {
     httpMock.expectOne('/api/v1/battles/demo').flush({});
   });
 
-  it('exposes the loaded battle state once the request succeeds', async () => {
+  it('exposes the loaded response as the domain battle state', async () => {
     const store = TestBed.inject(BattleStore);
     TestBed.tick();
-    const response: BattleStateResponse = {
-      board: { width: 21, height: 11, terrain: [] },
-      orbs: [],
-      walls: [],
-      units: [],
-    };
 
-    httpMock.expectOne('/api/v1/battles/demo').flush(response);
+    httpMock.expectOne('/api/v1/battles/demo').flush(demoResponse());
     await vi.waitFor(() => expect(store.loading()).toBe(false));
 
-    expect(store.battleState()).toEqual(response);
+    expect(store.battleState()).toEqual(toBattleState(demoResponse()));
+    expect(store.battleState()?.currentPlayer).toBe('LEFT');
+    expect(store.battleState()?.units[0].remainingMovement).toBe(3);
     expect(store.error()).toBeUndefined();
+  });
+
+  it('keeps the same battle state object across selection and mode changes', async () => {
+    const store = TestBed.inject(BattleStore);
+    TestBed.tick();
+    httpMock.expectOne('/api/v1/battles/demo').flush(demoResponse());
+    await vi.waitFor(() => expect(store.loading()).toBe(false));
+    const loaded = store.battleState();
+
+    store.selectUnit('left-unit-1');
+    store.setInteractionMode(InteractionMode.ATTACK);
+    store.clearSelection();
+
+    expect(store.battleState()).toBe(loaded);
   });
 
   it('exposes an error when the request fails', async () => {
@@ -65,15 +108,6 @@ describe('BattleStore', () => {
   });
 
   describe('selection and interaction mode', () => {
-    it('starts with currentPlayer as LEFT', () => {
-      const store = TestBed.inject(BattleStore);
-      TestBed.tick();
-
-      expect(store.currentPlayer()).toBe('LEFT');
-
-      httpMock.expectOne('/api/v1/battles/demo').flush({});
-    });
-
     it('starts with no selected unit', () => {
       const store = TestBed.inject(BattleStore);
       TestBed.tick();
