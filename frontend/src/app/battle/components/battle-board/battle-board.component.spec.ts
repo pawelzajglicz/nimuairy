@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { BoardInteraction } from '../../board-interaction';
-import type { BattleState } from '../../domain/battle-state';
-import { testUnit } from '../../domain/testing/battle-fixtures';
+import type { BattleState, Position } from '../../domain/battle-state';
+import type { ReachableCell } from '../../domain/movement';
+import { FOOTPRINTS, testUnit } from '../../domain/testing/battle-fixtures';
+import type { MovementPreview } from '../../movement-preview';
 import { BattleBoardComponent } from './battle-board.component';
 
 function buildBattleState(overrides: Partial<BattleState> = {}): BattleState {
@@ -220,6 +222,112 @@ describe('BattleBoardComponent', () => {
       expect(emitted).toEqual([
         { kind: 'cell-clicked', position: { x: 20, y: 5 } },
       ]);
+    });
+  });
+
+  describe('movement destinations', () => {
+    // A selected 2×1 unit at (5,4) covers (5,4) and (6,4).
+    const wideUnit = testUnit({
+      id: 'wide',
+      position: { x: 5, y: 4 },
+      footprint: FOOTPRINTS['2x1'],
+    });
+
+    function destination(x: number, y: number): ReachableCell {
+      const position = { x, y };
+      return {
+        position,
+        cost: 1,
+        via: { from: { x: 5, y: 4 }, to: position, cost: 1 },
+      };
+    }
+
+    function renderWithDestinations(
+      destinations: readonly ReachableCell[],
+      preview?: MovementPreview,
+    ) {
+      const fixture = TestBed.createComponent(BattleBoardComponent);
+      fixture.componentRef.setInput(
+        'battleState',
+        buildBattleState({
+          board: terrainAt([4, 4], [5, 4], [6, 4], [7, 4]),
+          units: [wideUnit],
+        }),
+      );
+      fixture.componentRef.setInput('selectedUnitId', 'wide');
+      fixture.componentRef.setInput('reachableDestinations', destinations);
+      fixture.componentRef.setInput('movementPreview', preview);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function target(
+      fixture: ReturnType<typeof render>,
+      label: string,
+    ): HTMLElement {
+      return fixture.nativeElement.querySelector(
+        `button.movement-target[aria-label^="Move to ${label}"]`,
+      );
+    }
+
+    it('emits a DestinationClicked interaction when a movement target is clicked', () => {
+      const fixture = renderWithDestinations([destination(4, 4)]);
+      const emitted = captureInteraction(fixture);
+
+      target(fixture, '(4, 4)').click();
+
+      expect(emitted).toEqual([
+        { kind: 'destination-clicked', position: { x: 4, y: 4 } },
+      ]);
+    });
+
+    it('forwards hovering a movement target, and leaving it', () => {
+      const fixture = renderWithDestinations([destination(4, 4)]);
+      const hovered: (Position | undefined)[] = [];
+      fixture.componentInstance.destinationHover.subscribe((position) =>
+        hovered.push(position),
+      );
+
+      target(fixture, '(4, 4)').dispatchEvent(new MouseEvent('mouseenter'));
+      target(fixture, '(4, 4)').dispatchEvent(new MouseEvent('mouseleave'));
+
+      expect(hovered).toEqual([{ x: 4, y: 4 }, undefined]);
+    });
+
+    it('still emits CellClicked for a terrain cell that is not a destination', () => {
+      const fixture = renderWithDestinations([destination(4, 4)]);
+      const emitted = captureInteraction(fixture);
+
+      terrainButton(fixture, 3)?.click();
+
+      expect(emitted).toEqual([
+        { kind: 'cell-clicked', position: { x: 7, y: 4 } },
+      ]);
+    });
+
+    it("offers a target for a destination overlapping the selected unit's own cells", () => {
+      const fixture = renderWithDestinations([destination(6, 4)]);
+      const emitted = captureInteraction(fixture);
+
+      // The terrain at (6,4) is inert under the unit; the movement target is not.
+      expect(terrainButton(fixture, 2)).toBeNull();
+      target(fixture, '(6, 4)').click();
+
+      expect(emitted).toEqual([
+        { kind: 'destination-clicked', position: { x: 6, y: 4 } },
+      ]);
+    });
+
+    it("outlines the selected unit's footprint at the previewed destination", () => {
+      const fixture = renderWithDestinations([destination(6, 4)], {
+        destination: { x: 6, y: 4 },
+        steps: [{ from: { x: 5, y: 4 }, to: { x: 6, y: 4 }, cost: 1 }],
+        cost: 1,
+      });
+
+      expect(
+        fixture.nativeElement.querySelectorAll('.footprint-preview'),
+      ).toHaveLength(2);
     });
   });
 });

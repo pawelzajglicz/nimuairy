@@ -5,9 +5,14 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BattleStateResponse } from '../api/generated/model';
+import type {
+  BattleStateResponse,
+  TerrainCellDto,
+  UnitDto,
+} from '../api/generated/model';
 import { toBattleState } from './battle-state.mapper';
 import { BattleStore } from './battle.store';
+import type { Position } from './domain/battle-state';
 import { InteractionMode } from './interaction-mode';
 
 function demoResponse(): BattleStateResponse {
@@ -218,6 +223,204 @@ describe('BattleStore', () => {
       expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
 
       httpMock.expectOne('/api/v1/battles/demo').flush({});
+    });
+  });
+
+  describe('movement', () => {
+    function unitDto(
+      id: string,
+      owner: 'LEFT' | 'RIGHT',
+      position: Position,
+    ): UnitDto {
+      return {
+        id,
+        owner,
+        unitType: 'SWORDSMAN',
+        position,
+        footprint: [{ x: 0, y: 0 }],
+        health: 10,
+        attack: 4,
+        defense: 2,
+        moveRange: 2,
+      };
+    }
+
+    /** A 6×3 PLAIN board: LEFT at (1,1) and RIGHT at (2,2), both with 2 movement. */
+    function movementResponse(): BattleStateResponse {
+      const terrain: TerrainCellDto[] = [];
+      for (let x = 0; x < 6; x++) {
+        for (let y = 0; y < 3; y++) {
+          terrain.push({ position: { x, y }, type: 'PLAIN' });
+        }
+      }
+      return {
+        board: { width: 6, height: 3, terrain },
+        orbs: [],
+        walls: [],
+        units: [
+          unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
+          unitDto('right-unit-1', 'RIGHT', { x: 2, y: 2 }),
+        ],
+      };
+    }
+
+    async function loadedStore() {
+      const store = TestBed.inject(BattleStore);
+      TestBed.tick();
+      httpMock.expectOne('/api/v1/battles/demo').flush(movementResponse());
+      await vi.waitFor(() => expect(store.loading()).toBe(false));
+      return store;
+    }
+
+    type LoadedStore = Awaited<ReturnType<typeof loadedStore>>;
+
+    function leftUnit(store: LoadedStore) {
+      return store.battleState()?.units.find(({ id }) => id === 'left-unit-1');
+    }
+
+    function destinations(store: LoadedStore): Position[] {
+      return store.reachableDestinations().map(({ position }) => position);
+    }
+
+    it('offers no destinations without a selection or outside MOVE mode', async () => {
+      const store = await loadedStore();
+      expect(store.reachableDestinations()).toEqual([]);
+
+      store.selectUnit('left-unit-1');
+      store.setInteractionMode(InteractionMode.ATTACK);
+
+      expect(store.reachableDestinations()).toEqual([]);
+    });
+
+    it("offers the selected unit's reachable destinations, without its own anchor or occupied cells", async () => {
+      const store = await loadedStore();
+
+      store.selectUnit('left-unit-1');
+
+      expect(store.reachableDestinations()).toContainEqual(
+        expect.objectContaining({ position: { x: 3, y: 1 }, cost: 2 }),
+      );
+      expect(destinations(store)).not.toContainEqual({ x: 1, y: 1 });
+      expect(destinations(store)).not.toContainEqual({ x: 2, y: 2 });
+    });
+
+    it('offers no destinations for a unit of the other player', async () => {
+      const store = await loadedStore();
+
+      store.selectUnit('right-unit-1');
+
+      expect(store.reachableDestinations()).toEqual([]);
+    });
+
+    it('previews the path and cost to a hovered destination', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+
+      store.hoverDestination({ x: 3, y: 1 });
+
+      expect(store.movementPreview()).toEqual({
+        destination: { x: 3, y: 1 },
+        steps: [
+          { from: { x: 1, y: 1 }, to: { x: 2, y: 1 }, cost: 1 },
+          { from: { x: 2, y: 1 }, to: { x: 3, y: 1 }, cost: 1 },
+        ],
+        cost: 2,
+      });
+    });
+
+    it("shows no preview for an unreachable cell or the unit's own anchor", async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+
+      store.hoverDestination({ x: 4, y: 1 });
+      expect(store.movementPreview()).toBeUndefined();
+
+      store.hoverDestination({ x: 1, y: 1 });
+      expect(store.movementPreview()).toBeUndefined();
+    });
+
+    it('clears the hover when the selection or the mode changes', async () => {
+      const store = await loadedStore();
+      const hover = () => store.hoverDestination({ x: 2, y: 1 });
+
+      store.selectUnit('left-unit-1');
+      hover();
+      store.selectUnit('right-unit-1');
+      expect(store.hoveredDestination()).toBeUndefined();
+
+      hover();
+      store.setInteractionMode(InteractionMode.ATTACK);
+      expect(store.hoveredDestination()).toBeUndefined();
+
+      hover();
+      store.clearSelection();
+      expect(store.hoveredDestination()).toBeUndefined();
+    });
+
+    it('moves the selected unit to a destination and charges the path cost', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+      store.hoverDestination({ x: 3, y: 1 });
+
+      store.moveSelectedUnit({ x: 3, y: 1 });
+
+      expect(leftUnit(store)).toMatchObject({
+        position: { x: 3, y: 1 },
+        remainingMovement: 0,
+        moveRange: 2,
+      });
+      expect(store.selectedUnitId()).toBe('left-unit-1');
+      expect(store.hoveredDestination()).toBeUndefined();
+      expect(store.reachableDestinations()).toEqual([]);
+    });
+
+    it('lets a second move spend the remaining movement from the new position', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+
+      store.moveSelectedUnit({ x: 2, y: 1 });
+      expect(leftUnit(store)?.remainingMovement).toBe(1);
+      expect(store.reachableDestinations()).toContainEqual(
+        expect.objectContaining({ position: { x: 3, y: 1 }, cost: 1 }),
+      );
+
+      store.moveSelectedUnit({ x: 3, y: 1 });
+      expect(leftUnit(store)).toMatchObject({
+        position: { x: 3, y: 1 },
+        remainingMovement: 0,
+      });
+    });
+
+    it('leaves the battle state untouched when the cell is not an offered destination', async () => {
+      const store = await loadedStore();
+      const before = store.battleState();
+
+      store.selectUnit('left-unit-1');
+      store.moveSelectedUnit({ x: 4, y: 1 });
+
+      store.setInteractionMode(InteractionMode.ATTACK);
+      store.moveSelectedUnit({ x: 2, y: 1 });
+      store.setInteractionMode(InteractionMode.MOVE);
+
+      store.selectUnit('right-unit-1');
+      store.moveSelectedUnit({ x: 3, y: 2 });
+
+      expect(store.battleState()).toBe(before);
+    });
+
+    it('keeps the moved state across later UI changes, leaving loading and error alone', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+      store.moveSelectedUnit({ x: 2, y: 1 });
+      const moved = store.battleState();
+
+      store.selectUnit('right-unit-1');
+      store.setInteractionMode(InteractionMode.ATTACK);
+      store.hoverDestination({ x: 0, y: 0 });
+
+      expect(store.battleState()).toBe(moved);
+      expect(store.loading()).toBe(false);
+      expect(store.error()).toBeUndefined();
     });
   });
 });

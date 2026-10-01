@@ -1,0 +1,57 @@
+@if (board(); as board) {
+  <div
+    class="movement-overlay"
+    [style.grid-template-columns]="'repeat(' + board.width + ', 1fr)'"
+    [style.grid-template-rows]="'repeat(' + board.height + ', 1fr)'"
+    [style.aspect-ratio]="board.width + ' / ' + board.height"
+  >
+    @for (cell of footprintCells(); track cell.key) {
+      <div
+        class="footprint-preview"
+        [style.grid-column]="cell.gridColumn"
+        [style.grid-row]="cell.gridRow"
+      ></div>
+    }
+    @for (target of targets(); track target.key) {
+      <button
+        type="button"
+        class="movement-target"
+        [class.previewed]="isPreviewed(target)"
+        [attr.aria-label]="
+          'Move to (' +
+          target.position.x +
+          ', ' +
+          target.position.y +
+          '), cost ' +
+          (target.cost | number: '1.0-2')
+        "
+        [style.grid-column]="target.gridColumn"
+        [style.grid-row]="target.gridRow"
+        (mouseenter)="destinationHover.emit(target.position)"
+        (mouseleave)="destinationHover.emit(undefined)"
+        (focus)="destinationHover.emit(target.position)"
+        (blur)="destinationHover.emit(undefined)"
+        (click)="destinationClick.emit(target.position)"
+      ></button>
+    }
+    @if (pathPoints(); as points) {
+      <svg
+        class="movement-path"
+        [attr.viewBox]="'0 0 ' + board.width + ' ' + board.height"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <polyline [attr.points]="points" />
+      </svg>
+    }
+    @if (costLabel(); as label) {
+      <span
+        class="preview-cost"
+        aria-hidden="true"
+        [style.grid-column]="label.gridColumn"
+        [style.grid-row]="label.gridRow"
+        >{{ label.cost | number: '1.0-2' }}</span
+      >
+    }
+  </div>
+}

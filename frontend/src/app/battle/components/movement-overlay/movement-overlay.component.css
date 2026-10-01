@@ -1,0 +1,71 @@
+/* Like the entity layer, the overlay covers the whole board, so only movement targets take pointer events: the path and labels never steal hover or clicks, and wherever there is no target the units and terrain beneath keep their own interaction. */
+:host {
+  display: block;
+  pointer-events: none;
+}
+
+.movement-overlay {
+  display: grid;
+  width: 100%;
+}
+
+/* Dashed outline = reachable, solid heavier outline = previewed, so the states differ in shape, not just colour. */
+.movement-target {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  border: 2px dashed rgba(4, 120, 87, 0.8);
+  background: rgba(16, 185, 129, 0.18);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.movement-target.previewed {
+  border: 3px solid #047857;
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.movement-target:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: -5px;
+}
+
+.footprint-preview {
+  box-sizing: border-box;
+  border: 2px solid #047857;
+  background: rgba(4, 120, 87, 0.2);
+}
+
+/* Spans the whole grid; its viewBox uses board units, so cell centres are (column - 0.5, row - 0.5). */
+.movement-path {
+  grid-area: 1 / 1 / -1 / -1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.movement-path polyline {
+  fill: none;
+  stroke: #065f46;
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.preview-cost {
+  align-self: center;
+  justify-self: center;
+  padding: 0 0.35em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #ffffff;
+  background: #065f46;
+  border-radius: 4px;
+}

@@ -12,7 +12,10 @@
       [battleState]="battleState"
       [selectedUnitId]="store.selectedUnitId()"
       [interactionMode]="store.interactionMode()"
+      [reachableDestinations]="store.reachableDestinations()"
+      [movementPreview]="store.movementPreview()"
       (interaction)="onBoardInteraction($event)"
+      (destinationHover)="store.hoverDestination($event)"
     />
   </div>
 }

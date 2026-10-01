@@ -22,6 +22,9 @@ export class BattleDemoPage {
       case 'cell-clicked':
         this.store.clearSelection();
         break;
+      case 'destination-clicked':
+        this.store.moveSelectedUnit(interaction.position);
+        break;
     }
   }
 }

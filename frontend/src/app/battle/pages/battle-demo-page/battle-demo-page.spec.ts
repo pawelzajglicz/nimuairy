@@ -415,4 +415,111 @@ describe('BattleDemoPage', () => {
       expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
     });
   });
+
+  describe('movement', () => {
+    const HEIGHT = 5;
+
+    // A 7×5 PLAIN board: LEFT at (1,1) with 1 movement, so only its four
+    // orthogonal neighbours are reachable; RIGHT at (5,3).
+    async function renderMovementBoard() {
+      const rendered = await renderWithLoadedBattle(
+        [
+          unitDto({
+            id: 'unit-left-1',
+            owner: 'LEFT',
+            position: { x: 1, y: 1 },
+            moveRange: 1,
+          }),
+          unitDto({
+            id: 'unit-right-1',
+            owner: 'RIGHT',
+            position: { x: 5, y: 3 },
+          }),
+        ],
+        {
+          board: {
+            width: 7,
+            height: HEIGHT,
+            terrain: Array.from({ length: 7 }, (_, x) =>
+              Array.from({ length: HEIGHT }, (_, y) => ({
+                position: { x, y },
+                type: 'PLAIN' as const,
+              })),
+            ).flat(),
+          },
+        },
+      );
+      const root: HTMLElement = rendered.fixture.nativeElement;
+      const unit = (owner: 'LEFT' | 'RIGHT'): HTMLElement =>
+        root.querySelector(
+          `button.entity-cell[data-kind="unit"][data-owner="${owner}"]`,
+        )!;
+      const targets = (): HTMLElement[] =>
+        Array.from(root.querySelectorAll('button.movement-target'));
+      const target = (x: number, y: number): HTMLElement =>
+        root.querySelector(
+          `button.movement-target[aria-label^="Move to (${x}, ${y})"]`,
+        )!;
+      const act = (action: () => void) => {
+        action();
+        rendered.fixture.detectChanges();
+      };
+
+      return { ...rendered, root, unit, targets, target, act };
+    }
+
+    it('shows movement targets for a selected LEFT unit and moves it when one is clicked', async () => {
+      const { unit, targets, target, act } = await renderMovementBoard();
+
+      act(() => unit('LEFT').click());
+      expect(targets()).toHaveLength(4);
+
+      act(() => target(2, 1).click());
+
+      expect(unit('LEFT').style.gridColumn).toBe('3');
+      expect(unit('LEFT').style.gridRow).toBe(String(HEIGHT - 1));
+      expect(unit('LEFT').classList).toContain('selected');
+      // The single point of movement is spent, so nothing is reachable any more.
+      expect(targets()).toHaveLength(0);
+    });
+
+    it('previews the hovered path and its cost, and removes it on leave', async () => {
+      const { root, unit, target, act } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+
+      act(() => target(2, 1).dispatchEvent(new MouseEvent('mouseenter')));
+      expect(root.querySelector('.movement-path polyline')).not.toBeNull();
+      expect(root.querySelector('.preview-cost')?.textContent?.trim()).toBe(
+        '1',
+      );
+
+      act(() => target(2, 1).dispatchEvent(new MouseEvent('mouseleave')));
+      expect(root.querySelector('.movement-path')).toBeNull();
+      expect(root.querySelector('.preview-cost')).toBeNull();
+    });
+
+    it('shows no movement targets for a selected RIGHT unit', async () => {
+      const { unit, targets, act } = await renderMovementBoard();
+
+      act(() => unit('RIGHT').click());
+
+      expect(unit('RIGHT').classList).toContain('selected');
+      expect(targets()).toHaveLength(0);
+    });
+
+    it('shows no movement targets in ATTACK mode', async () => {
+      const { root, unit, targets, act } = await renderMovementBoard();
+      act(() => unit('LEFT').click());
+
+      act(() =>
+        root
+          .querySelector<HTMLElement>(
+            `.mode-button[data-mode="${InteractionMode.ATTACK}"]`,
+          )!
+          .click(),
+      );
+
+      expect(targets()).toHaveLength(0);
+    });
+  });
 });
