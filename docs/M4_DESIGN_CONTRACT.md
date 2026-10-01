@@ -206,6 +206,10 @@ the available path to be too expensive or because no valid path exists.
 When multiple valid paths exist, the relevant movement cost and preview path
 use the minimum-cost valid path for reachability and preview purposes.
 
+Reachability is a pure query about the current movement state of a unit. It
+describes where that unit could move using its current `remainingMovement`;
+it does not grant permission to execute a movement command.
+
 Reachability/pathfinding and movement execution are separate responsibilities:
 
 - **reachability/pathfinding** calculates minimum-cost paths. The movement UI
@@ -382,8 +386,10 @@ The search should be implemented independently of Angular rendering.
 
 ## 13. Reachable Cells
 
-When a unit is selected in MOVE mode, the engine/application layer should make
-available the set of reachable destination anchor cells for that unit.
+When a unit is selected, the engine/application layer should make available the
+set of reachable destination anchor cells for that unit. This applies to both
+the current player's units and units of the other player: reachability is an
+inspection query, not an execution permission check.
 
 The reachable set includes the unit's current position as a valid zero-cost
 state internally, but the UI does not need to present the current position as a
@@ -408,9 +414,15 @@ The current position is included at cost `0`. The complete path to a reachable
 cell is reconstructed by following these steps back to the current position,
 and is returned as `MovementStep`s.
 
-Requesting reachability for a unit that does not belong to the current player
-is rejected with `UNIT_CANNOT_MOVE`, so the UI never presents a movement range
-for a unit that cannot move.
+Reachability uses the unit's current `remainingMovement`, including when the
+unit belongs to the other player. For example, a unit with `moveRange = 3` and
+`remainingMovement = 1.59` has only the cells reachable within `1.59` movement
+in its inspection range.
+
+Requesting reachability does not check whether the current player is allowed
+to execute movement with that unit. In particular, a RIGHT unit may return a
+valid `Reachability` result even though executing `MOVE_UNIT` for that unit is
+rejected with `UNIT_CANNOT_MOVE`.
 
 The frontend must not calculate reachability independently.
 
@@ -471,6 +483,11 @@ then diagonal: 3.41
 The exact visual styling is an implementation detail.
 
 ## 16. Movement Execution
+
+A successful `MOVE_UNIT` command is the authoritative check for whether a
+movement may actually be performed. Reachability may have been calculated for
+inspection, including for a unit belonging to the other player, but it does
+not authorize execution.
 
 A successful `MOVE_UNIT` command must:
 
@@ -547,8 +564,12 @@ For the demo only:
 
 - `BattleState.currentPlayer` is `LEFT`;
 - LEFT units can be moved;
-- RIGHT units can be selected;
-- RIGHT unit movement is rejected.
+- LEFT and RIGHT units can be selected and inspected;
+- RIGHT units can have their movement reachability calculated;
+- RIGHT unit movement is rejected by `MOVE_UNIT` with `UNIT_CANNOT_MOVE`.
+
+The current-player restriction therefore applies to movement execution, not to
+the reachability query.
 
 The engine must read the current player from `BattleState` rather than depending
 on Angular store state or another hidden external value.
@@ -573,7 +594,7 @@ The following must be rejected:
 - submitted path that is not valid;
 - submitted path that does not end at the destination;
 - diagonal movement through a blocked corner;
-- movement of a RIGHT unit in the M4 demo context.
+- execution of a movement command for a RIGHT unit in the M4 demo context.
 
 These cases map to `MovementError` as follows, with the precedence defined in
 §16:
@@ -585,7 +606,7 @@ These cases map to `MovementError` as follows, with the precedence defined in
 | submitted path that is not valid | `INVALID_PATH` with the reason of the failing rule |
 | submitted path that does not end at the destination | `INVALID_PATH` / `DESTINATION_MISMATCH` |
 | diagonal movement through a blocked corner | `INVALID_PATH` / `CORNER_BLOCKED` |
-| movement of a RIGHT unit | `UNIT_CANNOT_MOVE` |
+| execution of a movement command for a RIGHT unit | `UNIT_CANNOT_MOVE` |
 
 Execution does not search for paths, so "destination with no valid path"
 surfaces as an invalid submitted path (`INVALID_PATH`) or as
@@ -674,7 +695,9 @@ At minimum, cover:
 
 - LEFT unit can move;
 - RIGHT unit cannot move;
-- RIGHT unit can still be selected/inspected.
+- LEFT and RIGHT units can be selected/inspected;
+- RIGHT-unit inspection can return a movement reachability result using the
+  unit's current `remainingMovement`.
 
 Frontend tests should verify integration and presentation rather than duplicate
 pathfinding logic.
@@ -719,7 +742,8 @@ M4 is complete when:
    cost.
 9. A second movement can consume the remaining movement budget.
 10. An invalid or too-expensive move leaves the battle state unchanged.
-11. RIGHT units can be selected/inspected but cannot be moved in the M4 demo.
+11. LEFT and RIGHT units can be selected/inspected; RIGHT units cannot be moved
+    in the M4 demo, but their movement reachability can still be calculated.
 12. A temporary technical reset restores the selected unit's remaining movement
     to its initial `moveRange`.
 13. The UI communicates movement already spent and remaining movement.
