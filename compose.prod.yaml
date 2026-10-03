@@ -1,0 +1,32 @@
+# Production overlay, used instead of compose.override.yaml:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#
+# Public traffic arrives only through the Cloudflare Tunnel, which cloudflared
+# opens as an outbound connection, so no host ports are published. The tunnel
+# route (configured in the Cloudflare dashboard) points at http://frontend:8080.
+#
+# Secrets have no defaults here: a missing .env must stop the stack rather
+# than start it with the dev placeholders from compose.yaml.
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+  backend:
+    environment:
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+
+  cloudflared:
+    container_name: cloudflared-nimuairy
+    image: cloudflare/cloudflared:2026.9.3
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      # Read from the environment rather than passed as --token, which would
+      # leave it visible in `docker inspect` and the process list.
+      TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN:?set CLOUDFLARED_TOKEN in .env}
+    depends_on:
+      - frontend
+    networks:
+      - frontend
+    restart: unless-stopped

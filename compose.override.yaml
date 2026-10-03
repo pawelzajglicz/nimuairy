@@ -1,0 +1,35 @@
+# Local-development additions, merged automatically by `docker compose up`.
+# Skipped when files are passed explicitly, e.g.
+# `docker compose -f compose.yaml -f compose.prod.yaml up`.
+#
+# Ports are bound to 127.0.0.1 because Docker's port publishing bypasses
+# host firewall rules; this keeps the debug ports off the LAN.
+services:
+  postgres:
+    ports:
+      # Lets the backend also run outside Docker via
+      # `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev`, which
+      # connects to localhost:5432 (see application-dev.yml).
+      - "127.0.0.1:5432:5432"
+    # The port above needs a regular network: Docker publishes no ports for
+    # a container attached only to an internal one (verified: connection
+    # refused), so postgres also joins postgres-host in dev.
+    networks:
+      - backend
+      - postgres-host
+
+  backend:
+    ports:
+      # Not needed by the frontend (nginx proxies /api/ internally); exposed
+      # for debugging the API directly and for Orval's spec fetch.
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    ports:
+      # nginx listens on 8080 inside the container: the hardened image runs
+      # as non-root, which can't bind the privileged port 80.
+      - "127.0.0.1:4200:8080"
+
+networks:
+  postgres-host:
+    driver: bridge
