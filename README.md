@@ -97,8 +97,10 @@ back to the dev placeholders in `compose.yaml`. Production requires real values 
 
 The backend and frontend runtime images are the hardened, distroless-style DHI tags: no
 shell, no package manager, and they run as a non-root user by default. That's why the
-backend has no container-level healthcheck (there's nothing to run `curl` with) and why
-nginx listens on 8080 instead of 80 (a non-root process can't bind a privileged port).
+backend's healthcheck is a small Java program (`nimuairy-api/docker/HealthCheck.java`)
+calling `/actuator/health` instead of `curl`, and why nginx listens on 8080 instead of 80
+(a non-root process can't bind a privileged port). The frontend starts only once the
+backend reports healthy, which includes a working database connection.
 
 For backend/frontend development outside Docker, see `nimuairy-api/CLAUDE.md` and
 `frontend/CLAUDE.md`.

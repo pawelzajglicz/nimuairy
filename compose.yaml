@@ -40,9 +40,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # No container-level healthcheck: the hardened runtime image has no
-    # shell/curl to run one against. Nothing else in this file gates on the
-    # backend's health (only frontend->backend start order, not readiness).
+    # Healthcheck is defined in nimuairy-api/Dockerfile (GET /actuator/health).
     networks:
       - frontend
       - backend
@@ -54,7 +52,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - frontend
     restart: unless-stopped
