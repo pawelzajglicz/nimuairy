@@ -26,11 +26,11 @@ export class BattleEngine {
     state: BattleState,
     command: MoveUnitCommand,
   ): Result<MovementResult, MovementError> {
-    const movable = movableUnit(state, command.unitId);
-    if (!movable.ok) {
-      return movable;
+    const acting = actingUnit(state, command.unitId);
+    if (!acting.ok) {
+      return acting;
     }
-    const unit = movable.value;
+    const unit = acting.value;
 
     const lastCell = command.path.at(-1);
     if (!lastCell) {
@@ -75,6 +75,9 @@ export class BattleEngine {
         units: state.units.map((other) =>
           other.id === unit.id ? moved : other,
         ),
+        // A successful move claims an unclaimed turn; for the unit that
+        // already holds it this is a no-op.
+        activeUnitId: unit.id,
       },
       steps,
       cost,
@@ -140,11 +143,11 @@ export class BattleEngine {
     state: BattleState,
     unitId: string,
   ): Result<BattleState, MovementError> {
-    const movable = movableUnit(state, unitId);
-    if (!movable.ok) {
-      return movable;
+    const owned = currentPlayerUnit(state, unitId);
+    if (!owned.ok) {
+      return owned;
     }
-    const unit = movable.value;
+    const unit = owned.value;
 
     const reset: Unit = { ...unit, remainingMovement: unit.moveRange };
     return ok({
@@ -161,7 +164,11 @@ function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
   return canMoveAnywhere(state, unit) ? ['MOVE'] : [];
 }
 
-/** The turn is the current player's and is unclaimed or claimed by this unit. */
+/**
+ * The turn is the current player's and is unclaimed or claimed by this unit.
+ * Both the legal-action queries and execution go through this rule, so an
+ * action reported as legal is never rejected for turn-ownership reasons.
+ */
 function mayAct(state: BattleState, unit: Unit): boolean {
   return (
     unit.owner === state.currentPlayer &&
@@ -193,7 +200,22 @@ function findUnit(
   return unit ? ok(unit) : err({ type: 'UNIT_NOT_FOUND', unitId });
 }
 
-function movableUnit(
+function actingUnit(
+  state: BattleState,
+  unitId: string,
+): Result<Unit, MovementError> {
+  const found = findUnit(state, unitId);
+  if (found.ok && !mayAct(state, found.value)) {
+    return err({ type: 'UNIT_CANNOT_MOVE', unitId });
+  }
+  return found;
+}
+
+/**
+ * Checks ownership only: the technical reset is not a gameplay action, so the
+ * active-unit restriction does not apply to it.
+ */
+function currentPlayerUnit(
   state: BattleState,
   unitId: string,
 ): Result<Unit, MovementError> {
