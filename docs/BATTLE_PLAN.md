@@ -320,6 +320,15 @@ M5 steps:
   determine which gameplay actions are legal for the current turn. Include
   `MOVE` and `END_TURN`; keep the model open to future actions such as
   `ATTACK` without implementing them in M5.
+- **M5.2.5 — Active unit claiming.** Connect `activeUnitId` to movement
+  execution. A successful `MOVE_UNIT` claims the turn by setting
+  `activeUnitId` to the moved unit; a failed move leaves the state unchanged
+  and does not claim the turn. Once the turn is claimed, `MOVE_UNIT` for any
+  other unit is rejected with the existing `UNIT_CANNOT_MOVE` error. Execution
+  and the legal-action queries use one shared domain rule for whether a unit
+  may act, so an action reported as legal is never rejected for turn-ownership
+  reasons. The temporary `resetMovement` is not a gameplay action and does not
+  claim the turn. Clearing `activeUnitId` belongs to `END_TURN` in M5.3.
 - **M5.3 — End turn and player switching.** Add `END_TURN` to the engine.
   It switches `currentPlayer`, clears `activeUnitId`, and returns a new
   immutable `BattleState`.
