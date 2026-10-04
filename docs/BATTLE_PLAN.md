@@ -278,18 +278,57 @@ from Angular.
 
 ### M5 — Turns
 
-Implement:
+M5 implements the first real turn system.
 
-- current player,
-- legal actions,
-- ending a turn,
-- switching players.
+Turn model:
 
-Turn rules determine which player may currently perform gameplay actions.
+- exactly one unit may act during a turn;
+- the active unit may perform multiple actions during that turn;
+- `END_TURN` is the only action that ends the turn;
+- exhausting `remainingMovement` does not end the turn;
+- a turn may be ended while movement remains;
+- turn ownership is defined by `BattleState.currentPlayer`;
+- only the current player's unit may perform gameplay actions;
+- at the start of a player's new turn, every unit owned by that player has
+  `remainingMovement` restored to `moveRange`;
+- movement restoration happens at turn start, not while ending the previous turn.
 
-`currentPlayer` becomes part of the backend/API battle state: the Java
-`BattleState`, `BattleStateResponse`, the OpenAPI contract, and the regenerated
-client. The frontend mapper then maps it instead of defaulting to LEFT.
+M5 scope:
+
+- `currentPlayer` becomes part of the backend/API battle state:
+  Java `BattleState`, `BattleStateResponse`, OpenAPI, and regenerated
+  Angular client;
+- legal-action representation is prepared so future actions can be added
+  without introducing combat in M5;
+- `END_TURN` is implemented as the sole turn-ending gameplay action;
+- switching players is implemented in the domain engine;
+- the temporary development-only movement reset is removed/replaced by the
+  real turn lifecycle;
+- the Angular battle feature exposes a player-facing end-turn control;
+- M5 remains frontend-engine based; it does not move authoritative battle
+  execution to the backend.
+
+M5 steps:
+
+- **M5.1 — Current player and API contract.** Add `currentPlayer` to backend
+  battle state and response, update OpenAPI, regenerate the Angular client,
+  and map the value into the domain state instead of defaulting to LEFT.
+- **M5.2 — Legal actions.** Introduce the domain representation needed to
+  determine which gameplay actions are legal for the current turn. Include
+  `MOVE` and `END_TURN`; keep the model open to future actions such as
+  `ATTACK` without implementing them in M5.
+- **M5.3 — End turn and player switching.** Add `END_TURN` to the engine,
+  switch `currentPlayer`, and return a new immutable `BattleState`.
+- **M5.4 — Turn-start movement restoration.** When `END_TURN` switches to the
+  next player, restore `remainingMovement = moveRange` for all units owned
+  by that newly active player. Do not reset movement for the player whose turn
+  just ended.
+- **M5.5 — Battle feature integration.** Replace the technical movement reset
+  UI with a real end-turn control and expose the current player in the battle
+  screen. Keep action legality and state transitions in the domain engine.
+- **M5.6 — Verification and documentation.** Add/update unit, integration, and
+  Playwright tests, remove obsolete reset behaviour, and complete the M5
+  design/acceptance documentation.
 
 ### M6 — Combat
 
