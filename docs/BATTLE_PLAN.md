@@ -329,9 +329,9 @@ M5 steps:
   may act, so an action reported as legal is never rejected for turn-ownership
   reasons. The temporary `resetMovement` is not a gameplay action and does not
   claim the turn. Clearing `activeUnitId` belongs to `END_TURN` in M5.3.
-- **M5.3 — End turn and player switching.** Add `END_TURN` to the engine.
-  It switches `currentPlayer`, clears `activeUnitId`, and returns a new
-  immutable `BattleState`.
+- **M5.3 — End turn and player switching** (done). Add `END_TURN` to the
+  engine. It switches `currentPlayer`, clears `activeUnitId`, and returns a
+  new immutable `BattleState`. It does not restore movement; that is M5.4.
 - **M5.4 — Turn-start movement restoration.** When `END_TURN` switches to the
   next player, restore `remainingMovement = moveRange` for all units owned
   by that newly active player. Do not reset movement for the player whose turn

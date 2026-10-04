@@ -1,5 +1,5 @@
 import type { ActionType, UnitActionType } from './actions';
-import type { BattleState, Unit } from './battle-state';
+import type { BattleState, PlayerSide, Unit } from './battle-state';
 import { samePosition } from './geometry';
 import type {
   MoveUnitCommand,
@@ -11,6 +11,12 @@ import { isWithinBudget } from './movement-cost';
 import { movementRules, walkPath } from './movement-rules';
 import { findReachable } from './pathfinding';
 import { err, ok, type Result } from './result';
+
+/** Typed as a Record so that a new PlayerSide does not compile without one. */
+const OPPONENT: Record<PlayerSide, PlayerSide> = {
+  LEFT: 'RIGHT',
+  RIGHT: 'LEFT',
+};
 
 /**
  * Authoritative battle rules as pure functions of the battle state: commands
@@ -82,6 +88,19 @@ export class BattleEngine {
       steps,
       cost,
     });
+  }
+
+  /**
+   * Hands the turn to the other player and leaves the new turn unclaimed.
+   * Always legal, whatever movement remains; it never touches the movement of
+   * the player whose turn ends.
+   */
+  endTurn(state: BattleState): BattleState {
+    return {
+      ...state,
+      currentPlayer: OPPONENT[state.currentPlayer],
+      activeUnitId: undefined,
+    };
   }
 
   /**
