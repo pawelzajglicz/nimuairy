@@ -61,6 +61,7 @@ const battleState: BattleStateResponse = {
       health: 1500,
     },
   ],
+  currentPlayer: 'LEFT',
 };
 
 const EMPTY_CELL_INDEX = 3 * 3 + 1;

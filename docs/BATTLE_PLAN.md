@@ -313,7 +313,7 @@ M5 scope:
 
 M5 steps:
 
-- **M5.1 — Current player and API contract.** Add `currentPlayer` to backend
+- **M5.1 — Current player and API contract** (done). Add `currentPlayer` to backend
   battle state and response, update OpenAPI, regenerate the Angular client,
   and map the value into the domain state instead of defaulting to LEFT.
 - **M5.2 — Legal actions.** Introduce the domain representation needed to

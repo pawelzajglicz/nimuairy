@@ -34,7 +34,7 @@ public class BattleService {
     private static final Footprint WALL_FOOTPRINT = wallFootprint();
 
     public BattleState getDemoBattle() {
-        return new BattleState(buildBoard(), buildOrbs(), buildWalls(), buildUnits());
+        return new BattleState(buildBoard(), buildOrbs(), buildWalls(), buildUnits(), PlayerSide.LEFT);
     }
 
     private Board buildBoard() {

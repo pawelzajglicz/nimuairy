@@ -54,6 +54,7 @@ describe('BattleDemoPage', () => {
       orbs: [],
       walls: [],
       units,
+      currentPlayer: 'LEFT',
       ...overrides,
     };
     httpMock.expectOne('/api/v1/battles/demo').flush(response);

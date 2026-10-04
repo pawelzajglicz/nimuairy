@@ -3,7 +3,7 @@
  * com.nimuairy.nimuairy.battle so the engine can later move to Java.
  * Unlike the generated API DTOs, fields are required and readonly, and the
  * model holds battle state that the API does not carry yet
- * (remainingMovement, currentPlayer).
+ * (remainingMovement).
  */
 
 export interface Position {

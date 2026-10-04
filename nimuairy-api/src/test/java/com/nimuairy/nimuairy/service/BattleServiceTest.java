@@ -23,6 +23,11 @@ class BattleServiceTest {
     private final BattleService battleService = new BattleService();
 
     @Test
+    void demoBattle_startsWithLeftAsTheCurrentPlayer() {
+        assertThat(battleService.getDemoBattle().currentPlayer()).isEqualTo(PlayerSide.LEFT);
+    }
+
+    @Test
     void board_is21x11WithNoDuplicatePositions() {
         Board board = battleService.getDemoBattle().board();
 

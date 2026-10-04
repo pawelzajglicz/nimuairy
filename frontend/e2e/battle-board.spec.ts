@@ -51,6 +51,7 @@ const battleState: BattleStateResponse = {
       health: 1500,
     },
   ],
+  currentPlayer: 'LEFT',
 };
 
 test('battle board renders terrain cells and entity footprints from the API state', async ({

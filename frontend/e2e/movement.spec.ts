@@ -59,6 +59,7 @@ const battleState: BattleStateResponse = {
   ],
   orbs: [],
   walls: [],
+  currentPlayer: 'LEFT',
 };
 
 async function openBoard(page: Page) {

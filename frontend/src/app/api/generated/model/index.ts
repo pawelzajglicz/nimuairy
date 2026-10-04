@@ -7,6 +7,7 @@
 
 export * from './authResponse';
 export * from './battleStateResponse';
+export * from './battleStateResponseCurrentPlayer';
 export * from './boardDto';
 export * from './characterRequest';
 export * from './characterResponse';

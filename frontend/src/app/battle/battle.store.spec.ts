@@ -44,6 +44,7 @@ function demoResponse(): BattleStateResponse {
         moveRange: 3,
       },
     ],
+    currentPlayer: 'LEFT',
   };
 }
 
@@ -261,6 +262,7 @@ describe('BattleStore', () => {
           unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
           unitDto('right-unit-1', 'RIGHT', { x: 2, y: 2 }),
         ],
+        currentPlayer: 'LEFT',
       };
     }
 

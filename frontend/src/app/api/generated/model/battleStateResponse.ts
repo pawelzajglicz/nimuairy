@@ -4,6 +4,7 @@
  * OpenAPI definition
  * OpenAPI spec version: v0
  */
+import type { BattleStateResponseCurrentPlayer } from './battleStateResponseCurrentPlayer';
 import type { BoardDto } from './boardDto';
 import type { OrbDto } from './orbDto';
 import type { UnitDto } from './unitDto';
@@ -14,4 +15,5 @@ export interface BattleStateResponse {
   orbs?: OrbDto[];
   walls?: WallDto[];
   units?: UnitDto[];
+  currentPlayer?: BattleStateResponseCurrentPlayer;
 }
