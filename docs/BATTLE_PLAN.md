@@ -320,8 +320,9 @@ M5 steps:
   determine which gameplay actions are legal for the current turn. Include
   `MOVE` and `END_TURN`; keep the model open to future actions such as
   `ATTACK` without implementing them in M5.
-- **M5.3 — End turn and player switching.** Add `END_TURN` to the engine,
-  switch `currentPlayer`, and return a new immutable `BattleState`.
+- **M5.3 — End turn and player switching.** Add `END_TURN` to the engine.
+  It switches `currentPlayer`, clears `activeUnitId`, and returns a new
+  immutable `BattleState`.
 - **M5.4 — Turn-start movement restoration.** When `END_TURN` switches to the
   next player, restore `remainingMovement = moveRange` for all units owned
   by that newly active player. Do not reset movement for the player whose turn
