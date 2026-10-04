@@ -89,6 +89,13 @@ describe('toBattleState', () => {
     expect(toBattleState(rightToAct).currentPlayer).toBe('RIGHT');
   });
 
+  it('starts the turn without an active unit', () => {
+    const state = toBattleState(response());
+
+    expect(state).toHaveProperty('activeUnitId');
+    expect(state.activeUnitId).toBeUndefined();
+  });
+
   it('rejects a response without a current player instead of defaulting it', () => {
     const incomplete = response();
     delete incomplete.currentPlayer;

@@ -316,7 +316,7 @@ M5 steps:
 - **M5.1 — Current player and API contract** (done). Add `currentPlayer` to backend
   battle state and response, update OpenAPI, regenerate the Angular client,
   and map the value into the domain state instead of defaulting to LEFT.
-- **M5.2 — Legal actions.** Introduce the domain representation needed to
+- **M5.2 — Legal actions** (done). Introduce the domain representation needed to
   determine which gameplay actions are legal for the current turn. Include
   `MOVE` and `END_TURN`; keep the model open to future actions such as
   `ATTACK` without implementing them in M5.

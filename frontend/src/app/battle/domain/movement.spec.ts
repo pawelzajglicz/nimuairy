@@ -27,6 +27,7 @@ const state: BattleState = {
   walls: [],
   units: [unit],
   currentPlayer: 'LEFT',
+  activeUnitId: undefined,
 };
 
 describe('MoveUnitCommand', () => {

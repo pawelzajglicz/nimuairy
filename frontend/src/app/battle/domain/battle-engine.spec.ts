@@ -677,6 +677,152 @@ describe('reachability and execution', () => {
   );
 });
 
+describe('BattleEngine legal actions', () => {
+  const left = testUnit();
+  const leftOther = testUnit({ id: 'left-other', position: { x: 6, y: 6 } });
+  const right = testUnit({
+    id: 'right-1x1',
+    owner: 'RIGHT',
+    position: { x: 5, y: 5 },
+  });
+
+  function turnState(options: TestStateOptions = {}): BattleState {
+    return testState({ units: [left, leftOther, right], ...options });
+  }
+
+  describe('at the start of a turn', () => {
+    it('has no active unit and offers MOVE and END_TURN', () => {
+      const state = turnState();
+
+      expect(state.activeUnitId).toBeUndefined();
+      expect(engine.legalActions(state)).toEqual(new Set(['MOVE', 'END_TURN']));
+    });
+
+    it('offers MOVE to every unit of the current player that can move', () => {
+      const state = turnState();
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+      expect(engine.legalUnitActions(state, 'left-other')).toEqual(
+        new Set(['MOVE']),
+      );
+    });
+
+    it("never offers MOVE to the other player's unit", () => {
+      expect(engine.legalUnitActions(turnState(), 'right-1x1')).toEqual(
+        new Set(),
+      );
+    });
+
+    it('reads the current player from the battle state', () => {
+      const state = turnState({ currentPlayer: 'RIGHT' });
+
+      expect(engine.legalUnitActions(state, 'right-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
+    });
+
+    it('leaves out a unit without movement but still offers MOVE through another', () => {
+      const state = testState({
+        units: [testUnit({ remainingMovement: 0 }), leftOther],
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
+      expect(engine.legalActions(state)).toEqual(new Set(['MOVE', 'END_TURN']));
+    });
+  });
+
+  describe('once a unit has claimed the turn', () => {
+    it('offers MOVE only to the active unit', () => {
+      const state = turnState({ activeUnitId: 'left-1x1' });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+      expect(engine.legalUnitActions(state, 'left-other')).toEqual(new Set());
+      expect(engine.legalUnitActions(state, 'right-1x1')).toEqual(new Set());
+    });
+
+    it('offers no MOVE once the active unit has no movement left, even if another unit could move', () => {
+      const state = testState({
+        units: [testUnit({ remainingMovement: 0 }), leftOther, right],
+        activeUnitId: 'left-1x1',
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
+      expect(engine.legalActions(state)).toEqual(new Set(['END_TURN']));
+    });
+  });
+
+  describe('MOVE needs somewhere to go', () => {
+    it('is not offered for a leftover smaller than any step', () => {
+      const state = testState({
+        units: [testUnit({ remainingMovement: 5 - 3 * Math.SQRT2 })],
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
+    });
+
+    it('is offered for a leftover that still affords one step', () => {
+      const state = testState({ units: [testUnit({ remainingMovement: 1 })] });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+    });
+
+    it('is not offered to a boxed-in unit with full movement', () => {
+      const neighbours = [-1, 0, 1]
+        .flatMap((dx) => [-1, 0, 1].map((dy) => ({ x: 2 + dx, y: 2 + dy })))
+        .filter(({ x, y }) => x !== 2 || y !== 2);
+      const state = testState({ rocks: neighbours });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
+    });
+  });
+
+  describe('END_TURN', () => {
+    it('is offered while the active unit has movement left', () => {
+      const state = turnState({
+        units: [testUnit({ remainingMovement: 2.5 }), leftOther],
+        activeUnitId: 'left-1x1',
+      });
+
+      expect(engine.legalActions(state)).toEqual(new Set(['MOVE', 'END_TURN']));
+    });
+
+    it('is offered once the active unit has no movement left', () => {
+      const state = testState({
+        units: [testUnit({ remainingMovement: 0 })],
+        activeUnitId: 'left-1x1',
+      });
+
+      expect(engine.legalActions(state)).toEqual(new Set(['END_TURN']));
+    });
+  });
+
+  it('reports no actions for an unknown unit', () => {
+    expect(engine.legalUnitActions(turnState(), 'missing')).toEqual(new Set());
+  });
+
+  it('leaves the battle state untouched', () => {
+    const state = turnState({
+      units: [testUnit({ remainingMovement: 2.5 }), leftOther, right],
+      activeUnitId: 'left-1x1',
+    });
+    const before = structuredClone(state);
+
+    engine.legalActions(state);
+    for (const { id } of state.units) {
+      engine.legalUnitActions(state, id);
+    }
+
+    expect(state).toEqual(before);
+  });
+});
+
 describe('BattleEngine resetMovement (temporary technical transition)', () => {
   function expectReset(state: BattleState, unitId = 'left-1x1'): BattleState {
     const result = engine.resetMovement(state, unitId);

@@ -32,6 +32,9 @@ export function toBattleState(response: BattleStateResponse): BattleState {
     walls: required(response.walls, 'walls').map(toWall),
     units: required(response.units, 'units').map(toUnit),
     currentPlayer: required(response.currentPlayer, 'currentPlayer'),
+    // The API carries no turn progress, so a loaded battle starts with the
+    // current turn unclaimed.
+    activeUnitId: undefined,
   };
 }
 

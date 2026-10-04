@@ -3,7 +3,7 @@
  * com.nimuairy.nimuairy.battle so the engine can later move to Java.
  * Unlike the generated API DTOs, fields are required and readonly, and the
  * model holds battle state that the API does not carry yet
- * (remainingMovement).
+ * (remainingMovement, activeUnitId).
  */
 
 export interface Position {
@@ -71,4 +71,10 @@ export interface BattleState {
   readonly units: readonly Unit[];
   /** The only player whose units may currently act. */
   readonly currentPlayer: PlayerSide;
+  /**
+   * The unit that has claimed the current turn; once set, no other unit may
+   * act until the turn ends. Undefined until the turn's first unit action.
+   * Turn state, not the UI's selected unit.
+   */
+  readonly activeUnitId: string | undefined;
 }

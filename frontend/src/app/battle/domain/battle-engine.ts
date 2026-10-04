@@ -1,3 +1,4 @@
+import type { ActionType, UnitActionType } from './actions';
 import type { BattleState, Unit } from './battle-state';
 import { samePosition } from './geometry';
 import type {
@@ -106,6 +107,30 @@ export class BattleEngine {
   }
 
   /**
+   * Action types the current player may perform in this state: END_TURN, plus
+   * every unit action at least one of their units may perform.
+   */
+  legalActions(state: BattleState): ReadonlySet<ActionType> {
+    return new Set<ActionType>([
+      ...state.units.flatMap((unit) => unitActions(state, unit)),
+      'END_TURN',
+    ]);
+  }
+
+  /**
+   * Unit action types the unit may perform in this state; empty for an
+   * unknown unit, another player's unit, or a unit other than the one that
+   * has claimed the turn.
+   */
+  legalUnitActions(
+    state: BattleState,
+    unitId: string,
+  ): ReadonlySet<UnitActionType> {
+    const unit = state.units.find(({ id }) => id === unitId);
+    return new Set(unit ? unitActions(state, unit) : []);
+  }
+
+  /**
    * Restores the unit's remainingMovement to its moveRange. A temporary
    * technical transition that exists only for development and manual testing
    * of movement, not a gameplay action; it goes away or is replaced once M5
@@ -127,6 +152,37 @@ export class BattleEngine {
       units: state.units.map((other) => (other.id === unit.id ? reset : other)),
     });
   }
+}
+
+function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
+  if (!mayAct(state, unit)) {
+    return [];
+  }
+  return canMoveAnywhere(state, unit) ? ['MOVE'] : [];
+}
+
+/** The turn is the current player's and is unclaimed or claimed by this unit. */
+function mayAct(state: BattleState, unit: Unit): boolean {
+  return (
+    unit.owner === state.currentPlayer &&
+    (state.activeUnitId === undefined || state.activeUnitId === unit.id)
+  );
+}
+
+/**
+ * Asks reachability rather than checking remainingMovement > 0: a leftover
+ * smaller than any step (e.g. 5 - 3√2) or a boxed-in unit leaves nowhere to
+ * go, and MOVE must not be reported legal when execution would reject every
+ * path.
+ */
+function canMoveAnywhere(state: BattleState, unit: Unit): boolean {
+  const { cells } = findReachable(
+    movementRules(state, unit),
+    unit.position,
+    unit.remainingMovement,
+  );
+  // The origin itself is always included at cost 0.
+  return cells.size > 1;
 }
 
 function findUnit(
