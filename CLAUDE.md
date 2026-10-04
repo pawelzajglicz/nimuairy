@@ -8,8 +8,10 @@ Implemented: register/login with JWT, character CRUD. The battle system is under
 ## Terms
 
 - **Character** — a playable unit owned by a user; the thing that fights.
-- **Turn** — one action by one character. **Round** — every participant has taken a turn.
-- **Battle** — a sequence of rounds. **Action** — attack, defend, use ability.
+- **Action** — a gameplay action performed by a unit during its turn, such as movement or, in future, attack or ability use.
+- **Turn** — the period during which one player may act with one selected unit. A unit may perform multiple actions during that turn.
+- **Round** — after both players have completed their turns.
+- **Battle** — a sequence of rounds.
 
 ## Rules
 
@@ -104,7 +106,7 @@ Keep comments concise and intentional.
   - non-obvious domain rules,
   - architectural constraints,
   - important technical decisions,
-  - workarounds for framework or library behavior,
+  - workarounds for framework or library behaviour,
   - constraints that are not apparent from the code itself.
 - Do not add comments that merely restate the code.
 - Do not add comments to every method, variable, branch, or obvious operation.
