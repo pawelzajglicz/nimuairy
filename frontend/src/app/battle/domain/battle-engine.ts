@@ -91,15 +91,23 @@ export class BattleEngine {
   }
 
   /**
-   * Hands the turn to the other player and leaves the new turn unclaimed.
-   * Always legal, whatever movement remains; it never touches the movement of
-   * the player whose turn ends.
+   * Hands the turn to the other player, leaves the new turn unclaimed, and
+   * restores the movement of every unit of the player whose turn starts.
+   * Always legal, whatever movement remains. Movement is restored at turn
+   * start rather than turn end, so the units of the player whose turn ends
+   * keep what they have left until their owner's next turn.
    */
   endTurn(state: BattleState): BattleState {
+    const nextPlayer = OPPONENT[state.currentPlayer];
     return {
       ...state,
-      currentPlayer: OPPONENT[state.currentPlayer],
+      currentPlayer: nextPlayer,
       activeUnitId: undefined,
+      units: state.units.map((unit) =>
+        unit.owner === nextPlayer && unit.remainingMovement !== unit.moveRange
+          ? { ...unit, remainingMovement: unit.moveRange }
+          : unit,
+      ),
     };
   }
 

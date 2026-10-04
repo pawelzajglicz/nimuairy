@@ -917,15 +917,40 @@ describe('BattleEngine legal actions', () => {
 
 describe('BattleEngine endTurn', () => {
   const left = testUnit();
+  const leftSpent = testUnit({
+    id: 'left-spent',
+    position: { x: 0, y: 7 },
+    remainingMovement: 2,
+  });
   const right = testUnit({
     id: 'right-1x1',
     owner: 'RIGHT',
     position: { x: 5, y: 5 },
     remainingMovement: 1.5,
   });
+  const rightExhausted = testUnit({
+    id: 'right-exhausted',
+    owner: 'RIGHT',
+    position: { x: 7, y: 0 },
+    remainingMovement: 0,
+  });
+  const rightFresh = testUnit({
+    id: 'right-fresh',
+    owner: 'RIGHT',
+    position: { x: 7, y: 7 },
+  });
 
   function turnState(options: TestStateOptions = {}): BattleState {
-    return testState({ units: [left, right], ...options });
+    return testState({
+      units: [left, leftSpent, right, rightExhausted, rightFresh],
+      ...options,
+    });
+  }
+
+  function movementOf(state: BattleState): Record<string, number> {
+    return Object.fromEntries(
+      state.units.map(({ id, remainingMovement }) => [id, remainingMovement]),
+    );
   }
 
   it('passes the turn from LEFT to RIGHT', () => {
@@ -957,7 +982,7 @@ describe('BattleEngine endTurn', () => {
     expect(next.activeUnitId).toBeUndefined();
   });
 
-  it('ends a turn while the active unit has movement left, without restoring any', () => {
+  it('ends a turn while the active unit has movement left, which it keeps', () => {
     const { state: claimed } = expectMoved(
       turnState(),
       moveCommand([{ x: 3, y: 2 }]),
@@ -966,10 +991,9 @@ describe('BattleEngine endTurn', () => {
     const next = engine.endTurn(claimed);
 
     expect(unitIn(next)?.remainingMovement).toBe(4);
-    expect(next.units).toBe(claimed.units);
   });
 
-  it('ends a turn once the active unit has no movement left, without restoring any', () => {
+  it('ends a turn once the active unit has no movement left, which it keeps', () => {
     const claimed = turnState({
       units: [testUnit({ remainingMovement: 0 }), right],
       activeUnitId: 'left-1x1',
@@ -979,7 +1003,76 @@ describe('BattleEngine endTurn', () => {
 
     expect(next.currentPlayer).toBe('RIGHT');
     expect(unitIn(next)?.remainingMovement).toBe(0);
-    expect(unitIn(next, 'right-1x1')?.remainingMovement).toBe(1.5);
+  });
+
+  describe('turn-start movement restoration', () => {
+    it('restores every RIGHT unit when the turn passes to RIGHT', () => {
+      expect(movementOf(engine.endTurn(turnState()))).toEqual({
+        'left-1x1': 5,
+        'left-spent': 2,
+        'right-1x1': 5,
+        'right-exhausted': 5,
+        'right-fresh': 5,
+      });
+    });
+
+    it('restores every LEFT unit when the turn passes to LEFT', () => {
+      const state = turnState({
+        units: [
+          testUnit({ remainingMovement: 0 }),
+          leftSpent,
+          right,
+          rightExhausted,
+        ],
+        currentPlayer: 'RIGHT',
+        activeUnitId: 'right-1x1',
+      });
+
+      expect(movementOf(engine.endTurn(state))).toEqual({
+        'left-1x1': 5,
+        'left-spent': 5,
+        'right-1x1': 1.5,
+        'right-exhausted': 0,
+      });
+    });
+
+    it('restores units other than the one that held the turn, and only when their owner starts a turn', () => {
+      const { state: leftClaimed } = expectMoved(
+        turnState(),
+        moveCommand([{ x: 3, y: 2 }]),
+      );
+      const rightTurn = engine.endTurn(leftClaimed);
+      expect(unitIn(rightTurn)?.remainingMovement).toBe(4);
+
+      const { state: rightClaimed } = expectMoved(
+        rightTurn,
+        moveCommand([{ x: 6, y: 5 }], { unitId: 'right-1x1' }),
+      );
+      const leftTurn = engine.endTurn(rightClaimed);
+
+      expect(leftTurn.currentPlayer).toBe('LEFT');
+      expect(leftTurn.activeUnitId).toBeUndefined();
+      expect(movementOf(leftTurn)).toEqual({
+        'left-1x1': 5,
+        'left-spent': 5,
+        'right-1x1': 4,
+        'right-exhausted': 5,
+        'right-fresh': 5,
+      });
+    });
+
+    it('changes nothing but the restored movement', () => {
+      const next = engine.endTurn(turnState());
+
+      expect(unitIn(next, 'right-1x1')).toEqual({
+        ...right,
+        remainingMovement: right.moveRange,
+      });
+      expect(unitIn(next, 'right-exhausted')).toEqual({
+        ...rightExhausted,
+        remainingMovement: rightExhausted.moveRange,
+      });
+    });
   });
 
   it('returns a new state and leaves the previous one untouched', () => {
@@ -993,9 +1086,23 @@ describe('BattleEngine endTurn', () => {
     expect(state.currentPlayer).toBe('LEFT');
     expect(state.activeUnitId).toBe('left-1x1');
     expect(next.board).toBe(state.board);
-    expect(next.units).toBe(state.units);
     expect(next.walls).toBe(state.walls);
     expect(next.orbs).toBe(state.orbs);
+  });
+
+  it('creates new objects only for the units whose movement is restored', () => {
+    const state = turnState();
+
+    const next = engine.endTurn(state);
+
+    expect(next.units).not.toBe(state.units);
+    expect(unitIn(next, 'right-1x1')).not.toBe(right);
+    expect(unitIn(next, 'right-exhausted')).not.toBe(rightExhausted);
+    expect(unitIn(next, 'right-fresh')).toBe(rightFresh);
+    expect(unitIn(next, 'left-1x1')).toBe(left);
+    expect(unitIn(next, 'left-spent')).toBe(leftSpent);
+    expect(right.remainingMovement).toBe(1.5);
+    expect(rightExhausted.remainingMovement).toBe(0);
   });
 
   it("lets the next player's units act and stops the previous player's", () => {

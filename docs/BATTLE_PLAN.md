@@ -332,7 +332,7 @@ M5 steps:
 - **M5.3 — End turn and player switching** (done). Add `END_TURN` to the
   engine. It switches `currentPlayer`, clears `activeUnitId`, and returns a
   new immutable `BattleState`. It does not restore movement; that is M5.4.
-- **M5.4 — Turn-start movement restoration.** When `END_TURN` switches to the
+- **M5.4 — Turn-start movement restoration** (done). When `END_TURN` switches to the
   next player, restore `remainingMovement = moveRange` for all units owned
   by that newly active player. Do not reset movement for the player whose turn
   just ended.
