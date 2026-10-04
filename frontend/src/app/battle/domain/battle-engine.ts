@@ -159,29 +159,6 @@ export class BattleEngine {
     const unit = state.units.find(({ id }) => id === unitId);
     return new Set(unit ? unitActions(state, unit) : []);
   }
-
-  /**
-   * Restores the unit's remainingMovement to its moveRange. A temporary
-   * technical transition that exists only for development and manual testing
-   * of movement, not a gameplay action; it goes away or is replaced once M5
-   * defines how movement is restored.
-   */
-  resetMovement(
-    state: BattleState,
-    unitId: string,
-  ): Result<BattleState, MovementError> {
-    const owned = currentPlayerUnit(state, unitId);
-    if (!owned.ok) {
-      return owned;
-    }
-    const unit = owned.value;
-
-    const reset: Unit = { ...unit, remainingMovement: unit.moveRange };
-    return ok({
-      ...state,
-      units: state.units.map((other) => (other.id === unit.id ? reset : other)),
-    });
-  }
 }
 
 function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
@@ -233,21 +210,6 @@ function actingUnit(
 ): Result<Unit, MovementError> {
   const found = findUnit(state, unitId);
   if (found.ok && !mayAct(state, found.value)) {
-    return err({ type: 'UNIT_CANNOT_MOVE', unitId });
-  }
-  return found;
-}
-
-/**
- * Checks ownership only: the technical reset is not a gameplay action, so the
- * active-unit restriction does not apply to it.
- */
-function currentPlayerUnit(
-  state: BattleState,
-  unitId: string,
-): Result<Unit, MovementError> {
-  const found = findUnit(state, unitId);
-  if (found.ok && found.value.owner !== state.currentPlayer) {
     return err({ type: 'UNIT_CANNOT_MOVE', unitId });
   }
   return found;

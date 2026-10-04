@@ -22,8 +22,8 @@ interface BattleUiState {
   interactionMode: InteractionMode;
   hoveredDestination: Position | undefined;
   /**
-   * One global slot: replaced only by the next move or reset attempt, and kept
-   * across selection and mode changes.
+   * One global slot: replaced only by the next move attempt, and kept across
+   * selection and mode changes and the end of a turn.
    */
   lastOutcome: LastMovementOutcome | undefined;
 }
@@ -172,30 +172,18 @@ export const BattleStore = signalStore(
         },
       });
     },
-    /** Temporary development control; see BattleEngine.resetMovement. */
-    resetSelectedUnitMovement(): void {
+    endTurn(): void {
       const state = store.battleState();
-      const unitId = store.selectedUnitId();
-      if (!state || unitId === undefined) {
+      if (!state) {
         return;
       }
-
-      const result = store._engine.resetMovement(state, unitId);
-      patchState(
-        store,
-        result.ok
-          ? {
-              battleState: result.value,
-              lastOutcome: { kind: 'MOVEMENT_RESET', unitId },
-            }
-          : {
-              lastOutcome: {
-                kind: 'REJECTED',
-                action: 'RESET',
-                error: result.error,
-              },
-            },
-      );
+      // The selected unit belongs to the player whose turn just ended, so the
+      // new turn starts with nothing selected.
+      patchState(store, {
+        battleState: store._engine.endTurn(state),
+        selectedUnitId: undefined,
+        hoveredDestination: undefined,
+      });
     },
   })),
 );

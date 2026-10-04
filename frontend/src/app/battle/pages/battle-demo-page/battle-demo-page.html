@@ -4,15 +4,23 @@
   <p>Failed to load the demo battle.</p>
 } @else if (store.battleState(); as battleState) {
   <div class="battle-layout">
-    <app-interaction-mode-controls
-      [mode]="store.interactionMode()"
-      (modeChange)="store.setInteractionMode($event)"
-    />
+    <div class="turn-bar">
+      <!-- A live region, so screen readers announce the new turn. -->
+      <p class="current-player" aria-live="polite">
+        Turn: <strong>{{ battleState.currentPlayer }}</strong>
+      </p>
+      <app-interaction-mode-controls
+        [mode]="store.interactionMode()"
+        (modeChange)="store.setInteractionMode($event)"
+      />
+      <button type="button" class="end-turn-button" (click)="store.endTurn()">
+        END TURN
+      </button>
+    </div>
     <app-movement-info
       [unit]="store.selectedUnit()"
       [preview]="store.movementPreview()"
       [lastOutcome]="store.lastOutcome()"
-      (resetMovement)="store.resetSelectedUnitMovement()"
     />
     <app-battle-board
       [battleState]="battleState"

@@ -336,12 +336,17 @@ M5 steps:
   next player, restore `remainingMovement = moveRange` for all units owned
   by that newly active player. Do not reset movement for the player whose turn
   just ended.
-- **M5.5 — Battle feature integration.** Replace the technical movement reset
-  UI with a real end-turn control and expose the current player in the battle
-  screen. Keep action legality and state transitions in the domain engine.
-- **M5.6 — Verification and documentation.** Add/update unit, integration, and
-  Playwright tests, remove obsolete reset behaviour, and complete the M5
-  design/acceptance documentation.
+- **M5.5 — Battle feature integration** (done). The battle screen shows the
+  current player and offers a player-facing END TURN control, which applies
+  `BattleEngine.endTurn()` and stores the returned `BattleState`. Switching
+  the player and restoring movement stay domain responsibilities; the store
+  and components do neither. The temporary `resetMovement` is removed from
+  both the UI and the engine, since `END_TURN` now restores movement. Keep
+  action legality and state transitions in the domain engine.
+- **M5.6 — Verification and documentation.** Verify the implementation
+  against the acceptance criteria in `M5_DESIGN_CONTRACT.md`, close any
+  remaining gaps in the unit, integration, and Playwright tests required by
+  its testing contract, and complete the M5 design/acceptance documentation.
 
 ### M6 — Combat
 

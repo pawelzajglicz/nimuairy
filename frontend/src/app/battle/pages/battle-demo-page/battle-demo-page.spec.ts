@@ -549,22 +549,93 @@ describe('BattleDemoPage', () => {
       );
     });
 
-    it('restores movement with the reset control', async () => {
-      const { root, unit, targets, target, act, text } =
-        await renderMovementBoard();
-      act(() => unit('LEFT').click());
-      act(() => target(2, 1).click());
-      expect(targets()).toHaveLength(0);
+    describe('turns', () => {
+      function endTurnButton(root: HTMLElement): HTMLButtonElement {
+        return root.querySelector('button.end-turn-button')!;
+      }
 
-      act(() =>
-        root.querySelector<HTMLElement>('button.reset-button')!.click(),
-      );
+      it('shows LEFT as the current player at the start', async () => {
+        const { root, text } = await renderMovementBoard();
 
-      expect(text('.unit-movement')).toBe(
-        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
-      );
-      expect(targets()).toHaveLength(4);
-      expect(text('.last-outcome')).toBe('Movement reset for unit-left-1');
+        expect(text('.current-player')).toBe('Turn: LEFT');
+        expect(
+          root.querySelector('.current-player')?.getAttribute('aria-live'),
+        ).toBe('polite');
+      });
+
+      it('passes the turn to RIGHT and back to LEFT with END TURN', async () => {
+        const { root, act, text } = await renderMovementBoard();
+        const button = endTurnButton(root);
+        expect(button.type).toBe('button');
+        expect(button.textContent?.trim()).toBe('END TURN');
+
+        act(() => button.click());
+        expect(text('.current-player')).toBe('Turn: RIGHT');
+
+        act(() => button.click());
+        expect(text('.current-player')).toBe('Turn: LEFT');
+      });
+
+      it("shows the engine's new state after END TURN: the turn changes hands and movement returns at turn start", async () => {
+        const { root, store, unit, targets, target, act, text } =
+          await renderMovementBoard();
+        act(() => unit('LEFT').click());
+        act(() => target(2, 1).click());
+        expect(store.battleState()?.activeUnitId).toBe('unit-left-1');
+
+        act(() => endTurnButton(root).click());
+
+        expect(store.battleState()?.activeUnitId).toBeUndefined();
+        act(() => unit('LEFT').click());
+        expect(text('.unit-movement')).toBe(
+          'unit-left-1 (LEFT) · Move 1 / 1 · remaining 0',
+        );
+        act(() => unit('RIGHT').click());
+        act(() => target(6, 3).click());
+        expect(text('.last-outcome')).toBe(
+          'RIGHT moved unit-right-1 (5,3) → (6,3) · cost 1',
+        );
+
+        act(() => endTurnButton(root).click());
+        act(() => unit('LEFT').click());
+
+        expect(text('.unit-movement')).toBe(
+          'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+        );
+        expect(targets()).toHaveLength(4);
+      });
+
+      it('clears the selection and the hovered preview on END TURN, keeping the last outcome', async () => {
+        const { root, store, unit, targets, target, act, text } =
+          await renderMovementBoard();
+        act(() => unit('RIGHT').click());
+        act(() => target(6, 3).click());
+        act(() => unit('LEFT').click());
+        act(() => target(2, 1).dispatchEvent(new MouseEvent('mouseenter')));
+        expect(root.querySelector('.movement-path')).not.toBeNull();
+
+        act(() => endTurnButton(root).click());
+
+        expect(store.selectedUnitId()).toBeUndefined();
+        expect(store.hoveredDestination()).toBeUndefined();
+        expect(root.querySelector('.entity-cell.selected')).toBeNull();
+        expect(root.querySelector('.movement-path')).toBeNull();
+        expect(targets()).toHaveLength(0);
+        expect(text('.no-selection')).toBe('No unit selected.');
+        expect(text('.last-outcome')).toBe('Move rejected: UNIT_CANNOT_MOVE');
+        expect(store.interactionMode()).toBe(InteractionMode.MOVE);
+      });
+
+      it('no longer offers the movement reset control', async () => {
+        const { root, unit, act } = await renderMovementBoard();
+        act(() => unit('LEFT').click());
+
+        const labels = Array.from(root.querySelectorAll('button')).map(
+          (button) => button.textContent ?? '',
+        );
+        expect(root.querySelector('.reset-button')).toBeNull();
+        expect(labels.some((label) => /reset/i.test(label))).toBe(false);
+      });
     });
 
     it('reports the rejected move when a RIGHT unit target is clicked, leaving the unit in place', async () => {

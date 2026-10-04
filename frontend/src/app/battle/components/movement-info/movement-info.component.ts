@@ -1,12 +1,5 @@
 import { DecimalPipe, formatNumber } from '@angular/common';
-import {
-  Component,
-  LOCALE_ID,
-  computed,
-  inject,
-  input,
-  output,
-} from '@angular/core';
+import { Component, LOCALE_ID, computed, inject, input } from '@angular/core';
 import type { Position, Unit } from '../../domain/battle-state';
 import type { MovementError } from '../../domain/movement';
 import type { LastMovementOutcome } from '../../movement-outcome';
@@ -14,8 +7,8 @@ import type { MovementPreview } from '../../movement-preview';
 
 /**
  * Technical movement information for manual testing: the selected unit's
- * movement, the hovered preview, and the last move or reset outcome. Every
- * number comes from the domain; this component only formats it.
+ * movement, the hovered preview, and the last move outcome. Every number
+ * comes from the domain; this component only formats it.
  */
 @Component({
   selector: 'app-movement-info',
@@ -29,9 +22,6 @@ export class MovementInfoComponent {
   readonly unit = input<Unit>();
   readonly preview = input<MovementPreview>();
   readonly lastOutcome = input<LastMovementOutcome>();
-
-  /** Temporary development control (M4 contract §5), not a gameplay action. */
-  readonly resetMovement = output<void>();
 
   /** Display arithmetic on two domain fields, not a movement-cost calculation. */
   protected readonly spent = computed(() => {
@@ -56,10 +46,8 @@ export class MovementInfoComponent {
         const to = outcome.steps[outcome.steps.length - 1].to;
         return `${outcome.owner} moved ${outcome.unitId} ${cell(from)} → ${cell(to)} · cost ${cost(outcome.cost, this.locale)}`;
       }
-      case 'MOVEMENT_RESET':
-        return `Movement reset for ${outcome.unitId}`;
       case 'REJECTED':
-        return `${outcome.action === 'MOVE' ? 'Move' : 'Reset'} rejected: ${errorText(outcome.error, this.locale)}`;
+        return `Move rejected: ${errorText(outcome.error, this.locale)}`;
     }
   });
 }

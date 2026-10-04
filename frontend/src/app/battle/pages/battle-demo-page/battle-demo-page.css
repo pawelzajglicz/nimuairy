@@ -10,3 +10,36 @@
   gap: 0.75rem;
   max-width: 1050px;
 }
+
+/* Equal outer tracks keep the mode controls centred over the board whatever
+   the width of the turn label and the END TURN button. */
+.turn-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.current-player {
+  margin: 0;
+}
+
+/* Filled and coloured unlike the outlined mode toggles: it ends the player's
+   turn rather than choosing what the selected unit does. */
+.end-turn-button {
+  justify-self: end;
+  padding: 0.4rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  background: #1d4ed8;
+  border: 2px solid #1d4ed8;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.end-turn-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
