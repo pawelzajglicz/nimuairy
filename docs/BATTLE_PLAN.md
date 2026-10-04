@@ -280,6 +280,9 @@ from Angular.
 
 M5 implements the first real turn system.
 
+The concrete M5 gameplay and technical rules are defined in
+[`M5_DESIGN_CONTRACT.md`](./M5_DESIGN_CONTRACT.md).
+
 Turn model:
 
 - exactly one unit may act during a turn;
