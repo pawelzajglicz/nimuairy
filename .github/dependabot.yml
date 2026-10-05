@@ -1,4 +1,14 @@
 version: 2
+
+# Docker Hardened Images require a login even for public images.
+# Secrets live in Settings → Secrets and variables → Dependabot.
+registries:
+  dhi:
+    type: docker-registry
+    url: https://dhi.io
+    username: ${{secrets.DHI_USERNAME}}
+    password: ${{secrets.DHI_TOKEN}}
+
 updates:
   - package-ecosystem: npm
     directory: /frontend
@@ -6,9 +16,14 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore(deps)
-    # @angular/* packages pin each other as exact peer dependencies,
-    # so bumping one of them alone fails `npm ci`.
+    # Skip releases that get yanked or compromised within days of publishing.
+    # Security updates are not delayed.
+    cooldown:
+      default-days: 3
+    # A dependency joins the first group it matches, so order matters.
     groups:
+      # @angular/* packages pin each other as exact peer dependencies,
+      # so bumping one of them alone fails `npm ci`.
       angular:
         patterns:
           - "@angular/*"
@@ -16,3 +31,59 @@ updates:
         applies-to: security-updates
         patterns:
           - "@angular/*"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: maven
+    directory: /nimuairy-api
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    cooldown:
+      default-days: 3
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework*"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directories:
+      - /frontend
+      - /nimuairy-api
+    registries:
+      - dhi
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    cooldown:
+      default-days: 3
+
+  - package-ecosystem: docker-compose
+    directory: /
+    registries:
+      - dhi
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    cooldown:
+      default-days: 3
