@@ -5,9 +5,9 @@
  * OpenAPI spec version: v0
  */
 
-export type UnitDtoUnitType = typeof UnitDtoUnitType[keyof typeof UnitDtoUnitType];
+export type UnitType = typeof UnitType[keyof typeof UnitType];
 
 
-export const UnitDtoUnitType = {
+export const UnitType = {
   SWORDSMAN: 'SWORDSMAN',
 } as const;
