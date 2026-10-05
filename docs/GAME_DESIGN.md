@@ -62,7 +62,23 @@ Ending a turn:
 3. restores `remainingMovement` to `moveRange` for every unit owned by the new current player.
 
 Ending a turn does **not** require all movement to be spent and is valid even when
-the current unit has remaining movement.
+the active unit has remaining movement.
+
+### 2.3 Active unit
+
+The active unit is the one unit allowed to act during the current turn.
+
+- At the start of a turn there is no active unit.
+- The turn's first successful unit action, such as a move, makes that unit the active unit.
+- A failed action does not make a unit active.
+- Once a unit is active, no other unit may act until the turn ends.
+- `END_TURN` clears the active unit for the next player's turn.
+
+The active unit is battle state (`BattleState.activeUnitId`), just like `currentPlayer`.
+
+It is not the same as the unit selected in the UI (`selectedUnitId`). Selection is presentation
+state: a player may select or inspect any unit, including the opponent's units, at any time.
+Selecting a unit never makes it active, and selecting another unit does not change the active unit.
 
 ## 3. Board
 
@@ -260,7 +276,7 @@ The movement engine should decide whether a particular unit can interact with a 
 
 ### 8.1 Movement during a turn
 
-Movement is an action performed by the current unit.
+Movement is a unit action. A turn's first successful move makes the moving unit the active unit (see 2.3). After that, only that unit may move.
 
 A unit may perform multiple actions during its turn, so movement may be performed
 multiple times until the unit's remaining movement is exhausted.

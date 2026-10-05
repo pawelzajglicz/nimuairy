@@ -177,8 +177,9 @@ export const BattleStore = signalStore(
       if (!state) {
         return;
       }
-      // The selected unit belongs to the player whose turn just ended, so the
-      // new turn starts with nothing selected.
+      // Selection and hover belong to the turn that just ended, whichever
+      // player owns the selected unit, so the new turn starts with nothing
+      // selected.
       patchState(store, {
         battleState: store._engine.endTurn(state),
         selectedUnitId: undefined,

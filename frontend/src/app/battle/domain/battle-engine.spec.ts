@@ -539,6 +539,30 @@ describe('BattleEngine MOVE_UNIT', () => {
       expect(unitIn(state)?.position).toEqual({ x: 4, y: 2 });
     });
 
+    it('keeps the turn after a move that exhausts the remaining movement', () => {
+      const state = testState({
+        units: [testUnit({ moveRange: 2, remainingMovement: 2 }), other],
+      });
+
+      const { state: exhausted } = expectMoved(
+        state,
+        moveCommand([
+          { x: 3, y: 2 },
+          { x: 4, y: 2 },
+        ]),
+      );
+
+      expect(unitIn(exhausted)?.remainingMovement).toBe(0);
+      expect(exhausted.currentPlayer).toBe('LEFT');
+      expect(exhausted.activeUnitId).toBe('left-1x1');
+      expect(engine.legalActions(exhausted)).toEqual(new Set(['END_TURN']));
+      expectRejected(
+        exhausted,
+        moveCommand([{ x: 7, y: 6 }], { unitId: 'left-other' }),
+        { type: 'UNIT_CANNOT_MOVE', unitId: 'left-other' },
+      );
+    });
+
     it('is not claimed by a failed move', () => {
       const tooFar = moveCommand([3, 4, 5, 6, 7].map((x) => ({ x, y: 3 })));
 

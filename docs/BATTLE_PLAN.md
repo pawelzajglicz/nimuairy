@@ -187,7 +187,8 @@ At a high level, M4 introduces:
 - reachable-cell highlighting;
 - hovered minimum-cost path preview;
 - movement-cost and remaining-movement information;
-- a temporary technical movement reset control.
+- a temporary technical movement reset control *(superseded by M5.5: removed
+  and replaced by the END TURN control)*.
 
 M4 does not implement the real turn system or combat. For the demo, LEFT is
 treated as the current player: LEFT units can move, while RIGHT units may be
@@ -198,6 +199,10 @@ rules remain an M5 responsibility.
 `currentPlayer` is part of the domain `BattleState`. Because the demo API does
 not carry it yet, the frontend mapper initializes it to LEFT during M4 as a
 temporary fixture. This is not frontend ownership of turn state.
+
+> *Superseded by M5:* M5.1 delivers `currentPlayer` from the backend/API, and
+> the mapper no longer defaults it to LEFT. Since M5.3, `END_TURN` hands the
+> turn to RIGHT, so RIGHT units can move during RIGHT's turn.
 
 M4 should be implemented in small, reviewable steps rather than as one large
 frontend/backend change. Domain movement rules should be tested independently
@@ -211,7 +216,7 @@ from Angular.
 - **M4.2 — Movement rules, reachability, and execution** (done). Domain only;
   no UI changes. Key decisions:
   - `currentPlayer` is added to the domain `BattleState`, with a temporary
-    mapper default of LEFT;
+    mapper default of LEFT *(superseded by M5.1: read from the API)*;
   - one domain movement-rules module owns footprint validity, step legality
     (adjacency, obstacles, no corner cutting), and per-step movement cost;
     reachability and execution both use it;
@@ -243,7 +248,7 @@ from Angular.
     clicking a destination.
   - **M4.3.3 — Movement information and reset.** Movement information panel,
     spent-movement label on the selected unit, the last movement outcome, and
-    the temporary reset control.
+    the temporary reset control *(the reset is superseded by M5.5)*.
 
   Key decisions:
   - `battleState` is a linked store slice: the mapper seeds it from the HTTP
@@ -269,12 +274,15 @@ from Angular.
   - clicking a destination submits `MOVE_UNIT` with the `to` positions of
     the previewed steps, so the executed path is exactly the displayed one;
   - the temporary reset is `BattleEngine.resetMovement`, a technical
-    transition for development and manual testing only;
+    transition for development and manual testing only *(superseded by M5.5:
+    `resetMovement` is removed, and `END_TURN` restores movement at turn
+    start)*;
   - movement feedback is a single technical line, not a battle log:
     `lastOutcome` is one global, replace-only slot holding the most recent
     move or reset attempt of any unit. It is kept across selection and mode
     changes and replaced only by the next attempt; there is no history and no
-    per-unit record.
+    per-unit record. *(Since M5.5 it records move attempts only, because the
+    reset is gone.)*
 
 ### M5 — Turns
 
@@ -328,7 +336,8 @@ M5 steps:
   and the legal-action queries use one shared domain rule for whether a unit
   may act, so an action reported as legal is never rejected for turn-ownership
   reasons. The temporary `resetMovement` is not a gameplay action and does not
-  claim the turn. Clearing `activeUnitId` belongs to `END_TURN` in M5.3.
+  claim the turn *(superseded by M5.5: `resetMovement` is removed)*. Clearing
+  `activeUnitId` belongs to `END_TURN` in M5.3.
 - **M5.3 — End turn and player switching** (done). Add `END_TURN` to the
   engine. It switches `currentPlayer`, clears `activeUnitId`, and returns a
   new immutable `BattleState`. It does not restore movement; that is M5.4.
@@ -343,7 +352,18 @@ M5 steps:
   and components do neither. The temporary `resetMovement` is removed from
   both the UI and the engine, since `END_TURN` now restores movement. Keep
   action legality and state transitions in the domain engine.
-- **M5.6 — Verification and documentation.** Verify the implementation
+
+  UI decisions:
+  - END TURN clears the UI state of the turn that ended (`selectedUnitId` and
+    `hoveredDestination`) and keeps `interactionMode` and `lastOutcome`;
+  - END TURN is always enabled, because `END_TURN` is always legal;
+  - the active unit has no separate indicator yet. The UI shows the current
+    player, and the domain enforces the active unit;
+  - any unit, including friendly units other than the active one and the
+    opponent's units, can still be selected and inspected, with movement
+    reachability. Only the engine decides whether it may act, and it rejects
+    a move by any other unit with `UNIT_CANNOT_MOVE`.
+- **M5.6 — Verification and documentation** (done). Verify the implementation
   against the acceptance criteria in `M5_DESIGN_CONTRACT.md`, close any
   remaining gaps in the unit, integration, and Playwright tests required by
   its testing contract, and complete the M5 design/acceptance documentation.

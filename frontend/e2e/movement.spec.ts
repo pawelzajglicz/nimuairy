@@ -262,6 +262,29 @@ test.describe('turns', () => {
   const endTurn = (page: Page) =>
     page.getByRole('button', { name: 'END TURN' }).click();
 
+  test('the same unit moves more than once in a turn, and running out of movement keeps the turn', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await clickCell(page, 0, 0);
+
+    await clickCell(page, 1, 0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@1,0');
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 1 / 2 · remaining 1',
+    );
+
+    await clickCell(page, 2, 0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@2,0');
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 2 / 2 · remaining 0',
+    );
+    await expect(page.locator('.last-outcome')).toHaveText(
+      'LEFT moved left-small (1,0) → (2,0) · cost 1',
+    );
+    await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
+  });
+
   test('one unit acts per turn, and END TURN hands over the turn and restores movement', async ({
     page,
   }) => {

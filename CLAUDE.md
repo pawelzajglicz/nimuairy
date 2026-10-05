@@ -9,7 +9,7 @@ Implemented: register/login with JWT, character CRUD. The battle system is under
 
 - **Character** — a playable unit owned by a user; the thing that fights.
 - **Action** — a gameplay action performed by a unit during its turn, such as movement or, in future, attack or ability use.
-- **Turn** — the period during which one player may act with one selected unit. A unit may perform multiple actions during that turn.
+- **Turn** — the period during which one player may act with one active unit. The turn's first successful unit action makes that unit active; it may then perform multiple actions during that turn. The active unit is battle state, not the UI's selected unit.
 - **Round** — after both players have completed their turns.
 - **Battle** — a sequence of rounds.
 
