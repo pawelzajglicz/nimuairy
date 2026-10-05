@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(deps)
+    # @angular/* packages pin each other as exact peer dependencies,
+    # so bumping one of them alone fails `npm ci`.
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+      angular-security:
+        applies-to: security-updates
+        patterns:
+          - "@angular/*"
