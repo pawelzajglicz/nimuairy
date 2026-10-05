@@ -56,22 +56,6 @@ describe('MovementInfoComponent', () => {
       );
     });
 
-    it('offers a reset control that emits when activated', () => {
-      const fixture = render({ unit: movedUnit });
-      let resets = 0;
-      fixture.componentInstance.resetMovement.subscribe(() => resets++);
-      const button: HTMLButtonElement = fixture.nativeElement.querySelector(
-        'button.reset-button',
-      );
-
-      button.click();
-
-      expect(button.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-        'Reset movement (dev)',
-      );
-      expect(resets).toBe(1);
-    });
-
     it('shows the previewed path from the unit and its cost', () => {
       const fixture = render({
         unit: movedUnit,
@@ -90,12 +74,11 @@ describe('MovementInfoComponent', () => {
       );
     });
 
-    it('shows no unit details or reset control without a selected unit', () => {
+    it('shows no unit details without a selected unit', () => {
       const fixture = render();
 
       expect(text(fixture, '.no-selection')).toBe('No unit selected.');
       expect(fixture.nativeElement.querySelector('.unit-movement')).toBeNull();
-      expect(fixture.nativeElement.querySelector('.reset-button')).toBeNull();
     });
   });
 
@@ -116,16 +99,6 @@ describe('MovementInfoComponent', () => {
 
       expect(text(fixture, '.last-outcome')).toBe(
         'LEFT moved unit-left-2 (5,4) → (7,5) · cost 2.41',
-      );
-    });
-
-    it('describes a movement reset', () => {
-      const fixture = render({
-        lastOutcome: { kind: 'MOVEMENT_RESET', unitId: 'unit-left-2' },
-      });
-
-      expect(text(fixture, '.last-outcome')).toBe(
-        'Movement reset for unit-left-2',
       );
     });
 
@@ -153,10 +126,10 @@ describe('MovementInfoComponent', () => {
       {
         outcome: {
           kind: 'REJECTED',
-          action: 'RESET',
+          action: 'MOVE',
           error: { type: 'UNIT_CANNOT_MOVE', unitId: 'unit-right-1' },
         },
-        expected: 'Reset rejected: UNIT_CANNOT_MOVE',
+        expected: 'Move rejected: UNIT_CANNOT_MOVE',
       },
     ])('describes a rejection: $expected', ({ outcome, expected }) => {
       expect(text(render({ lastOutcome: outcome }), '.last-outcome')).toBe(
@@ -166,17 +139,21 @@ describe('MovementInfoComponent', () => {
 
     it('stays visible without a selected unit, in a polite live region', () => {
       const fixture = render({
-        lastOutcome: { kind: 'MOVEMENT_RESET', unitId: 'unit-left-2' },
+        lastOutcome: {
+          kind: 'REJECTED',
+          action: 'MOVE',
+          error: { type: 'UNIT_CANNOT_MOVE', unitId: 'unit-right-1' },
+        },
       });
       const line: HTMLElement =
         fixture.nativeElement.querySelector('.last-outcome');
 
       expect(fixture.nativeElement.querySelector('.unit-movement')).toBeNull();
-      expect(line.textContent?.trim()).toBe('Movement reset for unit-left-2');
+      expect(line.textContent?.trim()).toBe('Move rejected: UNIT_CANNOT_MOVE');
       expect(line.getAttribute('aria-live')).toBe('polite');
     });
 
-    it('is empty before any move or reset', () => {
+    it('is empty before any move', () => {
       expect(text(render(), '.last-outcome')).toBe('');
     });
   });

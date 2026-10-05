@@ -1,4 +1,5 @@
-import type { BattleState, Unit } from './battle-state';
+import type { ActionType, UnitActionType } from './actions';
+import type { BattleState, PlayerSide, Unit } from './battle-state';
 import { samePosition } from './geometry';
 import type {
   MoveUnitCommand,
@@ -10,6 +11,12 @@ import { isWithinBudget } from './movement-cost';
 import { movementRules, walkPath } from './movement-rules';
 import { findReachable } from './pathfinding';
 import { err, ok, type Result } from './result';
+
+/** Typed as a Record so that a new PlayerSide does not compile without one. */
+const OPPONENT: Record<PlayerSide, PlayerSide> = {
+  LEFT: 'RIGHT',
+  RIGHT: 'LEFT',
+};
 
 /**
  * Authoritative battle rules as pure functions of the battle state: commands
@@ -25,11 +32,11 @@ export class BattleEngine {
     state: BattleState,
     command: MoveUnitCommand,
   ): Result<MovementResult, MovementError> {
-    const movable = movableUnit(state, command.unitId);
-    if (!movable.ok) {
-      return movable;
+    const acting = actingUnit(state, command.unitId);
+    if (!acting.ok) {
+      return acting;
     }
-    const unit = movable.value;
+    const unit = acting.value;
 
     const lastCell = command.path.at(-1);
     if (!lastCell) {
@@ -74,10 +81,34 @@ export class BattleEngine {
         units: state.units.map((other) =>
           other.id === unit.id ? moved : other,
         ),
+        // A successful move claims an unclaimed turn; for the unit that
+        // already holds it this is a no-op.
+        activeUnitId: unit.id,
       },
       steps,
       cost,
     });
+  }
+
+  /**
+   * Hands the turn to the other player, leaves the new turn unclaimed, and
+   * restores the movement of every unit of the player whose turn starts.
+   * Always legal, whatever movement remains. Movement is restored at turn
+   * start rather than turn end, so the units of the player whose turn ends
+   * keep what they have left until their owner's next turn.
+   */
+  endTurn(state: BattleState): BattleState {
+    const nextPlayer = OPPONENT[state.currentPlayer];
+    return {
+      ...state,
+      currentPlayer: nextPlayer,
+      activeUnitId: undefined,
+      units: state.units.map((unit) =>
+        unit.owner === nextPlayer && unit.remainingMovement !== unit.moveRange
+          ? { ...unit, remainingMovement: unit.moveRange }
+          : unit,
+      ),
+    };
   }
 
   /**
@@ -106,27 +137,63 @@ export class BattleEngine {
   }
 
   /**
-   * Restores the unit's remainingMovement to its moveRange. A temporary
-   * technical transition that exists only for development and manual testing
-   * of movement, not a gameplay action; it goes away or is replaced once M5
-   * defines how movement is restored.
+   * Action types the current player may perform in this state: END_TURN, plus
+   * every unit action at least one of their units may perform.
    */
-  resetMovement(
+  legalActions(state: BattleState): ReadonlySet<ActionType> {
+    return new Set<ActionType>([
+      ...state.units.flatMap((unit) => unitActions(state, unit)),
+      'END_TURN',
+    ]);
+  }
+
+  /**
+   * Unit action types the unit may perform in this state; empty for an
+   * unknown unit, another player's unit, or a unit other than the one that
+   * has claimed the turn.
+   */
+  legalUnitActions(
     state: BattleState,
     unitId: string,
-  ): Result<BattleState, MovementError> {
-    const movable = movableUnit(state, unitId);
-    if (!movable.ok) {
-      return movable;
-    }
-    const unit = movable.value;
-
-    const reset: Unit = { ...unit, remainingMovement: unit.moveRange };
-    return ok({
-      ...state,
-      units: state.units.map((other) => (other.id === unit.id ? reset : other)),
-    });
+  ): ReadonlySet<UnitActionType> {
+    const unit = state.units.find(({ id }) => id === unitId);
+    return new Set(unit ? unitActions(state, unit) : []);
   }
+}
+
+function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
+  if (!mayAct(state, unit)) {
+    return [];
+  }
+  return canMoveAnywhere(state, unit) ? ['MOVE'] : [];
+}
+
+/**
+ * The turn is the current player's and is unclaimed or claimed by this unit.
+ * Both the legal-action queries and execution go through this rule, so an
+ * action reported as legal is never rejected for turn-ownership reasons.
+ */
+function mayAct(state: BattleState, unit: Unit): boolean {
+  return (
+    unit.owner === state.currentPlayer &&
+    (state.activeUnitId === undefined || state.activeUnitId === unit.id)
+  );
+}
+
+/**
+ * Asks reachability rather than checking remainingMovement > 0: a leftover
+ * smaller than any step (e.g. 5 - 3√2) or a boxed-in unit leaves nowhere to
+ * go, and MOVE must not be reported legal when execution would reject every
+ * path.
+ */
+function canMoveAnywhere(state: BattleState, unit: Unit): boolean {
+  const { cells } = findReachable(
+    movementRules(state, unit),
+    unit.position,
+    unit.remainingMovement,
+  );
+  // The origin itself is always included at cost 0.
+  return cells.size > 1;
 }
 
 function findUnit(
@@ -137,12 +204,12 @@ function findUnit(
   return unit ? ok(unit) : err({ type: 'UNIT_NOT_FOUND', unitId });
 }
 
-function movableUnit(
+function actingUnit(
   state: BattleState,
   unitId: string,
 ): Result<Unit, MovementError> {
   const found = findUnit(state, unitId);
-  if (found.ok && found.value.owner !== state.currentPlayer) {
+  if (found.ok && !mayAct(state, found.value)) {
     return err({ type: 'UNIT_CANNOT_MOVE', unitId });
   }
   return found;

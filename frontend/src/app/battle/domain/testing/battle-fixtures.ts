@@ -57,6 +57,7 @@ export interface TestStateOptions {
   readonly walls?: readonly Wall[];
   readonly orbs?: readonly Orb[];
   readonly currentPlayer?: PlayerSide;
+  readonly activeUnitId?: string;
 }
 
 /**
@@ -72,6 +73,7 @@ export function testState({
   walls = [],
   orbs = [],
   currentPlayer = 'LEFT',
+  activeUnitId,
 }: TestStateOptions = {}): BattleState {
   const rockKeys = new Set(rocks.map(positionKey));
   const missingKeys = new Set(withoutTerrain.map(positionKey));
@@ -93,5 +95,6 @@ export function testState({
     walls,
     units,
     currentPlayer,
+    activeUnitId,
   };
 }

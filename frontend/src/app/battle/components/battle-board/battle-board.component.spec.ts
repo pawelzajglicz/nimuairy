@@ -14,6 +14,7 @@ function buildBattleState(overrides: Partial<BattleState> = {}): BattleState {
     orbs: [],
     walls: [],
     currentPlayer: 'LEFT',
+    activeUnitId: undefined,
     ...overrides,
   };
 }

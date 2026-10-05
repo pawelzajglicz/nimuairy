@@ -22,9 +22,67 @@ The primary objective is to destroy the opponent's orb.
 
 Destroying the opponent's orb immediately ends the battle and determines the winner, regardless of how many units either player has remaining.
 
-## 2. Board
+## 2. Turn Model
 
-### 2.1 Grid
+The battle is divided into player turns.
+
+During a turn:
+
+- exactly one unit may act;
+- the unit may perform multiple actions during that turn;
+- the player may choose to perform another action with the same unit until the turn is ended;
+- `END_TURN` is the action that ends the current turn;
+- `remainingMovement = 0` does not end the turn automatically.
+
+The other player's turn begins only after `END_TURN`.
+
+At the start of a new player's turn, every unit belonging to that player has its
+`remainingMovement` restored to its `moveRange`.
+
+Movement restoration therefore happens on turn start, not when ending the previous
+turn. A player's remaining movement may stay partially consumed after that player's
+turn has ended and is restored when that player becomes active again.
+
+### 2.1 Current player
+
+`BattleState.currentPlayer` identifies the player whose turn is currently active.
+
+Only that player may perform gameplay actions during the turn.
+
+The current player is a property of battle state, not UI state.
+
+### 2.2 Ending a turn
+
+`END_TURN` is the only action that ends a turn.
+
+Ending a turn:
+
+1. switches `currentPlayer` to the other player;
+2. starts that player's turn;
+3. restores `remainingMovement` to `moveRange` for every unit owned by the new current player.
+
+Ending a turn does **not** require all movement to be spent and is valid even when
+the active unit has remaining movement.
+
+### 2.3 Active unit
+
+The active unit is the one unit allowed to act during the current turn.
+
+- At the start of a turn there is no active unit.
+- The turn's first successful unit action, such as a move, makes that unit the active unit.
+- A failed action does not make a unit active.
+- Once a unit is active, no other unit may act until the turn ends.
+- `END_TURN` clears the active unit for the next player's turn.
+
+The active unit is battle state (`BattleState.activeUnitId`), just like `currentPlayer`.
+
+It is not the same as the unit selected in the UI (`selectedUnitId`). Selection is presentation
+state: a player may select or inspect any unit, including the opponent's units, at any time.
+Selecting a unit never makes it active, and selecting another unit does not change the active unit.
+
+## 3. Board
+
+### 3.1 Grid
 
 The entire game area is represented by a single rectangular grid.
 
@@ -34,7 +92,7 @@ The initial board planned for M1 is 21 x 11 cells.
 
 The exact initial placement of all objects is part of the M1 demo battle state.
 
-### 2.2 Coordinates
+### 3.2 Coordinates
 
 A position identifies a cell on the board.
 
@@ -45,11 +103,11 @@ The board uses zero-based coordinates:
 
 Every object that occupies board space uses this coordinate system.
 
-## 3. Board Layers
+## 4. Board Layers
 
 The board is conceptually composed of several independent layers.
 
-### 3.1 Terrain
+### 4.1 Terrain
 
 Terrain describes the properties of a cell.
 
@@ -59,7 +117,7 @@ The terrain system is intentionally extensible. Future terrain types may include
 
 Terrain is not the same concept as a wall.
 
-### 3.2 Structures
+### 4.2 Structures
 
 Structures are persistent objects that form part of the battlefield.
 
@@ -67,13 +125,13 @@ Walls are structures.
 
 A structure can occupy one or more cells through a footprint.
 
-### 3.3 Units
+### 4.3 Units
 
 Units are controllable game entities belonging to a player.
 
 Units can occupy one or more cells through a footprint.
 
-### 3.4 Objectives
+### 4.4 Objectives
 
 Objectives are interactive game objects with a gameplay purpose.
 
@@ -81,7 +139,7 @@ Each player has one orb.
 
 Orbs occupy one or more cells through a footprint.
 
-## 4. Orbs
+## 5. Orbs
 
 Each player has exactly one orb.
 
@@ -104,7 +162,7 @@ The opponent wins.
 
 The number, health, or status of the remaining units does not change this victory condition.
 
-## 5. Walls
+## 6. Walls
 
 Each player has a wall protecting their orb.
 
@@ -120,7 +178,7 @@ A wall:
 - can contain slots for units,
 - can be interacted with by movement and combat rules.
 
-### 5.1 Wall slots
+### 6.1 Wall slots
 
 Walls may expose a number of explicit slots where units can be positioned.
 
@@ -136,7 +194,7 @@ The slot model is intended to make such rules explicit rather than representing 
 
 The exact slot layout and supported unit types are future gameplay details unless required by a particular milestone.
 
-### 5.2 Units on walls
+### 6.2 Units on walls
 
 A unit occupying a wall slot is still a unit.
 
@@ -144,7 +202,7 @@ The wall remains a structure.
 
 This distinction allows future mechanics such as ranged units positioned on walls, mounted units, different wall types, destructible walls, and units with special abilities for interacting with walls.
 
-## 6. Units
+## 7. Units
 
 A unit belongs to a player and has gameplay statistics.
 
@@ -159,15 +217,15 @@ The initial domain model includes:
 - position
 - footprint
 
-### 6.1 Position
+### 7.1 Position
 
 A unit's position is its anchor position.
 
 It does not necessarily describe every cell occupied by the unit.
 
-### 6.2 Footprint
+### 7.2 Footprint
 
-A footprint describes the cells occupied by an object relative to its anchor position.
+A footprint describes the cells occupied by a unit relative to its anchor position.
 
 A normal one-cell unit has the relative cell `(0, 0)`.
 
@@ -182,7 +240,7 @@ without requiring a different positioning model.
 
 The currently planned units can all use a one-cell footprint.
 
-### 6.3 Occupied cells
+### 7.3 Occupied cells
 
 Occupied cells are derived from:
 
@@ -192,13 +250,13 @@ They should not be treated as a second independent source of truth.
 
 This keeps movement and state changes simpler and leaves room for units with different shapes and sizes.
 
-### 6.4 Rotation
+### 7.4 Rotation
 
 Unit rotation is intentionally not part of the initial design.
 
 It may be introduced later if gameplay requires it.
 
-## 7. Movement and Traversal
+## 8. Movement and Traversal
 
 Movement rules determine whether a unit can move from one position to another.
 
@@ -216,7 +274,18 @@ A wall therefore does not need to encode every possible movement rule itself.
 
 The movement engine should decide whether a particular unit can interact with a particular terrain or structure.
 
-## 8. Combat
+### 8.1 Movement during a turn
+
+Movement is a unit action. A turn's first successful move makes the moving unit the active unit (see 2.3). After that, only that unit may move.
+
+A unit may perform multiple actions during its turn, so movement may be performed
+multiple times until the unit's remaining movement is exhausted.
+
+Exhausting `remainingMovement` does not end the turn.
+
+At the start of a unit owner's new turn, its `remainingMovement` is restored to `moveRange`.
+
+## 9. Combat
 
 Combat is governed by unit statistics and battle rules.
 
@@ -232,7 +301,7 @@ The exact attack ranges, targeting rules, damage calculation, and special abilit
 
 The domain model should not assume that all attacks target units only.
 
-## 9. Domain Concepts
+## 10. Domain Concepts
 
 The domain should distinguish between different kinds of objects even when they share common geometric concepts.
 
@@ -260,7 +329,7 @@ For example:
 
 The domain model should remain independent of Spring, JPA, and persistence concerns.
 
-## 10. Initial Battle
+## 11. Initial Battle
 
 M1 provides a deterministic, hard-coded initial battle.
 
@@ -277,7 +346,9 @@ The initial battle should contain:
 
 The initial state is a demonstration state and is not persisted.
 
-## 11. Future Ideas
+The initial current player for the demo battle is `LEFT`.
+
+## 12. Future Ideas
 
 The following ideas are intentionally recorded so that they are not lost. They are not commitments to a particular milestone.
 
@@ -322,7 +393,7 @@ The following ideas are intentionally recorded so that they are not lost. They a
 - [ ] special damage types
 - [ ] defensive abilities
 
-## 12. Design Principles
+## 13. Design Principles
 
 1. **Keep the domain independent from frameworks and persistence.**
 2. **Represent board geometry explicitly.**

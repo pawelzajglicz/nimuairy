@@ -51,6 +51,7 @@ function response(): BattleStateResponse {
         moveRange: 5,
       },
     ],
+    currentPlayer: 'LEFT',
   };
 }
 
@@ -78,8 +79,28 @@ describe('toBattleState', () => {
     expect(unit.remainingMovement).toBe(unit.moveRange);
   });
 
-  it('starts the demo battle with LEFT as the current player', () => {
+  it('maps LEFT as the current player from the response', () => {
     expect(toBattleState(response()).currentPlayer).toBe('LEFT');
+  });
+
+  it('maps RIGHT as the current player from the response', () => {
+    const rightToAct = { ...response(), currentPlayer: 'RIGHT' as const };
+
+    expect(toBattleState(rightToAct).currentPlayer).toBe('RIGHT');
+  });
+
+  it('starts the turn without an active unit', () => {
+    const state = toBattleState(response());
+
+    expect(state).toHaveProperty('activeUnitId');
+    expect(state.activeUnitId).toBeUndefined();
+  });
+
+  it('rejects a response without a current player instead of defaulting it', () => {
+    const incomplete = response();
+    delete incomplete.currentPlayer;
+
+    expect(() => toBattleState(incomplete)).toThrow('currentPlayer');
   });
 
   it('rejects a response with a missing required field', () => {

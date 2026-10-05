@@ -59,6 +59,7 @@ const battleState: BattleStateResponse = {
   ],
   orbs: [],
   walls: [],
+  currentPlayer: 'LEFT',
 };
 
 async function openBoard(page: Page) {
@@ -229,7 +230,7 @@ test.describe('movement with real pointer interaction', () => {
   });
 });
 
-test.describe('movement information and reset', () => {
+test.describe('movement information', () => {
   test('the panel shows the preview, spent and remaining movement, and the last move', async ({
     page,
   }) => {
@@ -254,23 +255,72 @@ test.describe('movement information and reset', () => {
       'LEFT moved left-small (0,0) → (2,0) · cost 2',
     );
   });
+});
 
-  test('the reset control restores movement for a further move', async ({
+test.describe('turns', () => {
+  const currentPlayer = (page: Page) => page.locator('.current-player');
+  const endTurn = (page: Page) =>
+    page.getByRole('button', { name: 'END TURN' }).click();
+
+  test('the same unit moves more than once in a turn, and running out of movement keeps the turn', async ({
     page,
   }) => {
     await openBoard(page);
     await clickCell(page, 0, 0);
+
+    await clickCell(page, 1, 0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@1,0');
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 1 / 2 · remaining 1',
+    );
+
+    await clickCell(page, 2, 0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@2,0');
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 2 / 2 · remaining 0',
+    );
+    await expect(page.locator('.last-outcome')).toHaveText(
+      'LEFT moved left-small (1,0) → (2,0) · cost 1',
+    );
+    await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
+  });
+
+  test('one unit acts per turn, and END TURN hands over the turn and restores movement', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
+
+    await clickCell(page, 0, 0);
     await clickCell(page, 2, 0);
     await expect(targets(page)).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Reset movement (dev)' }).click();
-
+    // The turn now belongs to left-small, so left-wide cannot move.
+    await clickCell(page, 2, 2);
+    await clickCell(page, 1, 2);
     await expect(page.locator('.last-outcome')).toHaveText(
-      'Movement reset for left-small',
+      'Move rejected: UNIT_CANNOT_MOVE',
     );
-    await expect(targets(page)).not.toHaveCount(0);
+    await expect.poll(() => unitCells(page)).toContain('LEFT@2,2');
 
-    await clickCell(page, 3, 0);
-    await expect.poll(() => unitCells(page)).toContain('LEFT@3,0');
+    await endTurn(page);
+    await expect(currentPlayer(page)).toHaveText('Turn: RIGHT');
+    await clickCell(page, 5, 0);
+    await clickCell(page, 4, 0);
+    await expect.poll(() => unitCells(page)).toContain('RIGHT@4,0');
+
+    await endTurn(page);
+    await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
+    await clickCell(page, 2, 0);
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · Move 0 / 2 · remaining 2',
+    );
+  });
+
+  test('the development reset control is gone', async ({ page }) => {
+    await openBoard(page);
+    await clickCell(page, 0, 0);
+
+    await expect(page.getByRole('button', { name: /reset/i })).toHaveCount(0);
   });
 });

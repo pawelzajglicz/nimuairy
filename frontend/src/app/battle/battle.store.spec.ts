@@ -12,6 +12,7 @@ import type {
 } from '../api/generated/model';
 import { toBattleState } from './battle-state.mapper';
 import { BattleStore } from './battle.store';
+import { BattleEngine } from './domain/battle-engine';
 import type { Position } from './domain/battle-state';
 import { InteractionMode } from './interaction-mode';
 
@@ -44,6 +45,7 @@ function demoResponse(): BattleStateResponse {
         moveRange: 3,
       },
     ],
+    currentPlayer: 'LEFT',
   };
 }
 
@@ -261,6 +263,7 @@ describe('BattleStore', () => {
           unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
           unitDto('right-unit-1', 'RIGHT', { x: 2, y: 2 }),
         ],
+        currentPlayer: 'LEFT',
       };
     }
 
@@ -470,7 +473,7 @@ describe('BattleStore', () => {
         });
       });
 
-      it('is kept across selection, mode and hover changes', async () => {
+      it('is kept across selection, mode, hover and turn changes', async () => {
         const store = await loadedStore();
         store.selectUnit('left-unit-1');
         store.moveSelectedUnit({ x: 2, y: 1 });
@@ -480,6 +483,7 @@ describe('BattleStore', () => {
         store.selectUnit('right-unit-1');
         store.setInteractionMode(InteractionMode.ATTACK);
         store.clearSelection();
+        store.endTurn();
 
         expect(store.lastOutcome()).toBe(outcome);
       });
@@ -489,17 +493,13 @@ describe('BattleStore', () => {
         store.selectUnit('left-unit-1');
         store.moveSelectedUnit({ x: 2, y: 1 });
 
-        store.resetSelectedUnitMovement();
-        expect(store.lastOutcome()).toEqual({
-          kind: 'MOVEMENT_RESET',
-          unitId: 'left-unit-1',
-        });
+        expect(store.lastOutcome()?.kind).toBe('MOVED');
 
         store.selectUnit('right-unit-1');
-        store.resetSelectedUnitMovement();
+        store.moveSelectedUnit({ x: 3, y: 2 });
         expect(store.lastOutcome()).toEqual({
           kind: 'REJECTED',
-          action: 'RESET',
+          action: 'MOVE',
           error: { type: 'UNIT_CANNOT_MOVE', unitId: 'right-unit-1' },
         });
       });
@@ -514,40 +514,73 @@ describe('BattleStore', () => {
       });
     });
 
-    describe('movement reset (temporary development control)', () => {
-      it("restores the selected unit's movement through the engine, keeping its position", async () => {
+    describe('end turn', () => {
+      it('passes the turn to RIGHT and back to LEFT', async () => {
+        const store = await loadedStore();
+
+        store.endTurn();
+        expect(store.battleState()?.currentPlayer).toBe('RIGHT');
+
+        store.endTurn();
+        expect(store.battleState()?.currentPlayer).toBe('LEFT');
+      });
+
+      it('stores the state the engine returns for END_TURN', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 2, y: 1 });
+        const before = store.battleState()!;
+
+        store.endTurn();
+
+        expect(store.battleState()).toEqual(new BattleEngine().endTurn(before));
+      });
+
+      it('clears the active unit and restores the movement of the player whose turn starts', async () => {
         const store = await loadedStore();
         store.selectUnit('left-unit-1');
         store.moveSelectedUnit({ x: 3, y: 1 });
+        expect(store.battleState()?.activeUnitId).toBe('left-unit-1');
         expect(store.reachableDestinations()).toEqual([]);
 
-        store.resetSelectedUnitMovement();
+        store.endTurn();
+        expect(store.battleState()?.activeUnitId).toBeUndefined();
+        expect(leftUnit(store)?.remainingMovement).toBe(0);
 
+        store.endTurn();
         expect(leftUnit(store)).toMatchObject({
           position: { x: 3, y: 1 },
           remainingMovement: 2,
         });
+        store.selectUnit('left-unit-1');
         expect(store.reachableDestinations()).not.toEqual([]);
       });
 
-      it('leaves the battle state untouched when the engine rejects the reset', async () => {
+      it('clears the selection and hover, keeping the interaction mode and last outcome', async () => {
         const store = await loadedStore();
-        const before = store.battleState();
-        store.selectUnit('right-unit-1');
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 2, y: 1 });
+        const outcome = store.lastOutcome();
+        store.hoverDestination({ x: 3, y: 1 });
+        expect(store.movementPreview()).toBeDefined();
 
-        store.resetSelectedUnitMovement();
+        store.endTurn();
 
-        expect(store.battleState()).toBe(before);
+        expect(store.selectedUnitId()).toBeUndefined();
+        expect(store.selectedUnit()).toBeUndefined();
+        expect(store.hoveredDestination()).toBeUndefined();
+        expect(store.movementPreview()).toBeUndefined();
+        expect(store.interactionMode()).toBe(InteractionMode.MOVE);
+        expect(store.lastOutcome()).toBe(outcome);
       });
 
-      it('does nothing without a selected unit', async () => {
+      it('keeps a non-default interaction mode', async () => {
         const store = await loadedStore();
-        const before = store.battleState();
+        store.setInteractionMode(InteractionMode.ATTACK);
 
-        store.resetSelectedUnitMovement();
+        store.endTurn();
 
-        expect(store.battleState()).toBe(before);
-        expect(store.lastOutcome()).toBeUndefined();
+        expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
       });
     });
   });
