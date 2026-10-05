@@ -18,6 +18,9 @@ export default defineConfig({
       client: 'angular',
       target: 'src/app/api/generated/nimuairy-api.ts',
       schemas: 'src/app/api/generated/model',
+      // Orval never deletes stale files and merges into an existing model/index.ts, so a renamed
+      // schema would leave dead files and exports behind. Wipe both output folders first instead.
+      clean: true,
       override: {
         angular: {
           // GET endpoints -> httpResource() signals, everything else -> HttpClient service.
