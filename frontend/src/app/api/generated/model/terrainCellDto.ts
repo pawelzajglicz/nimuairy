@@ -5,9 +5,9 @@
  * OpenAPI spec version: v0
  */
 import type { PositionDto } from './positionDto';
-import type { TerrainCellDtoType } from './terrainCellDtoType';
+import type { TerrainType } from './terrainType';
 
 export interface TerrainCellDto {
   position?: PositionDto;
-  type?: TerrainCellDtoType;
+  type?: TerrainType;
 }

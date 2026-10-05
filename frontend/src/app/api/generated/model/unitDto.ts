@@ -4,14 +4,14 @@
  * OpenAPI definition
  * OpenAPI spec version: v0
  */
+import type { PlayerSide } from './playerSide';
 import type { PositionDto } from './positionDto';
-import type { UnitDtoOwner } from './unitDtoOwner';
-import type { UnitDtoUnitType } from './unitDtoUnitType';
+import type { UnitType } from './unitType';
 
 export interface UnitDto {
   id?: string;
-  owner?: UnitDtoOwner;
-  unitType?: UnitDtoUnitType;
+  owner?: PlayerSide;
+  unitType?: UnitType;
   position?: PositionDto;
   footprint?: PositionDto[];
   health?: number;

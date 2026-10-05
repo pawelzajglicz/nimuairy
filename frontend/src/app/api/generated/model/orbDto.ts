@@ -4,12 +4,12 @@
  * OpenAPI definition
  * OpenAPI spec version: v0
  */
-import type { OrbDtoOwner } from './orbDtoOwner';
+import type { PlayerSide } from './playerSide';
 import type { PositionDto } from './positionDto';
 
 export interface OrbDto {
   id?: string;
-  owner?: OrbDtoOwner;
+  owner?: PlayerSide;
   position?: PositionDto;
   footprint?: PositionDto[];
   health?: number;

@@ -5,10 +5,10 @@
  * OpenAPI spec version: v0
  */
 
-export type UnitDtoOwner = typeof UnitDtoOwner[keyof typeof UnitDtoOwner];
+export type PlayerSide = typeof PlayerSide[keyof typeof PlayerSide];
 
 
-export const UnitDtoOwner = {
+export const PlayerSide = {
   LEFT: 'LEFT',
   RIGHT: 'RIGHT',
 } as const;

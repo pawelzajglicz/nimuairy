@@ -5,10 +5,10 @@
  * OpenAPI spec version: v0
  */
 
-export type TerrainCellDtoType = typeof TerrainCellDtoType[keyof typeof TerrainCellDtoType];
+export type TerrainType = typeof TerrainType[keyof typeof TerrainType];
 
 
-export const TerrainCellDtoType = {
+export const TerrainType = {
   PLAIN: 'PLAIN',
   ROCK: 'ROCK',
 } as const;
