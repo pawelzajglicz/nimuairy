@@ -19,7 +19,7 @@ services:
 
   cloudflared:
     container_name: cloudflared-nimuairy
-    image: cloudflare/cloudflared:2026.9.3
+    image: cloudflare/cloudflared:2026.10.0
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:
       # Read from the environment rather than passed as --token, which would
