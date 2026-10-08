@@ -59,6 +59,14 @@ battle rules.
 
 ## Milestones
 
+Status:
+
+- M1–M5 — done
+- **M6 — Action Points — next**
+- M7 — Combat / Attacks — planned
+- M8 — Victory — planned
+- M9 — Refactoring — planned
+
 ### M1 — Demo Battle API
 
 Backend returns a deterministic, hard-coded initial `BattleState`.
@@ -190,6 +198,10 @@ At a high level, M4 introduces:
 - a temporary technical movement reset control *(superseded by M5.5: removed
   and replaced by the END TURN control)*.
 
+> *Superseded by M6:* `moveRange` and `remainingMovement` are replaced by
+> `actionPointBudget` and `remainingActionPoints`; movement then spends Action
+> Points.
+
 M4 does not implement the real turn system or combat. For the demo, LEFT is
 treated as the current player: LEFT units can move, while RIGHT units may be
 selected and inspected, including their movement reachability, but movement
@@ -304,6 +316,10 @@ Turn model:
   `remainingMovement` restored to `moveRange`;
 - movement restoration happens at turn start, not while ending the previous turn.
 
+> *Superseded by M6:* turn-start restoration of `remainingMovement = moveRange`
+> becomes `remainingActionPoints = actionPointBudget`. The turn model itself is
+> unchanged.
+
 M5 scope:
 
 - `currentPlayer` becomes part of the backend/API battle state:
@@ -368,7 +384,46 @@ M5 steps:
   remaining gaps in the unit, integration, and Playwright tests required by
   its testing contract, and complete the M5 design/acceptance documentation.
 
-### M6 — Combat
+### M6 — Action Points
+
+M6 introduces Action Points (AP): one shared, integer resource that all
+actions of a unit draw from. MOVE is its first user; ATTACK, ABILITY and other
+future actions will use the same resource. The rules are defined in
+[`GAME_DESIGN.md`](./GAME_DESIGN.md) §2.4 (Action Points) and §8.2 (Movement
+cost).
+
+At a high level:
+
+- each unit has `actionPointBudget`, its AP for one turn;
+- each unit has `remainingActionPoints`, its current AP in battle state;
+- `moveRange` is removed from the gameplay model; `remainingMovement` is
+  replaced by `remainingActionPoints`;
+- MOVE costs `ceil(sum of baseMovementCost × stepCost × terrainCost)` for the
+  whole path, with `stepCost` `1` orthogonal / `√2` diagonal and
+  `terrainCost = 1` for all current terrain;
+- reachability and the path preview are limited by `remainingActionPoints`;
+- `END_TURN` costs no AP and is always possible, also at `0 AP`;
+- `0 AP` does not end the turn automatically;
+- the active unit is still `activeUnitId`, as in M5;
+- at the start of a player's turn, all of that player's units restore
+  `remainingActionPoints = actionPointBudget`.
+
+M6 scope:
+
+- domain model and engine: AP state, movement cost in AP, turn-start
+  restoration;
+- backend/API: unit statistics (`actionPointBudget`, `baseMovementCost`)
+  replace `moveRange`; update OpenAPI and regenerate the Angular client;
+- battle UI shows AP instead of movement.
+
+M6 does not design ATTACK or ABILITY, and does not introduce terrain with a
+cost other than `1`. A dedicated design contract and the M6 steps are defined
+in the M6 design review.
+
+### M7 — Combat / Attacks
+
+Combat uses the AP system from M6: an attack spends the attacking unit's
+`remainingActionPoints`. The AP cost of attacks is defined in M7.
 
 Implement:
 
@@ -388,7 +443,7 @@ Initial damage formula:
 
     damage = max(0, attacker.attack - defender.defense)
 
-### M7 — Victory
+### M8 — Victory
 
 Implement:
 
@@ -399,7 +454,7 @@ Implement:
 
 The primary victory condition is destruction of the opponent's orb.
 
-### M8 — Refactoring
+### M9 — Refactoring
 
 Review the battle domain and prepare it for moving the engine to Java.
 
