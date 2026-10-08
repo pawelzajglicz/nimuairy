@@ -1,5 +1,9 @@
 import { ApplicationConfig } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withRouterResources,
+} from '@angular/router';
 import {
   provideHttpClient,
   withInterceptors,
@@ -11,7 +15,7 @@ import { authInterceptor } from './interceptors/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideRouter(routes),
+    provideRouter(routes, withComponentInputBinding(), withRouterResources()),
     provideHttpClient(withXhr(), withInterceptors([authInterceptor])),
   ],
 };
