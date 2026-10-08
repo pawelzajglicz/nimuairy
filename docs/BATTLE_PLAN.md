@@ -398,7 +398,7 @@ At a high level:
 - each unit has `remainingActionPoints`, its current AP in battle state;
 - `moveRange` is removed from the gameplay model; `remainingMovement` is
   replaced by `remainingActionPoints`;
-- MOVE costs `ceil(sum of baseMovementCost × stepCost × terrainCost)` for the
+- MOVE costs `ceil(sum of movementCostFactor × stepCost × terrainCost)` for the
   whole path, with `stepCost` `1` orthogonal / `√2` diagonal and
   `terrainCost = 1` for all current terrain;
 - reachability and the path preview are limited by `remainingActionPoints`;
@@ -412,7 +412,7 @@ M6 scope:
 
 - domain model and engine: AP state, movement cost in AP, turn-start
   restoration;
-- backend/API: unit statistics (`actionPointBudget`, `baseMovementCost`)
+- backend/API: unit statistics (`actionPointBudget`, `movementCostFactor`)
   replace `moveRange`; update OpenAPI and regenerate the Angular client;
 - battle UI shows AP instead of movement.
 

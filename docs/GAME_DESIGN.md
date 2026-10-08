@@ -247,7 +247,7 @@ The initial domain model includes:
 From M6, a unit also has:
 
 - `actionPointBudget` — its AP per turn (see 2.4)
-- `baseMovementCost` — its movement cost multiplier (see 8.2)
+- `movementCostFactor` — its movement cost multiplier (see 8.2)
 - `remainingActionPoints` — its current AP, as battle state
 
 `moveRange` is removed from the gameplay model in M6.
@@ -326,7 +326,7 @@ At the start of a unit owner's new turn, its `remainingActionPoints` is restored
 The AP cost of one MOVE is calculated once for its whole path:
 
     movementCost = ceil( sum over all steps of
-                         unit.baseMovementCost × stepCost × terrainCost )
+                         unit.movementCostFactor × stepCost × terrainCost )
 
 For M6:
 
@@ -336,13 +336,13 @@ For M6:
 Fractional values exist only during the calculation. The resulting cost and all AP
 values are integers.
 
-Examples with `baseMovementCost = 1`:
+Examples with `movementCostFactor = 1`:
 
 - one orthogonal step costs `1 AP`;
 - one diagonal step costs `ceil(√2) = 2 AP`;
 - two diagonal steps in one MOVE cost `ceil(2√2) = 3 AP`.
 
-Examples with `baseMovementCost = 3`:
+Examples with `movementCostFactor = 3`:
 
 - one orthogonal step costs `3 AP`;
 - one diagonal step costs `ceil(3√2) = 5 AP`.
