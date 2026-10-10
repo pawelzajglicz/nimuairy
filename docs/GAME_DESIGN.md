@@ -32,16 +32,20 @@ During a turn:
 - the unit may perform multiple actions during that turn;
 - the player may choose to perform another action with the same unit until the turn is ended;
 - `END_TURN` is the action that ends the current turn;
-- `remainingMovement = 0` does not end the turn automatically.
+- `remainingActionPoints = 0` does not end the turn automatically.
 
 The other player's turn begins only after `END_TURN`.
 
 At the start of a new player's turn, every unit belonging to that player has its
-`remainingMovement` restored to its `moveRange`.
+`remainingActionPoints` restored to its `actionPointBudget`.
 
-Movement restoration therefore happens on turn start, not when ending the previous
-turn. A player's remaining movement may stay partially consumed after that player's
-turn has ended and is restored when that player becomes active again.
+Action Point restoration therefore happens on turn start, not when ending the previous
+turn. A player's units may keep partially spent Action Points after that player's
+turn has ended; they are restored when that player becomes active again.
+
+> Action Points are introduced in M6. Up to and including M5, the implementation
+> uses `remainingMovement` restored to `moveRange` instead (see
+> [`M5_DESIGN_CONTRACT.md`](./M5_DESIGN_CONTRACT.md)).
 
 ### 2.1 Current player
 
@@ -59,10 +63,10 @@ Ending a turn:
 
 1. switches `currentPlayer` to the other player;
 2. starts that player's turn;
-3. restores `remainingMovement` to `moveRange` for every unit owned by the new current player.
+3. restores `remainingActionPoints` to `actionPointBudget` for every unit owned by the new current player.
 
-Ending a turn does **not** require all movement to be spent and is valid even when
-the active unit has remaining movement.
+Ending a turn does **not** require all Action Points to be spent. It is valid with any
+number of remaining Action Points, including `0`.
 
 ### 2.3 Active unit
 
@@ -79,6 +83,29 @@ The active unit is battle state (`BattleState.activeUnitId`), just like `current
 It is not the same as the unit selected in the UI (`selectedUnitId`). Selection is presentation
 state: a player may select or inspect any unit, including the opponent's units, at any time.
 Selecting a unit never makes it active, and selecting another unit does not change the active unit.
+
+### 2.4 Action Points
+
+Action Points (AP) are the single resource that all actions of a unit draw from.
+Movement is the first action that uses them. Attacks, abilities, and other future
+actions will spend the same AP rather than having separate per-action allowances.
+
+- AP are integers.
+- `END_TURN` costs no AP and is always possible, including at `0 AP`.
+- `0 AP` does not end the turn automatically.
+- AP are restored at the start of the owner's turn (see 2 and 2.2).
+
+Four concepts must be kept apart:
+
+| Concept | Kind | Meaning |
+|---|---|---|
+| `actionPointBudget` | unit statistic | AP the unit has at the start of each of its owner's turns |
+| `remainingActionPoints` | battle state, per unit | AP the unit has left in the current turn |
+| `activeUnitId` | battle state | the unit that has claimed the right to act this turn (2.3) |
+| `selectedUnitId` | UI state | the unit chosen for display or inspection |
+
+Only battle state decides which unit may act. `selectedUnitId` never grants or
+implies the right to act.
 
 ## 3. Board
 
@@ -217,6 +244,14 @@ The initial domain model includes:
 - position
 - footprint
 
+From M6, a unit also has:
+
+- `actionPointBudget` — its AP per turn (see 2.4)
+- `movementCostFactor` — its movement cost multiplier (see 8.2)
+- `remainingActionPoints` — its current AP, as battle state
+
+`moveRange` is removed from the gameplay model in M6.
+
 ### 7.1 Position
 
 A unit's position is its anchor position.
@@ -278,12 +313,46 @@ The movement engine should decide whether a particular unit can interact with a 
 
 Movement is a unit action. A turn's first successful move makes the moving unit the active unit (see 2.3). After that, only that unit may move.
 
-A unit may perform multiple actions during its turn, so movement may be performed
-multiple times until the unit's remaining movement is exhausted.
+Movement spends the unit's `remainingActionPoints`. A unit may perform multiple actions
+during its turn, so it may move multiple times while it has enough AP.
 
-Exhausting `remainingMovement` does not end the turn.
+Running out of AP does not end the turn.
 
-At the start of a unit owner's new turn, its `remainingMovement` is restored to `moveRange`.
+At the start of a unit owner's new turn, its `remainingActionPoints` is restored to
+`actionPointBudget`.
+
+### 8.2 Movement cost
+
+The AP cost of one MOVE is calculated once for its whole path:
+
+    movementCost = ceil( sum over all steps of
+                         unit.movementCostFactor × stepCost × terrainCost )
+
+For M6:
+
+- `stepCost` is `1` for an orthogonal step and `√2` for a diagonal step;
+- `terrainCost` is `1` for all current terrain.
+
+Fractional values exist only during the calculation. The resulting cost and all AP
+values are integers.
+
+Examples with `movementCostFactor = 1`:
+
+- one orthogonal step costs `1 AP`;
+- one diagonal step costs `ceil(√2) = 2 AP`;
+- two diagonal steps in one MOVE cost `ceil(2√2) = 3 AP`.
+
+Examples with `movementCostFactor = 3`:
+
+- one orthogonal step costs `3 AP`;
+- one diagonal step costs `ceil(3√2) = 5 AP`.
+
+A MOVE is one action, so rounding is applied once per MOVE. Splitting a path into
+several MOVEs can therefore cost more in total than one longer MOVE along the same
+cells. This is intended.
+
+`terrainCost` is a per-step factor, so terrain with a cost other than `1` can be
+introduced later without changing the AP model.
 
 ## 9. Combat
 

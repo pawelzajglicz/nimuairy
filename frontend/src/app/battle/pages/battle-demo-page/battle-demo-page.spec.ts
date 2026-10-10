@@ -23,7 +23,8 @@ function unitDto(overrides: UnitDto): UnitDto {
     health: 100,
     attack: 10,
     defense: 5,
-    moveRange: 3,
+    actionPointBudget: 3,
+    movementCostFactor: 1,
     ...overrides,
   };
 }
@@ -429,7 +430,7 @@ describe('BattleDemoPage', () => {
             id: 'unit-left-1',
             owner: 'LEFT',
             position: { x: 1, y: 1 },
-            moveRange: 1,
+            actionPointBudget: 1,
           }),
           unitDto({
             id: 'unit-right-1',
@@ -483,7 +484,7 @@ describe('BattleDemoPage', () => {
       expect(unit('LEFT').style.gridColumn).toBe('3');
       expect(unit('LEFT').style.gridRow).toBe(String(HEIGHT - 1));
       expect(unit('LEFT').classList).toContain('selected');
-      // The single point of movement is spent, so nothing is reachable any more.
+      // The single AP is spent, so nothing is reachable any more.
       expect(targets()).toHaveLength(0);
     });
 
@@ -531,21 +532,21 @@ describe('BattleDemoPage', () => {
       expect(targets()).toHaveLength(0);
     });
 
-    it("shows the selected unit's spent and remaining movement and the last move", async () => {
+    it("shows the selected unit's spent and remaining AP and the last move", async () => {
       const { unit, target, act, text } = await renderMovementBoard();
       act(() => unit('LEFT').click());
       expect(text('.unit-movement')).toBe(
-        'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+        'unit-left-1 (LEFT) · AP spent 0 / 1 · remaining 1',
       );
 
       act(() => target(2, 1).click());
 
       expect(text('.unit-movement')).toBe(
-        'unit-left-1 (LEFT) · Move 1 / 1 · remaining 0',
+        'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
       );
       expect(text('.spent-label')).toBe('1');
       expect(text('.last-outcome')).toBe(
-        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1',
+        'LEFT moved unit-left-1 (1,1) → (2,1) · cost 1 AP',
       );
     });
 
@@ -576,7 +577,22 @@ describe('BattleDemoPage', () => {
         expect(text('.current-player')).toBe('Turn: LEFT');
       });
 
-      it("shows the engine's new state after END TURN: the turn changes hands and movement returns at turn start", async () => {
+      it('keeps END TURN enabled at 0 AP and passes the turn', async () => {
+        const { root, unit, target, act, text } = await renderMovementBoard();
+        act(() => unit('LEFT').click());
+        act(() => target(2, 1).click());
+        expect(text('.unit-movement')).toBe(
+          'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
+        );
+
+        const button = endTurnButton(root);
+        expect(button.disabled).toBe(false);
+        act(() => button.click());
+
+        expect(text('.current-player')).toBe('Turn: RIGHT');
+      });
+
+      it("shows the engine's new state after END TURN: the turn changes hands and AP return at turn start", async () => {
         const { root, store, unit, targets, target, act, text } =
           await renderMovementBoard();
         act(() => unit('LEFT').click());
@@ -588,19 +604,19 @@ describe('BattleDemoPage', () => {
         expect(store.battleState()?.activeUnitId).toBeUndefined();
         act(() => unit('LEFT').click());
         expect(text('.unit-movement')).toBe(
-          'unit-left-1 (LEFT) · Move 1 / 1 · remaining 0',
+          'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
         );
         act(() => unit('RIGHT').click());
         act(() => target(6, 3).click());
         expect(text('.last-outcome')).toBe(
-          'RIGHT moved unit-right-1 (5,3) → (6,3) · cost 1',
+          'RIGHT moved unit-right-1 (5,3) → (6,3) · cost 1 AP',
         );
 
         act(() => endTurnButton(root).click());
         act(() => unit('LEFT').click());
 
         expect(text('.unit-movement')).toBe(
-          'unit-left-1 (LEFT) · Move 0 / 1 · remaining 1',
+          'unit-left-1 (LEFT) · AP spent 0 / 1 · remaining 1',
         );
         expect(targets()).toHaveLength(4);
       });
@@ -647,7 +663,7 @@ describe('BattleDemoPage', () => {
       expect(unit('RIGHT').style.gridColumn).toBe('6');
       expect(unit('RIGHT').style.gridRow).toBe(String(HEIGHT - 3));
       expect(text('.unit-movement')).toBe(
-        'unit-right-1 (RIGHT) · Move 0 / 3 · remaining 3',
+        'unit-right-1 (RIGHT) · AP spent 0 / 3 · remaining 3',
       );
       expect(text('.last-outcome')).toBe('Move rejected: UNIT_CANNOT_MOVE');
     });

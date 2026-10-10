@@ -1,5 +1,4 @@
-import { DecimalPipe, formatNumber } from '@angular/common';
-import { Component, LOCALE_ID, computed, inject, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import type { Position, Unit } from '../../domain/battle-state';
 import type { MovementError } from '../../domain/movement';
 import type { LastMovementOutcome } from '../../movement-outcome';
@@ -7,18 +6,15 @@ import type { MovementPreview } from '../../movement-preview';
 
 /**
  * Technical movement information for manual testing: the selected unit's
- * movement, the hovered preview, and the last move outcome. Every number
+ * AP, the hovered preview, and the last move outcome. Every number
  * comes from the domain; this component only formats it.
  */
 @Component({
   selector: 'app-movement-info',
-  imports: [DecimalPipe],
   templateUrl: './movement-info.component.html',
   styleUrl: './movement-info.component.css',
 })
 export class MovementInfoComponent {
-  private readonly locale = inject(LOCALE_ID);
-
   readonly unit = input<Unit>();
   readonly preview = input<MovementPreview>();
   readonly lastOutcome = input<LastMovementOutcome>();
@@ -26,7 +22,7 @@ export class MovementInfoComponent {
   /** Display arithmetic on two domain fields, not a movement-cost calculation. */
   protected readonly spent = computed(() => {
     const unit = this.unit();
-    return unit ? unit.moveRange - unit.remainingMovement : 0;
+    return unit ? unit.actionPointBudget - unit.remainingActionPoints : 0;
   });
 
   protected readonly previewPath = computed(() => {
@@ -44,10 +40,10 @@ export class MovementInfoComponent {
       case 'MOVED': {
         const from = outcome.steps[0].from;
         const to = outcome.steps[outcome.steps.length - 1].to;
-        return `${outcome.owner} moved ${outcome.unitId} ${cell(from)} → ${cell(to)} · cost ${cost(outcome.cost, this.locale)}`;
+        return `${outcome.owner} moved ${outcome.unitId} ${cell(from)} → ${cell(to)} · cost ${cost(outcome.cost)}`;
       }
       case 'REJECTED':
-        return `Move rejected: ${errorText(outcome.error, this.locale)}`;
+        return `Move rejected: ${errorText(outcome.error)}`;
     }
   });
 }
@@ -56,16 +52,16 @@ function cell({ x, y }: Position): string {
   return `(${x},${y})`;
 }
 
-function cost(value: number, locale: string): string {
-  return formatNumber(value, locale, '1.0-2');
+function cost(actionPoints: number): string {
+  return `${actionPoints} AP`;
 }
 
-function errorText(error: MovementError, locale: string): string {
+function errorText(error: MovementError): string {
   switch (error.type) {
     case 'INVALID_PATH':
       return `INVALID_PATH (${error.reason})`;
-    case 'INSUFFICIENT_MOVEMENT':
-      return `INSUFFICIENT_MOVEMENT (needs ${cost(error.required, locale)}, has ${cost(error.available, locale)})`;
+    case 'INSUFFICIENT_ACTION_POINTS':
+      return `INSUFFICIENT_ACTION_POINTS (needs ${cost(error.required)}, has ${cost(error.available)})`;
     default:
       return error.type;
   }

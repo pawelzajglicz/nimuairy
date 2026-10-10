@@ -48,7 +48,8 @@ function response(): BattleStateResponse {
         health: 10,
         attack: 4,
         defense: 2,
-        moveRange: 5,
+        actionPointBudget: 5,
+        movementCostFactor: 2,
       },
     ],
     currentPlayer: 'LEFT',
@@ -72,11 +73,12 @@ describe('toBattleState', () => {
     expect(state.units[0]).toMatchObject(response().units![0]);
   });
 
-  it('starts every unit with its full movement allowance', () => {
+  it('maps the unit statistics and starts every unit with its full AP', () => {
     const [unit] = toBattleState(response()).units;
 
-    expect(unit.moveRange).toBe(5);
-    expect(unit.remainingMovement).toBe(unit.moveRange);
+    expect(unit.actionPointBudget).toBe(5);
+    expect(unit.movementCostFactor).toBe(2);
+    expect(unit.remainingActionPoints).toBe(5);
   });
 
   it('maps LEFT as the current player from the response', () => {
@@ -108,5 +110,29 @@ describe('toBattleState', () => {
     delete incomplete.units![0].position;
 
     expect(() => toBattleState(incomplete)).toThrow('unit.position');
+  });
+
+  it.each(['actionPointBudget', 'movementCostFactor'] as const)(
+    'rejects a unit without %s',
+    (field) => {
+      const incomplete = response();
+      delete incomplete.units![0][field];
+
+      expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
+    },
+  );
+
+  it.each([
+    ['actionPointBudget', 0],
+    ['actionPointBudget', -1],
+    ['actionPointBudget', 2.5],
+    ['movementCostFactor', 0],
+    ['movementCostFactor', -1],
+    ['movementCostFactor', 1.5],
+  ] as const)('rejects a unit with %s = %s', (field, value) => {
+    const invalid = response();
+    invalid.units![0][field] = value;
+
+    expect(() => toBattleState(invalid)).toThrow(`invalid unit.${field}`);
   });
 });

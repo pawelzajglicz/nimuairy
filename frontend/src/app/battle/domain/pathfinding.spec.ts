@@ -15,7 +15,7 @@ import {
 function reachable(
   unit: Unit,
   options: TestStateOptions = {},
-  budget = unit.remainingMovement,
+  budget = unit.remainingActionPoints,
 ): Reachability {
   const others = options.units ?? [];
   const state = testState({ ...options, units: [unit, ...others] });
@@ -37,16 +37,17 @@ describe('findReachable', () => {
     expect(reachability.cells.get('2,2')).toEqual({
       position: { x: 2, y: 2 },
       cost: 0,
+      actionPointCost: 0,
       via: null,
     });
     expect(pathTo(reachability, { x: 2, y: 2 })).toEqual([]);
   });
 
   it.each([
-    { budget: 0.5, size: 1 },
+    { budget: 0, size: 1 },
     { budget: 1, size: 5 },
-    { budget: 1.5, size: 9 },
     { budget: 2, size: 13 },
+    { budget: 3, size: 29 },
   ])(
     'reaches $size cells with budget $budget on an open board',
     ({ budget, size }) => {
@@ -64,6 +65,45 @@ describe('findReachable', () => {
 
   it('chooses the minimum-cost path', () => {
     expect(costTo(reachable(testUnit()), { x: 4, y: 3 })).toBe(1 + Math.SQRT2);
+  });
+
+  describe('with an AP budget', () => {
+    const origin = { x: 3, y: 3 };
+
+    function apCostTo(reachability: Reachability, position: Position) {
+      return reachability.cells.get(positionKey(position))?.actionPointCost;
+    }
+
+    it('records the AP cost of the cheapest path to each cell, rounded once', () => {
+      const reachability = reachable(testUnit({ position: origin }), {}, 3);
+
+      expect(apCostTo(reachability, { x: 4, y: 3 })).toBe(1);
+      expect(apCostTo(reachability, { x: 4, y: 4 })).toBe(2);
+      expect(apCostTo(reachability, { x: 5, y: 4 })).toBe(3);
+    });
+
+    it('includes a cell whose AP cost equals the budget and excludes one AP above', () => {
+      const unit = testUnit({ position: origin });
+
+      expect(reachable(unit, {}, 2).cells.has('4,4')).toBe(true);
+      expect(reachable(unit, {}, 1).cells.has('4,4')).toBe(false);
+    });
+
+    it('reaches two diagonals with 3 AP at factor 1, rounding the path once', () => {
+      const reachability = reachable(testUnit({ position: origin }), {}, 3);
+
+      expect(costTo(reachability, { x: 5, y: 5 })).toBe(2 * Math.SQRT2);
+      expect(apCostTo(reachability, { x: 5, y: 5 })).toBe(3);
+    });
+
+    it('does not reach a diagonal with 4 AP at factor 3, which needs 5', () => {
+      const unit = testUnit({ position: origin, movementCostFactor: 3 });
+
+      const withFour = reachable(unit, {}, 4);
+      expect(withFour.cells.has('4,4')).toBe(false);
+      expect(apCostTo(withFour, { x: 4, y: 3 })).toBe(3);
+      expect(apCostTo(reachable(unit, {}, 5), { x: 4, y: 4 })).toBe(5);
+    });
   });
 
   it('only records occupiable cells within the budget', () => {

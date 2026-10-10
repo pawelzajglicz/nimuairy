@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { Board, Position, Unit } from '../../domain/battle-state';
 import type { ReachableCell } from '../../domain/movement';
+import { actionPointCost } from '../../domain/movement-cost';
 import { FOOTPRINTS, testUnit } from '../../domain/testing/battle-fixtures';
 import type { MovementPreview } from '../../movement-preview';
 import { toGridPosition } from '../../utils/coordinate-mapper';
@@ -9,10 +10,15 @@ import { MovementOverlayComponent } from './movement-overlay.component';
 
 const BOARD: Board = { width: 21, height: 11, terrain: [] };
 
-/** A reachable cell; the overlay only reads its position and cost. */
+/** A reachable cell; the overlay only reads its position and AP cost. */
 function destination(x: number, y: number, cost: number): ReachableCell {
   const position = { x, y };
-  return { position, cost, via: { from: { x: 2, y: 2 }, to: position, cost } };
+  return {
+    position,
+    cost,
+    actionPointCost: actionPointCost(cost),
+    via: { from: { x: 2, y: 2 }, to: position, cost },
+  };
 }
 
 /** (2,2) → (3,2) → (4,3): one orthogonal and one diagonal step. */
@@ -22,7 +28,7 @@ const PREVIEW: MovementPreview = {
     { from: { x: 2, y: 2 }, to: { x: 3, y: 2 }, cost: 1 },
     { from: { x: 3, y: 2 }, to: { x: 4, y: 3 }, cost: Math.SQRT2 },
   ],
-  cost: 1 + Math.SQRT2,
+  cost: 3,
 };
 
 const TWO_DESTINATIONS = [
@@ -79,7 +85,7 @@ describe('MovementOverlayComponent', () => {
       ]);
     });
 
-    it('labels each target with its position and movement cost', () => {
+    it('labels each target with its position and AP cost', () => {
       const targets = all(
         render({ destinations: TWO_DESTINATIONS }),
         '.movement-target',
@@ -87,7 +93,7 @@ describe('MovementOverlayComponent', () => {
 
       expect(
         targets.map((target) => target.getAttribute('aria-label')),
-      ).toEqual(['Move to (3, 2), cost 1', 'Move to (4, 3), cost 2.41']);
+      ).toEqual(['Move to (3, 2), cost 1 AP', 'Move to (4, 3), cost 3 AP']);
     });
 
     it('reports pointer and keyboard hover, and their end, as the hovered destination', () => {
@@ -164,13 +170,13 @@ describe('MovementOverlayComponent', () => {
       );
     });
 
-    it('shows the previewed cost at the destination', () => {
+    it('shows the previewed AP cost at the destination', () => {
       const [label] = all(
         render({ destinations: TWO_DESTINATIONS, preview: PREVIEW }),
         '.preview-cost',
       );
 
-      expect(label.textContent?.trim()).toBe('2.41');
+      expect(label.textContent?.trim()).toBe('3');
       expect(gridPosition(label)).toEqual(
         toGridPosition({ x: 4, y: 3 }, BOARD.height),
       );
@@ -204,20 +210,20 @@ describe('MovementOverlayComponent', () => {
     });
   });
 
-  describe('spent movement', () => {
-    it("labels the selected unit's anchor cell with the movement it has spent", () => {
+  describe('spent AP', () => {
+    it("labels the selected unit's anchor cell with the AP it has spent", () => {
       const [label] = all(
         render({
           unit: testUnit({
             position: { x: 4, y: 3 },
-            moveRange: 5,
-            remainingMovement: 5 - 1 - Math.SQRT2,
+            actionPointBudget: 5,
+            remainingActionPoints: 2,
           }),
         }),
         '.spent-label',
       );
 
-      expect(label.textContent?.trim()).toBe('2.41');
+      expect(label.textContent?.trim()).toBe('3');
       expect(gridPosition(label)).toEqual(
         toGridPosition({ x: 4, y: 3 }, BOARD.height),
       );

@@ -26,7 +26,8 @@ const battleState: BattleStateResponse = {
       health: 100,
       attack: 10,
       defense: 5,
-      moveRange: 3,
+      actionPointBudget: 3,
+      movementCostFactor: 1,
     },
   ],
   orbs: [

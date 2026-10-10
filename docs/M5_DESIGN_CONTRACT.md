@@ -97,6 +97,7 @@ M5 recognizes:
 - END_TURN
 
 ATTACK is intentionally not implemented in M5, but the action model should be open to adding it in M6 without redesigning the turn model.
+*(Superseded: M6 is Action Points; ATTACK/Combat moved to M7, see BATTLE_PLAN.md.)*
 
 For a gameplay action targeting a unit:
 1. the unit must exist;

@@ -1,4 +1,3 @@
-import { DecimalPipe } from '@angular/common';
 import { Component, computed, input, output } from '@angular/core';
 import type { Board, Position, Unit } from '../../domain/battle-state';
 import {
@@ -26,14 +25,13 @@ interface RenderedCell {
 
 /**
  * The selected unit's movement layer, drawn above units and terrain: one target
- * per reachable destination anchor, the hovered path and its cost, and the
- * movement the unit has already spent. Targets live here rather than on terrain
+ * per reachable destination anchor, the hovered path and its AP cost, and the
+ * AP the unit has already spent. Targets live here rather than on terrain
  * cells because a destination can overlap the moving unit's own current cells,
  * where the unit itself is the click target.
  */
 @Component({
   selector: 'app-movement-overlay',
-  imports: [DecimalPipe],
   templateUrl: './movement-overlay.component.html',
   styleUrl: './movement-overlay.component.css',
 })
@@ -41,7 +39,7 @@ export class MovementOverlayComponent {
   readonly board = input<Board>();
   readonly destinations = input<readonly ReachableCell[]>([]);
   readonly preview = input<MovementPreview>();
-  /** The selected unit: its spent movement is labelled, and its footprint outlined at the previewed destination. */
+  /** The selected unit: its spent AP are labelled, and its footprint outlined at the previewed destination. */
   readonly unit = input<Unit>();
 
   readonly destinationHover = output<Position | undefined>();
@@ -50,10 +48,10 @@ export class MovementOverlayComponent {
   private readonly height = computed(() => this.board()?.height ?? 0);
 
   protected readonly targets = computed<RenderedTarget[]>(() =>
-    this.destinations().map(({ position, cost }) => ({
+    this.destinations().map(({ position, actionPointCost }) => ({
       key: positionKey(position),
       position,
-      cost,
+      cost: actionPointCost,
       ...toGridPosition(position, this.height()),
     })),
   );
@@ -94,12 +92,12 @@ export class MovementOverlayComponent {
       : undefined;
   });
 
-  /** Shown on the unit's anchor cell; moveRange − remainingMovement, both from the domain. */
+  /** Shown on the unit's anchor cell; actionPointBudget − remainingActionPoints, both from the domain. */
   protected readonly spentLabel = computed(() => {
     const unit = this.unit();
     return unit
       ? {
-          spent: unit.moveRange - unit.remainingMovement,
+          spent: unit.actionPointBudget - unit.remainingActionPoints,
           ...toGridPosition(unit.position, this.height()),
         }
       : undefined;

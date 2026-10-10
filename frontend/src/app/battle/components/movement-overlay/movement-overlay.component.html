@@ -23,7 +23,8 @@
           ', ' +
           target.position.y +
           '), cost ' +
-          (target.cost | number: '1.0-2')
+          target.cost +
+          ' AP'
         "
         [style.grid-column]="target.gridColumn"
         [style.grid-row]="target.gridRow"
@@ -50,7 +51,7 @@
         aria-hidden="true"
         [style.grid-column]="label.gridColumn"
         [style.grid-row]="label.gridRow"
-        >{{ label.spent | number: '1.0-2' }}</span
+        >{{ label.spent }}</span
       >
     }
     @if (costLabel(); as label) {
@@ -59,7 +60,7 @@
         aria-hidden="true"
         [style.grid-column]="label.gridColumn"
         [style.grid-row]="label.gridRow"
-        >{{ label.cost | number: '1.0-2' }}</span
+        >{{ label.cost }}</span
       >
     }
   </div>

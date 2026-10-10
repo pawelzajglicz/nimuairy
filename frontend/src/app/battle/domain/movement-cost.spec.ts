@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isCheaper, isWithinBudget, stepCost } from './movement-cost';
+import {
+  actionPointCost,
+  isCheaper,
+  isWithinBudget,
+  stepCost,
+} from './movement-cost';
 
 describe('stepCost', () => {
   it.each([
@@ -18,6 +23,55 @@ describe('stepCost', () => {
     { x: 3, y: 1 },
   ])('costs √2 for a diagonal step to %o', (to) => {
     expect(stepCost({ x: 2, y: 2 }, to)).toBe(Math.SQRT2);
+  });
+
+  it('costs the movement cost factor for an orthogonal step', () => {
+    expect(stepCost({ x: 2, y: 2 }, { x: 3, y: 2 }, 1)).toBe(1);
+    expect(stepCost({ x: 2, y: 2 }, { x: 3, y: 2 }, 3)).toBe(3);
+  });
+
+  it('costs the movement cost factor times √2 for a diagonal step', () => {
+    expect(stepCost({ x: 2, y: 2 }, { x: 3, y: 3 }, 1)).toBe(Math.SQRT2);
+    expect(stepCost({ x: 2, y: 2 }, { x: 3, y: 3 }, 3)).toBe(3 * Math.SQRT2);
+  });
+});
+
+describe('actionPointCost', () => {
+  it.each([
+    { path: '1 orthogonal step', pathCost: 1, actionPoints: 1 },
+    { path: '1 diagonal step', pathCost: Math.SQRT2, actionPoints: 2 },
+    {
+      path: '2 diagonal steps',
+      pathCost: Math.SQRT2 + Math.SQRT2,
+      actionPoints: 3,
+    },
+    { path: '3 orthogonal steps', pathCost: 3, actionPoints: 3 },
+    {
+      path: '1 diagonal step at factor 3',
+      pathCost: 3 * Math.SQRT2,
+      actionPoints: 5,
+    },
+  ])('charges $actionPoints AP for $path', ({ pathCost, actionPoints }) => {
+    expect(actionPointCost(pathCost)).toBe(actionPoints);
+  });
+
+  it('rounds once for the whole path, not per step', () => {
+    const diagonal = stepCost({ x: 2, y: 2 }, { x: 3, y: 3 });
+
+    expect(actionPointCost(diagonal + diagonal)).toBe(3);
+    expect(actionPointCost(diagonal) + actionPointCost(diagonal)).toBe(4);
+  });
+
+  it('does not round up a cost above an integer only by rounding error', () => {
+    expect(actionPointCost(3 + 1e-12)).toBe(3);
+  });
+
+  it('rounds up a cost genuinely above an integer', () => {
+    expect(actionPointCost(3.001)).toBe(4);
+  });
+
+  it('charges +0, not -0, for a zero cost', () => {
+    expect(actionPointCost(0)).toBe(0);
   });
 });
 

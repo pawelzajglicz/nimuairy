@@ -24,9 +24,9 @@ export interface MovementStep {
 }
 
 /**
- * What the engine actually executed. `steps` keeps each step's cost so callers
- * can show it (future terrain makes steps differ) without recalculating
- * movement cost themselves; `cost` is the total charged.
+ * What the engine actually executed. `steps` keeps each step's fractional
+ * cost so callers can show it (future terrain makes steps differ) without
+ * recalculating movement cost themselves; `cost` is the integer AP charged.
  */
 export interface MovementResult {
   readonly state: BattleState;
@@ -45,22 +45,24 @@ export type MovementError =
   | { readonly type: 'INVALID_DESTINATION'; readonly destination: Position }
   | { readonly type: 'INVALID_PATH'; readonly reason: InvalidPathReason }
   | {
-      readonly type: 'INSUFFICIENT_MOVEMENT';
+      readonly type: 'INSUFFICIENT_ACTION_POINTS';
       readonly required: number;
       readonly available: number;
     };
 
 export interface ReachableCell {
   readonly position: Position;
-  /** Minimum movement cost from the origin. */
+  /** Minimum fractional path cost from the origin; the search key. */
   readonly cost: number;
+  /** Integer AP a MOVE along the canonical path costs. */
+  readonly actionPointCost: number;
   /** Last step of the canonical minimum-cost path; null for the origin. */
   readonly via: MovementStep | null;
 }
 
 /**
  * Minimum-cost paths from a unit's anchor to every anchor within its
- * remaining movement, stored as a shortest-path tree: each cell keeps only
+ * remaining AP, stored as a shortest-path tree: each cell keeps only
  * its incoming step, and full paths are rebuilt on demand.
  */
 export interface Reachability {

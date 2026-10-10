@@ -3,7 +3,7 @@
  * com.nimuairy.nimuairy.battle so the engine can later move to Java.
  * Unlike the generated API DTOs, fields are required and readonly, and the
  * model holds battle state that the API does not carry yet
- * (remainingMovement, activeUnitId).
+ * (remainingActionPoints, activeUnitId).
  */
 
 export interface Position {
@@ -38,14 +38,16 @@ export interface Unit {
   readonly health: number;
   readonly attack: number;
   readonly defense: number;
-  /** Initial movement allowance; never consumed by movement. */
-  readonly moveRange: number;
+  /** AP restored at the start of each of the owner's turns. Integer > 0. */
+  readonly actionPointBudget: number;
+  /** Multiplies the cost of every movement step. Integer > 0. */
+  readonly movementCostFactor: number;
   /**
-   * Current allowance, stored rather than derived from movement history so a
-   * turn can contain several moves (MOVE → ATTACK → MOVE).
-   * Invariant: 0 <= remainingMovement <= moveRange.
+   * AP left in the current turn, shared by all unit actions. Stored rather
+   * than derived from action history so a turn can contain several actions
+   * (MOVE → ATTACK → MOVE). Invariant: integer >= 0.
    */
-  readonly remainingMovement: number;
+  readonly remainingActionPoints: number;
 }
 
 export interface Wall {

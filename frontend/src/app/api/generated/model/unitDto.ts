@@ -17,5 +17,6 @@ export interface UnitDto {
   health?: number;
   attack?: number;
   defense?: number;
-  moveRange?: number;
+  actionPointBudget?: number;
+  movementCostFactor?: number;
 }
