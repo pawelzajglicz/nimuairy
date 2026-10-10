@@ -14,3 +14,6 @@
 .env
 .env.*
 !.env.example
+
+# Playwright MCP session output (snapshots, console logs, screenshots)
+.playwright-mcp/

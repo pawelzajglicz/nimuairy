@@ -83,4 +83,10 @@ Use the generated API types and clients instead of creating duplicate request/re
 
 Keep generated API code separate from application/domain code.
 
+## Browser verification (Playwright MCP)
+
+- The `playwright` MCP server lets an agent explore and verify the running app, and find accessible locators for new specs.
+- It does not replace `npm run e2e`. Write every regression worth keeping as a spec in `e2e/`, because MCP sessions leave nothing behind in CI.
+- Page snapshots are expensive in context (the board has 231 cells), so use it deliberately, e.g. once per milestone or to reproduce a UI bug.
+
 ## My preferences
