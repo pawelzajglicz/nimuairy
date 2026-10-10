@@ -13,7 +13,7 @@ function unit(
   owner: 'LEFT' | 'RIGHT',
   position: PositionDto,
   footprint: PositionDto[],
-  moveRange: number,
+  actionPointBudget: number,
 ): UnitDto {
   return {
     id,
@@ -24,14 +24,15 @@ function unit(
     health: 100,
     attack: 10,
     defense: 5,
-    moveRange,
+    actionPointBudget,
+    movementCostFactor: 1,
   };
 }
 
 // 6x4 PLAIN board, terrain listed x-major (index = x * HEIGHT + y):
-// - LEFT 1x1 at (0,0) with 2 movement;
-// - LEFT 2x1 at (2,2), covering (2,2) and (3,2), with 1 movement;
-// - RIGHT 1x1 at (5,0).
+// - LEFT 1x1 at (0,0) with 2 AP;
+// - LEFT 2x1 at (2,2), covering (2,2) and (3,2), with 1 AP;
+// - RIGHT 1x1 at (5,0) with 3 AP.
 const battleState: BattleStateResponse = {
   board: {
     width: WIDTH,

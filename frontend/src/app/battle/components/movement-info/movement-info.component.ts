@@ -26,7 +26,7 @@ export class MovementInfoComponent {
   /** Display arithmetic on two domain fields, not a movement-cost calculation. */
   protected readonly spent = computed(() => {
     const unit = this.unit();
-    return unit ? unit.moveRange - unit.remainingMovement : 0;
+    return unit ? unit.actionPointBudget - unit.remainingActionPoints : 0;
   });
 
   protected readonly previewPath = computed(() => {
@@ -64,8 +64,8 @@ function errorText(error: MovementError, locale: string): string {
   switch (error.type) {
     case 'INVALID_PATH':
       return `INVALID_PATH (${error.reason})`;
-    case 'INSUFFICIENT_MOVEMENT':
-      return `INSUFFICIENT_MOVEMENT (needs ${cost(error.required, locale)}, has ${cost(error.available, locale)})`;
+    case 'INSUFFICIENT_ACTION_POINTS':
+      return `INSUFFICIENT_ACTION_POINTS (needs ${cost(error.required, locale)}, has ${cost(error.available, locale)})`;
     default:
       return error.type;
   }

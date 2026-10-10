@@ -189,6 +189,23 @@ describe('movementRules step', () => {
     });
   });
 
+  it("weights the step's cost by the unit's movement cost factor", () => {
+    const rules = rulesFor(testUnit({ movementCostFactor: 3 }));
+
+    expect(rules.step({ x: 2, y: 2 }, { x: 3, y: 2 })).toEqual({
+      ok: true,
+      value: { from: { x: 2, y: 2 }, to: { x: 3, y: 2 }, cost: 3 },
+    });
+    expect(rules.step({ x: 2, y: 2 }, { x: 3, y: 3 })).toEqual({
+      ok: true,
+      value: {
+        from: { x: 2, y: 2 },
+        to: { x: 3, y: 3 },
+        cost: 3 * Math.SQRT2,
+      },
+    });
+  });
+
   it.each([
     { x: 4, y: 2 },
     { x: 2, y: 2 },
@@ -322,6 +339,19 @@ describe('walkPath', () => {
         cost: 1 + Math.SQRT2,
       },
     });
+  });
+
+  it('sums the factor-weighted step costs without rounding', () => {
+    const result = walkPath(
+      rulesFor(testUnit({ movementCostFactor: 3 })),
+      origin,
+      [
+        { x: 3, y: 2 },
+        { x: 4, y: 3 },
+      ],
+    );
+
+    expect(result.ok && result.value.cost).toBe(3 + 3 * Math.SQRT2);
   });
 
   it('accepts an empty path at no cost', () => {

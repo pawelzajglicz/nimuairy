@@ -15,7 +15,8 @@ public record UnitDto(
         int health,
         int attack,
         int defense,
-        int moveRange
+        int actionPointBudget,
+        int movementCostFactor
 ) {
 
     public static UnitDto from(Unit unit) {
@@ -28,7 +29,8 @@ public record UnitDto(
                 unit.health(),
                 unit.attack(),
                 unit.defense(),
-                unit.moveRange()
+                unit.actionPointBudget(),
+                unit.movementCostFactor()
         );
     }
 }

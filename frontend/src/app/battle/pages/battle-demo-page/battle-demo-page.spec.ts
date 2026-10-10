@@ -23,7 +23,8 @@ function unitDto(overrides: UnitDto): UnitDto {
     health: 100,
     attack: 10,
     defense: 5,
-    moveRange: 3,
+    actionPointBudget: 3,
+    movementCostFactor: 1,
     ...overrides,
   };
 }
@@ -429,7 +430,7 @@ describe('BattleDemoPage', () => {
             id: 'unit-left-1',
             owner: 'LEFT',
             position: { x: 1, y: 1 },
-            moveRange: 1,
+            actionPointBudget: 1,
           }),
           unitDto({
             id: 'unit-right-1',
@@ -483,7 +484,7 @@ describe('BattleDemoPage', () => {
       expect(unit('LEFT').style.gridColumn).toBe('3');
       expect(unit('LEFT').style.gridRow).toBe(String(HEIGHT - 1));
       expect(unit('LEFT').classList).toContain('selected');
-      // The single point of movement is spent, so nothing is reachable any more.
+      // The single AP is spent, so nothing is reachable any more.
       expect(targets()).toHaveLength(0);
     });
 

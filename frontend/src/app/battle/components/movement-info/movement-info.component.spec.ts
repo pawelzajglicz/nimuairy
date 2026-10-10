@@ -30,21 +30,21 @@ function text(fixture: Fixture, selector: string): string | undefined {
   return element?.textContent?.replace(/\s+/g, ' ').trim();
 }
 
-/** A LEFT unit at (4,3) that has spent 1 + √2 of its 5 movement. */
+/** A LEFT unit at (4,3) that has spent 3 of its 5 AP. */
 const movedUnit = testUnit({
   id: 'unit-left-2',
   position: { x: 4, y: 3 },
-  moveRange: 5,
-  remainingMovement: 5 - 1 - Math.SQRT2,
+  actionPointBudget: 5,
+  remainingActionPoints: 2,
 });
 
 describe('MovementInfoComponent', () => {
   describe('selected unit', () => {
-    it('shows movement spent, the allowance and what remains, rounded to two decimals', () => {
+    it('shows AP spent, the budget and what remains', () => {
       const fixture = render({ unit: movedUnit });
 
       expect(text(fixture, '.unit-movement')).toBe(
-        'unit-left-2 (LEFT) · Move 2.41 / 5 · remaining 2.59',
+        'unit-left-2 (LEFT) · Move 3 / 5 · remaining 2',
       );
     });
 
@@ -116,12 +116,12 @@ describe('MovementInfoComponent', () => {
           kind: 'REJECTED',
           action: 'MOVE',
           error: {
-            type: 'INSUFFICIENT_MOVEMENT',
-            required: 1 + Math.SQRT2,
+            type: 'INSUFFICIENT_ACTION_POINTS',
+            required: 3,
             available: 2,
           },
         },
-        expected: 'Move rejected: INSUFFICIENT_MOVEMENT (needs 2.41, has 2)',
+        expected: 'Move rejected: INSUFFICIENT_ACTION_POINTS (needs 3, has 2)',
       },
       {
         outcome: {

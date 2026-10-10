@@ -42,7 +42,8 @@ function demoResponse(): BattleStateResponse {
         health: 10,
         attack: 4,
         defense: 2,
-        moveRange: 3,
+        actionPointBudget: 3,
+        movementCostFactor: 1,
       },
     ],
     currentPlayer: 'LEFT',
@@ -83,7 +84,7 @@ describe('BattleStore', () => {
 
     expect(store.battleState()).toEqual(toBattleState(demoResponse()));
     expect(store.battleState()?.currentPlayer).toBe('LEFT');
-    expect(store.battleState()?.units[0].remainingMovement).toBe(3);
+    expect(store.battleState()?.units[0].remainingActionPoints).toBe(3);
     expect(store.error()).toBeUndefined();
   });
 
@@ -243,11 +244,12 @@ describe('BattleStore', () => {
         health: 10,
         attack: 4,
         defense: 2,
-        moveRange: 2,
+        actionPointBudget: 2,
+        movementCostFactor: 1,
       };
     }
 
-    /** A 6×3 PLAIN board: LEFT at (1,1) and RIGHT at (2,2), both with 2 movement. */
+    /** A 6×3 PLAIN board: LEFT at (1,1) and RIGHT at (2,2), both with 2 AP. */
     function movementResponse(): BattleStateResponse {
       const terrain: TerrainCellDto[] = [];
       for (let x = 0; x < 6; x++) {
@@ -338,6 +340,28 @@ describe('BattleStore', () => {
       });
     });
 
+    it('limits destinations by AP and previews a diagonal at its integer AP cost', async () => {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+
+      store.hoverDestination({ x: 0, y: 0 });
+
+      expect(store.reachableDestinations()).toContainEqual(
+        expect.objectContaining({
+          position: { x: 0, y: 0 },
+          cost: Math.SQRT2,
+          actionPointCost: 2,
+        }),
+      );
+      // 1 + √2 rounds up to 3 AP, more than the 2 AP the unit has.
+      expect(destinations(store)).not.toContainEqual({ x: 3, y: 0 });
+      expect(store.movementPreview()).toEqual({
+        destination: { x: 0, y: 0 },
+        steps: [{ from: { x: 1, y: 1 }, to: { x: 0, y: 0 }, cost: Math.SQRT2 }],
+        cost: 2,
+      });
+    });
+
     it("shows no preview for an unreachable cell or the unit's own anchor", async () => {
       const store = await loadedStore();
       store.selectUnit('left-unit-1');
@@ -376,20 +400,20 @@ describe('BattleStore', () => {
 
       expect(leftUnit(store)).toMatchObject({
         position: { x: 3, y: 1 },
-        remainingMovement: 0,
-        moveRange: 2,
+        remainingActionPoints: 0,
+        actionPointBudget: 2,
       });
       expect(store.selectedUnitId()).toBe('left-unit-1');
       expect(store.hoveredDestination()).toBeUndefined();
       expect(store.reachableDestinations()).toEqual([]);
     });
 
-    it('lets a second move spend the remaining movement from the new position', async () => {
+    it('lets a second move spend the remaining AP from the new position', async () => {
       const store = await loadedStore();
       store.selectUnit('left-unit-1');
 
       store.moveSelectedUnit({ x: 2, y: 1 });
-      expect(leftUnit(store)?.remainingMovement).toBe(1);
+      expect(leftUnit(store)?.remainingActionPoints).toBe(1);
       expect(store.reachableDestinations()).toContainEqual(
         expect.objectContaining({ position: { x: 3, y: 1 }, cost: 1 }),
       );
@@ -397,7 +421,7 @@ describe('BattleStore', () => {
       store.moveSelectedUnit({ x: 3, y: 1 });
       expect(leftUnit(store)).toMatchObject({
         position: { x: 3, y: 1 },
-        remainingMovement: 0,
+        remainingActionPoints: 0,
       });
     });
 
@@ -536,7 +560,7 @@ describe('BattleStore', () => {
         expect(store.battleState()).toEqual(new BattleEngine().endTurn(before));
       });
 
-      it('clears the active unit and restores the movement of the player whose turn starts', async () => {
+      it('clears the active unit, ends the turn at 0 AP and restores the AP of the player whose turn starts', async () => {
         const store = await loadedStore();
         store.selectUnit('left-unit-1');
         store.moveSelectedUnit({ x: 3, y: 1 });
@@ -545,12 +569,12 @@ describe('BattleStore', () => {
 
         store.endTurn();
         expect(store.battleState()?.activeUnitId).toBeUndefined();
-        expect(leftUnit(store)?.remainingMovement).toBe(0);
+        expect(leftUnit(store)?.remainingActionPoints).toBe(0);
 
         store.endTurn();
         expect(leftUnit(store)).toMatchObject({
           position: { x: 3, y: 1 },
-          remainingMovement: 2,
+          remainingActionPoints: 2,
         });
         store.selectUnit('left-unit-1');
         expect(store.reachableDestinations()).not.toEqual([]);

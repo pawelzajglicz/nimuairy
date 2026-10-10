@@ -17,8 +17,9 @@ const unit: Unit = {
   health: 10,
   attack: 4,
   defense: 2,
-  moveRange: 5,
-  remainingMovement: 5,
+  actionPointBudget: 5,
+  movementCostFactor: 1,
+  remainingActionPoints: 5,
 };
 
 const state: BattleState = {
@@ -48,17 +49,17 @@ describe('MoveUnitCommand', () => {
 });
 
 describe('MovementResult', () => {
-  it('carries the resulting state, executed steps and total cost as a successful result', () => {
+  it('carries the resulting state, fractional executed steps and integer AP charged as a successful result', () => {
     const steps: MovementStep[] = [
       { from: { x: 2, y: 3 }, to: { x: 3, y: 3 }, cost: 1 },
       { from: { x: 3, y: 3 }, to: { x: 4, y: 4 }, cost: Math.SQRT2 },
     ];
 
-    const result = ok<MovementResult>({ state, steps, cost: 1 + Math.SQRT2 });
+    const result = ok<MovementResult>({ state, steps, cost: 3 });
 
     expect(result).toEqual({
       ok: true,
-      value: { state, steps, cost: 1 + Math.SQRT2 },
+      value: { state, steps, cost: 3 },
     });
   });
 });
@@ -66,13 +67,13 @@ describe('MovementResult', () => {
 describe('MovementError', () => {
   it('is narrowed by its type to the matching details', () => {
     const error: MovementError = {
-      type: 'INSUFFICIENT_MOVEMENT',
-      required: 1 + Math.SQRT2,
+      type: 'INSUFFICIENT_ACTION_POINTS',
+      required: 3,
       available: 2,
     };
 
-    if (error.type !== 'INSUFFICIENT_MOVEMENT') {
-      throw new Error('expected INSUFFICIENT_MOVEMENT');
+    if (error.type !== 'INSUFFICIENT_ACTION_POINTS') {
+      throw new Error('expected INSUFFICIENT_ACTION_POINTS');
     }
     expect(error.required).toBeGreaterThan(error.available);
   });

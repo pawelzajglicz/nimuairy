@@ -2,9 +2,9 @@
   @if (unit(); as unit) {
     <p class="unit-movement">
       <strong>{{ unit.id }}</strong> ({{ unit.owner }}) · Move
-      {{ spent() | number: '1.0-2' }} / {{ unit.moveRange | number: '1.0-2' }} ·
-      remaining
-      {{ unit.remainingMovement | number: '1.0-2' }}
+      {{ spent() | number: '1.0-2' }} /
+      {{ unit.actionPointBudget | number: '1.0-2' }} · remaining
+      {{ unit.remainingActionPoints | number: '1.0-2' }}
     </p>
     @if (preview(); as preview) {
       <p class="preview">

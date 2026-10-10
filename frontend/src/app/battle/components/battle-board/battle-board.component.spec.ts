@@ -239,6 +239,7 @@ describe('BattleBoardComponent', () => {
       return {
         position,
         cost: 1,
+        actionPointCost: 1,
         via: { from: { x: 5, y: 4 }, to: position, cost: 1 },
       };
     }

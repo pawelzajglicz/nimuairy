@@ -11,6 +11,7 @@ import { pathTo } from './domain/pathfinding';
 export interface MovementPreview {
   readonly destination: Position;
   readonly steps: readonly MovementStep[];
+  /** Integer AP the previewed MOVE costs. */
   readonly cost: number;
 }
 
@@ -27,5 +28,5 @@ export function toMovementPreview(
   if (!cell?.via || !steps) {
     return undefined;
   }
-  return { destination: cell.position, steps, cost: cell.cost };
+  return { destination: cell.position, steps, cost: cell.actionPointCost };
 }

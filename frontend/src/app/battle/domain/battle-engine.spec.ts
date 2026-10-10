@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BattleState, Position, Unit } from './battle-state';
 import { BattleEngine } from './battle-engine';
-import { COST_EPSILON } from './movement-cost';
 import type {
   MoveUnitCommand,
   MovementError,
@@ -64,7 +63,7 @@ function unitIn(state: BattleState, id = 'left-1x1'): Unit | undefined {
 }
 
 describe('BattleEngine MOVE_UNIT', () => {
-  it('moves the unit along the submitted path and charges its cost', () => {
+  it('moves the unit along the submitted path and charges its AP cost', () => {
     const command = moveCommand([
       { x: 3, y: 2 },
       { x: 4, y: 3 },
@@ -77,15 +76,15 @@ describe('BattleEngine MOVE_UNIT', () => {
       { from: { x: 3, y: 2 }, to: { x: 4, y: 3 }, cost: Math.SQRT2 },
     ]);
     expect(result.steps.map(({ to }) => to)).toEqual(command.path);
-    expect(result.cost).toBe(1 + Math.SQRT2);
+    expect(result.cost).toBe(3);
     expect(unitIn(result.state)).toMatchObject({
       position: { x: 4, y: 3 },
-      moveRange: 5,
-      remainingMovement: 5 - (1 + Math.SQRT2),
+      actionPointBudget: 5,
+      remainingActionPoints: 2,
     });
   });
 
-  it('sums the cost of every step', () => {
+  it('charges the summed cost of every step, rounded up once', () => {
     const result = expectMoved(
       testState(),
       moveCommand([
@@ -95,12 +94,40 @@ describe('BattleEngine MOVE_UNIT', () => {
       ]),
     );
 
-    expect(result.cost).toBe(2 + Math.SQRT2);
+    expect(result.cost).toBe(4);
   });
 
-  it('allows a move that exactly exhausts the remaining movement', () => {
+  it('rounds once per MOVE, not per step: two diagonals cost 3 AP', () => {
+    const result = expectMoved(
+      testState(),
+      moveCommand([
+        { x: 3, y: 3 },
+        { x: 4, y: 4 },
+      ]),
+    );
+
+    expect(result.cost).toBe(3);
+    expect(unitIn(result.state)?.remainingActionPoints).toBe(2);
+  });
+
+  it.each([
+    { factor: 3, path: [{ x: 3, y: 2 }], cost: 3 },
+    { factor: 3, path: [{ x: 3, y: 3 }], cost: 5 },
+  ])(
+    'weights every step by the movement cost factor: $cost AP at factor $factor',
+    ({ factor, path, cost }) => {
+      const unit = testUnit({ movementCostFactor: factor });
+
+      const result = expectMoved(stateWith(unit), moveCommand(path));
+
+      expect(result.cost).toBe(cost);
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(5 - cost);
+    },
+  );
+
+  it('allows a move that exactly exhausts the remaining AP', () => {
     const state = testState({
-      units: [testUnit({ moveRange: 3, remainingMovement: 3 })],
+      units: [testUnit({ actionPointBudget: 3, remainingActionPoints: 3 })],
     });
 
     const result = expectMoved(
@@ -112,16 +139,12 @@ describe('BattleEngine MOVE_UNIT', () => {
       ]),
     );
 
-    expect(unitIn(result.state)?.remainingMovement).toBe(0);
+    expect(unitIn(result.state)?.remainingActionPoints).toBe(0);
   });
 
-  it('allows a move whose cost exceeds the remaining movement only by rounding error', () => {
-    // Summed in a different order, the same true cost 1 + 3√2 comes out one
-    // rounding step larger than the remaining movement.
-    const unit = testUnit({
-      moveRange: 6,
-      remainingMovement: 1 + Math.SQRT2 + Math.SQRT2 + Math.SQRT2,
-    });
+  it('charges the AP cost of a path that exactly exhausts the remaining AP, whatever its fractional cost', () => {
+    // 1 + 3√2 ≈ 5.24 rounds up to exactly the 6 AP the unit has left.
+    const unit = testUnit({ actionPointBudget: 6, remainingActionPoints: 6 });
 
     const result = expectMoved(
       testState({ units: [unit] }),
@@ -133,12 +156,14 @@ describe('BattleEngine MOVE_UNIT', () => {
       ]),
     );
 
-    expect(result.cost).toBeGreaterThan(unit.remainingMovement);
-    expect(unitIn(result.state)?.remainingMovement).toBe(0);
+    expect(result.cost).toBe(6);
+    expect(unitIn(result.state)?.remainingActionPoints).toBe(0);
   });
 
-  it('rejects a path that costs more than the remaining movement', () => {
-    const state = testState({ units: [testUnit({ remainingMovement: 2 })] });
+  it('rejects a path whose AP cost exceeds the remaining AP, without moving along its affordable prefix', () => {
+    const state = testState({
+      units: [testUnit({ remainingActionPoints: 2 })],
+    });
 
     expectRejected(
       state,
@@ -147,22 +172,24 @@ describe('BattleEngine MOVE_UNIT', () => {
         { x: 4, y: 2 },
         { x: 5, y: 3 },
       ]),
-      { type: 'INSUFFICIENT_MOVEMENT', required: 2 + Math.SQRT2, available: 2 },
+      { type: 'INSUFFICIENT_ACTION_POINTS', required: 4, available: 2 },
     );
   });
 
-  it('rejects any move once movement is used up', () => {
-    const state = testState({ units: [testUnit({ remainingMovement: 0 })] });
+  it('rejects any move at 0 AP', () => {
+    const state = testState({
+      units: [testUnit({ remainingActionPoints: 0 })],
+    });
 
     expectRejected(state, moveCommand([{ x: 3, y: 2 }]), {
-      type: 'INSUFFICIENT_MOVEMENT',
+      type: 'INSUFFICIENT_ACTION_POINTS',
       required: 1,
       available: 0,
     });
   });
 
-  it('accepts a valid path that is not minimal and charges its actual cost', () => {
-    // The minimum cost to (3,2) is 1; the caller chose a detour via (2,3).
+  it('accepts a valid path that is not minimal and charges its actual AP cost', () => {
+    // The minimum cost to (3,2) is 1 AP; the caller chose a detour via (2,3).
     const result = expectMoved(
       testState(),
       moveCommand([
@@ -171,8 +198,8 @@ describe('BattleEngine MOVE_UNIT', () => {
       ]),
     );
 
-    expect(result.cost).toBe(1 + Math.SQRT2);
-    expect(unitIn(result.state)?.remainingMovement).toBe(5 - (1 + Math.SQRT2));
+    expect(result.cost).toBe(3);
+    expect(unitIn(result.state)?.remainingActionPoints).toBe(2);
   });
 
   it.each([
@@ -185,9 +212,7 @@ describe('BattleEngine MOVE_UNIT', () => {
       { x: 4, y: 3 },
     ],
   ])('accepts each of several equal-cost paths: %o then %o', (...path) => {
-    expect(expectMoved(testState(), moveCommand(path)).cost).toBe(
-      1 + Math.SQRT2,
-    );
+    expect(expectMoved(testState(), moveCommand(path)).cost).toBe(3);
   });
 
   it('changes only the moved unit and leaves the input state untouched', () => {
@@ -235,7 +260,7 @@ describe('BattleEngine MOVE_UNIT', () => {
     expect({
       ...moved,
       position: original.position,
-      remainingMovement: original.remainingMovement,
+      remainingActionPoints: original.remainingActionPoints,
     }).toEqual(original);
   });
 
@@ -245,16 +270,33 @@ describe('BattleEngine MOVE_UNIT', () => {
       { x: 4, y: 2 },
     ]);
 
-    it('evaluates each move from the new position against the remaining movement', () => {
+    it('evaluates each move from the new position against the remaining AP', () => {
       const first = expectMoved(testState(), firstMove);
       const second = expectMoved(first.state, moveCommand([{ x: 5, y: 3 }]));
 
-      expect(unitIn(first.state)?.remainingMovement).toBe(3);
+      expect(unitIn(first.state)?.remainingActionPoints).toBe(3);
       expect(unitIn(second.state)).toMatchObject({
         position: { x: 5, y: 3 },
-        moveRange: 5,
-        remainingMovement: 3 - Math.SQRT2,
+        actionPointBudget: 5,
+        remainingActionPoints: 1,
       });
+    });
+
+    it('rounds each MOVE on its own, so split MOVEs can cost more than one', () => {
+      const single = expectMoved(
+        testState(),
+        moveCommand([
+          { x: 3, y: 3 },
+          { x: 4, y: 4 },
+        ]),
+      );
+      const first = expectMoved(testState(), moveCommand([{ x: 3, y: 3 }]));
+      const second = expectMoved(first.state, moveCommand([{ x: 4, y: 4 }]));
+
+      expect(single.cost).toBe(3);
+      expect(first.cost + second.cost).toBe(4);
+      expect(unitIn(single.state)?.remainingActionPoints).toBe(2);
+      expect(unitIn(second.state)?.remainingActionPoints).toBe(1);
     });
 
     it('rejects a path that starts next to the previous position', () => {
@@ -277,9 +319,9 @@ describe('BattleEngine MOVE_UNIT', () => {
           { x: 7, y: 3 },
         ]),
         {
-          type: 'INSUFFICIENT_MOVEMENT',
+          type: 'INSUFFICIENT_ACTION_POINTS',
           required: 2,
-          available: 3 - Math.SQRT2,
+          available: 1,
         },
       );
     });
@@ -290,7 +332,7 @@ describe('BattleEngine MOVE_UNIT', () => {
 
       expect(unitIn(back.state)).toMatchObject({
         position: { x: 2, y: 2 },
-        remainingMovement: 3,
+        remainingActionPoints: 3,
       });
     });
   });
@@ -539,9 +581,12 @@ describe('BattleEngine MOVE_UNIT', () => {
       expect(unitIn(state)?.position).toEqual({ x: 4, y: 2 });
     });
 
-    it('keeps the turn after a move that exhausts the remaining movement', () => {
+    it('keeps the turn after a move that exhausts the remaining AP, blocking other units at 0 AP', () => {
       const state = testState({
-        units: [testUnit({ moveRange: 2, remainingMovement: 2 }), other],
+        units: [
+          testUnit({ actionPointBudget: 2, remainingActionPoints: 2 }),
+          other,
+        ],
       });
 
       const { state: exhausted } = expectMoved(
@@ -552,7 +597,7 @@ describe('BattleEngine MOVE_UNIT', () => {
         ]),
       );
 
-      expect(unitIn(exhausted)?.remainingMovement).toBe(0);
+      expect(unitIn(exhausted)?.remainingActionPoints).toBe(0);
       expect(exhausted.currentPlayer).toBe('LEFT');
       expect(exhausted.activeUnitId).toBe('left-1x1');
       expect(engine.legalActions(exhausted)).toEqual(new Set(['END_TURN']));
@@ -563,12 +608,13 @@ describe('BattleEngine MOVE_UNIT', () => {
       );
     });
 
-    it('is not claimed by a failed move', () => {
+    it('is not claimed by a move rejected for insufficient AP', () => {
+      // √2 + 4 rounds up to 6 AP.
       const tooFar = moveCommand([3, 4, 5, 6, 7].map((x) => ({ x, y: 3 })));
 
       expectRejected(unclaimed, tooFar, {
-        type: 'INSUFFICIENT_MOVEMENT',
-        required: Math.SQRT2 + 4,
+        type: 'INSUFFICIENT_ACTION_POINTS',
+        required: 6,
         available: 5,
       });
       expect(unclaimed.activeUnitId).toBeUndefined();
@@ -615,10 +661,13 @@ describe('BattleEngine reachability', () => {
     }
 
     expect(result.value.origin).toEqual({ x: 2, y: 2 });
-    expect(result.value.cells.get('4,3')?.cost).toBe(1 + Math.SQRT2);
+    expect(result.value.cells.get('4,3')).toMatchObject({
+      cost: 1 + Math.SQRT2,
+      actionPointCost: 3,
+    });
   });
 
-  it('starts from the current position and is limited by the remaining movement', () => {
+  it('starts from the current position and is limited by the remaining AP', () => {
     const { state } = expectMoved(
       testState(),
       moveCommand([
@@ -633,9 +682,12 @@ describe('BattleEngine reachability', () => {
     }
 
     expect(result.value.origin).toEqual({ x: 4, y: 2 });
-    expect(result.value.cells.get('7,2')?.cost).toBe(3);
+    expect(result.value.cells.get('7,2')?.actionPointCost).toBe(3);
+    // 1 + √2 rounds up to 3 AP; 2 + √2 would need 4.
+    expect(result.value.cells.get('6,3')?.actionPointCost).toBe(3);
+    expect(result.value.cells.has('7,3')).toBe(false);
     for (const cell of result.value.cells.values()) {
-      expect(cell.cost).toBeLessThanOrEqual(3 + COST_EPSILON);
+      expect(cell.actionPointCost).toBeLessThanOrEqual(3);
     }
   });
 
@@ -647,18 +699,18 @@ describe('BattleEngine reachability', () => {
   });
 
   describe("the other player's unit", () => {
-    // 1.59 covers one orthogonal (1) or diagonal (√2) step, but not two
-    // orthogonal steps (2), although the unit's moveRange is 3.
+    // 1 AP covers one orthogonal step (1 AP) but not a diagonal (2 AP),
+    // although the unit's actionPointBudget is 3.
     const right = testUnit({
       id: 'right-1x1',
       owner: 'RIGHT',
       position: { x: 5, y: 5 },
-      moveRange: 3,
-      remainingMovement: 1.59,
+      actionPointBudget: 3,
+      remainingActionPoints: 1,
     });
     const state = testState({ units: [testUnit(), right] });
 
-    it('can be inspected, within its remaining movement rather than its moveRange', () => {
+    it('can be inspected, within its remaining AP rather than its budget', () => {
       const before = structuredClone(state);
 
       const result = engine.reachability(state, 'right-1x1');
@@ -670,9 +722,9 @@ describe('BattleEngine reachability', () => {
 
       expect(result.value.origin).toEqual({ x: 5, y: 5 });
       expect([...result.value.cells.keys()].sort()).toEqual(
-        ['4,4', '4,5', '4,6', '5,4', '5,5', '5,6', '6,4', '6,5', '6,6'].sort(),
+        ['4,5', '5,4', '5,5', '5,6', '6,5'].sort(),
       );
-      expect(result.value.cells.get('6,6')?.cost).toBe(Math.SQRT2);
+      expect(result.value.cells.get('6,5')?.actionPointCost).toBe(1);
       expect(state).toEqual(before);
     });
 
@@ -681,7 +733,7 @@ describe('BattleEngine reachability', () => {
       if (!reachability.ok) {
         throw new Error('expected reachability');
       }
-      const steps = pathTo(reachability.value, { x: 6, y: 6 }) ?? [];
+      const steps = pathTo(reachability.value, { x: 6, y: 5 }) ?? [];
       expect(steps).toHaveLength(1);
 
       expectRejected(
@@ -737,7 +789,7 @@ describe('reachability and execution', () => {
       },
     },
   ])(
-    'executes every previewed path with the previewed steps and cost: $name',
+    'executes every previewed path with the previewed steps and AP cost: $name',
     ({ unit, options }) => {
       const state = stateWith(unit, options);
       const reachability = engine.reachability(state, unit.id);
@@ -761,7 +813,7 @@ describe('reachability and execution', () => {
         );
 
         expect(result.steps).toEqual(steps);
-        expect(result.cost).toBe(cell.cost);
+        expect(result.cost).toBe(cell.actionPointCost);
       }
     },
   );
@@ -814,9 +866,9 @@ describe('BattleEngine legal actions', () => {
       expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
     });
 
-    it('leaves out a unit without movement but still offers MOVE through another', () => {
+    it('leaves out a unit at 0 AP but still offers MOVE through another', () => {
       const state = testState({
-        units: [testUnit({ remainingMovement: 0 }), leftOther],
+        units: [testUnit({ remainingActionPoints: 0 }), leftOther],
       });
 
       expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
@@ -835,9 +887,9 @@ describe('BattleEngine legal actions', () => {
       expect(engine.legalUnitActions(state, 'right-1x1')).toEqual(new Set());
     });
 
-    it('offers no MOVE once the active unit has no movement left, even if another unit could move', () => {
+    it('offers no MOVE once the active unit is at 0 AP, even if another unit could move', () => {
       const state = testState({
-        units: [testUnit({ remainingMovement: 0 }), leftOther, right],
+        units: [testUnit({ remainingActionPoints: 0 }), leftOther, right],
         activeUnitId: 'left-1x1',
       });
 
@@ -847,23 +899,25 @@ describe('BattleEngine legal actions', () => {
   });
 
   describe('MOVE needs somewhere to go', () => {
-    it('is not offered for a leftover smaller than any step', () => {
+    it('is not offered when the remaining AP do not afford the cheapest step', () => {
       const state = testState({
-        units: [testUnit({ remainingMovement: 5 - 3 * Math.SQRT2 })],
+        units: [testUnit({ movementCostFactor: 2, remainingActionPoints: 1 })],
       });
 
       expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(new Set());
     });
 
-    it('is offered for a leftover that still affords one step', () => {
-      const state = testState({ units: [testUnit({ remainingMovement: 1 })] });
+    it('is offered while the remaining AP still afford one step', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 1 })],
+      });
 
       expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
         new Set(['MOVE']),
       );
     });
 
-    it('is not offered to a boxed-in unit with full movement', () => {
+    it('is not offered to a boxed-in unit with full AP', () => {
       const neighbours = [-1, 0, 1]
         .flatMap((dx) => [-1, 0, 1].map((dy) => ({ x: 2 + dx, y: 2 + dy })))
         .filter(({ x, y }) => x !== 2 || y !== 2);
@@ -874,18 +928,18 @@ describe('BattleEngine legal actions', () => {
   });
 
   describe('END_TURN', () => {
-    it('is offered while the active unit has movement left', () => {
+    it('is offered while the active unit has AP left', () => {
       const state = turnState({
-        units: [testUnit({ remainingMovement: 2.5 }), leftOther],
+        units: [testUnit({ remainingActionPoints: 2 }), leftOther],
         activeUnitId: 'left-1x1',
       });
 
       expect(engine.legalActions(state)).toEqual(new Set(['MOVE', 'END_TURN']));
     });
 
-    it('is offered once the active unit has no movement left', () => {
+    it('is offered at 0 AP', () => {
       const state = testState({
-        units: [testUnit({ remainingMovement: 0 })],
+        units: [testUnit({ remainingActionPoints: 0 })],
         activeUnitId: 'left-1x1',
       });
 
@@ -925,7 +979,7 @@ describe('BattleEngine legal actions', () => {
 
   it('leaves the battle state untouched', () => {
     const state = turnState({
-      units: [testUnit({ remainingMovement: 2.5 }), leftOther, right],
+      units: [testUnit({ remainingActionPoints: 2 }), leftOther, right],
       activeUnitId: 'left-1x1',
     });
     const before = structuredClone(state);
@@ -944,19 +998,19 @@ describe('BattleEngine endTurn', () => {
   const leftSpent = testUnit({
     id: 'left-spent',
     position: { x: 0, y: 7 },
-    remainingMovement: 2,
+    remainingActionPoints: 2,
   });
   const right = testUnit({
     id: 'right-1x1',
     owner: 'RIGHT',
     position: { x: 5, y: 5 },
-    remainingMovement: 1.5,
+    remainingActionPoints: 1,
   });
   const rightExhausted = testUnit({
     id: 'right-exhausted',
     owner: 'RIGHT',
     position: { x: 7, y: 0 },
-    remainingMovement: 0,
+    remainingActionPoints: 0,
   });
   const rightFresh = testUnit({
     id: 'right-fresh',
@@ -971,9 +1025,12 @@ describe('BattleEngine endTurn', () => {
     });
   }
 
-  function movementOf(state: BattleState): Record<string, number> {
+  function actionPointsOf(state: BattleState): Record<string, number> {
     return Object.fromEntries(
-      state.units.map(({ id, remainingMovement }) => [id, remainingMovement]),
+      state.units.map(({ id, remainingActionPoints }) => [
+        id,
+        remainingActionPoints,
+      ]),
     );
   }
 
@@ -1006,7 +1063,7 @@ describe('BattleEngine endTurn', () => {
     expect(next.activeUnitId).toBeUndefined();
   });
 
-  it('ends a turn while the active unit has movement left, which it keeps', () => {
+  it('ends a turn while the active unit has AP left, which it keeps', () => {
     const { state: claimed } = expectMoved(
       turnState(),
       moveCommand([{ x: 3, y: 2 }]),
@@ -1014,24 +1071,24 @@ describe('BattleEngine endTurn', () => {
 
     const next = engine.endTurn(claimed);
 
-    expect(unitIn(next)?.remainingMovement).toBe(4);
+    expect(unitIn(next)?.remainingActionPoints).toBe(4);
   });
 
-  it('ends a turn once the active unit has no movement left, which it keeps', () => {
+  it('ends a turn at 0 AP, which the unit keeps', () => {
     const claimed = turnState({
-      units: [testUnit({ remainingMovement: 0 }), right],
+      units: [testUnit({ remainingActionPoints: 0 }), right],
       activeUnitId: 'left-1x1',
     });
 
     const next = engine.endTurn(claimed);
 
     expect(next.currentPlayer).toBe('RIGHT');
-    expect(unitIn(next)?.remainingMovement).toBe(0);
+    expect(unitIn(next)?.remainingActionPoints).toBe(0);
   });
 
-  describe('turn-start movement restoration', () => {
+  describe('turn-start AP restoration', () => {
     it('restores every RIGHT unit when the turn passes to RIGHT', () => {
-      expect(movementOf(engine.endTurn(turnState()))).toEqual({
+      expect(actionPointsOf(engine.endTurn(turnState()))).toEqual({
         'left-1x1': 5,
         'left-spent': 2,
         'right-1x1': 5,
@@ -1043,7 +1100,7 @@ describe('BattleEngine endTurn', () => {
     it('restores every LEFT unit when the turn passes to LEFT', () => {
       const state = turnState({
         units: [
-          testUnit({ remainingMovement: 0 }),
+          testUnit({ remainingActionPoints: 0 }),
           leftSpent,
           right,
           rightExhausted,
@@ -1052,10 +1109,10 @@ describe('BattleEngine endTurn', () => {
         activeUnitId: 'right-1x1',
       });
 
-      expect(movementOf(engine.endTurn(state))).toEqual({
+      expect(actionPointsOf(engine.endTurn(state))).toEqual({
         'left-1x1': 5,
         'left-spent': 5,
-        'right-1x1': 1.5,
+        'right-1x1': 1,
         'right-exhausted': 0,
       });
     });
@@ -1066,7 +1123,7 @@ describe('BattleEngine endTurn', () => {
         moveCommand([{ x: 3, y: 2 }]),
       );
       const rightTurn = engine.endTurn(leftClaimed);
-      expect(unitIn(rightTurn)?.remainingMovement).toBe(4);
+      expect(unitIn(rightTurn)?.remainingActionPoints).toBe(4);
 
       const { state: rightClaimed } = expectMoved(
         rightTurn,
@@ -1076,7 +1133,7 @@ describe('BattleEngine endTurn', () => {
 
       expect(leftTurn.currentPlayer).toBe('LEFT');
       expect(leftTurn.activeUnitId).toBeUndefined();
-      expect(movementOf(leftTurn)).toEqual({
+      expect(actionPointsOf(leftTurn)).toEqual({
         'left-1x1': 5,
         'left-spent': 5,
         'right-1x1': 4,
@@ -1085,16 +1142,16 @@ describe('BattleEngine endTurn', () => {
       });
     });
 
-    it('changes nothing but the restored movement', () => {
+    it('changes nothing but the restored AP', () => {
       const next = engine.endTurn(turnState());
 
       expect(unitIn(next, 'right-1x1')).toEqual({
         ...right,
-        remainingMovement: right.moveRange,
+        remainingActionPoints: right.actionPointBudget,
       });
       expect(unitIn(next, 'right-exhausted')).toEqual({
         ...rightExhausted,
-        remainingMovement: rightExhausted.moveRange,
+        remainingActionPoints: rightExhausted.actionPointBudget,
       });
     });
   });
@@ -1114,7 +1171,7 @@ describe('BattleEngine endTurn', () => {
     expect(next.orbs).toBe(state.orbs);
   });
 
-  it('creates new objects only for the units whose movement is restored', () => {
+  it('creates new objects only for the units whose AP are restored', () => {
     const state = turnState();
 
     const next = engine.endTurn(state);
@@ -1125,8 +1182,8 @@ describe('BattleEngine endTurn', () => {
     expect(unitIn(next, 'right-fresh')).toBe(rightFresh);
     expect(unitIn(next, 'left-1x1')).toBe(left);
     expect(unitIn(next, 'left-spent')).toBe(leftSpent);
-    expect(right.remainingMovement).toBe(1.5);
-    expect(rightExhausted.remainingMovement).toBe(0);
+    expect(right.remainingActionPoints).toBe(1);
+    expect(rightExhausted.remainingActionPoints).toBe(0);
   });
 
   it("lets the next player's units act and stops the previous player's", () => {

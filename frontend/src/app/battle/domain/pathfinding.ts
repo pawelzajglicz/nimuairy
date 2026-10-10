@@ -1,7 +1,7 @@
 import type { Position } from './battle-state';
 import { positionKey } from './geometry';
 import type { MovementStep, Reachability, ReachableCell } from './movement';
-import { isCheaper, isWithinBudget } from './movement-cost';
+import { actionPointCost, isCheaper, isWithinBudget } from './movement-cost';
 import type { MovementRules } from './movement-rules';
 
 /**
@@ -22,7 +22,9 @@ const NEIGHBOUR_OFFSETS: readonly Position[] = [
 
 /**
  * Dijkstra from `origin` over the anchors the unit can occupy, never
- * recording a cell whose cost exceeds `budget`.
+ * recording a cell whose cost exceeds `budget` (integer AP). For an integer
+ * budget, `isWithinBudget` on the fractional cost is equivalent to the cell's
+ * AP cost fitting the budget, so the search never rounds a prefix.
  */
 export function findReachable(
   rules: MovementRules,
@@ -32,7 +34,10 @@ export function findReachable(
   // Map iteration follows insertion order and re-setting a key keeps its
   // place, so equal costs are settled in discovery order.
   const cells = new Map<string, ReachableCell>([
-    [positionKey(origin), { position: origin, cost: 0, via: null }],
+    [
+      positionKey(origin),
+      { position: origin, cost: 0, actionPointCost: 0, via: null },
+    ],
   ]);
   const settled = new Set<string>();
 
@@ -64,7 +69,12 @@ export function findReachable(
       // Only a strictly cheaper path replaces a known one: among equal-cost
       // paths the first one found stays canonical.
       if (!known || isCheaper(cost, known.cost)) {
-        cells.set(key, { position: to, cost, via: step.value });
+        cells.set(key, {
+          position: to,
+          cost,
+          actionPointCost: actionPointCost(cost),
+          via: step.value,
+        });
       }
     }
   }

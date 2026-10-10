@@ -94,12 +94,12 @@ export class MovementOverlayComponent {
       : undefined;
   });
 
-  /** Shown on the unit's anchor cell; moveRange − remainingMovement, both from the domain. */
+  /** Shown on the unit's anchor cell; actionPointBudget − remainingActionPoints, both from the domain. */
   protected readonly spentLabel = computed(() => {
     const unit = this.unit();
     return unit
       ? {
-          spent: unit.moveRange - unit.remainingMovement,
+          spent: unit.actionPointBudget - unit.remainingActionPoints,
           ...toGridPosition(unit.position, this.height()),
         }
       : undefined;

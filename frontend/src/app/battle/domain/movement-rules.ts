@@ -89,7 +89,11 @@ export function movementRules(state: BattleState, unit: Unit): MovementRules {
       ) {
         return err('CORNER_BLOCKED');
       }
-      return ok({ from, to, cost: stepCost(from, to) });
+      return ok({
+        from,
+        to,
+        cost: stepCost(from, to, unit.movementCostFactor),
+      });
     },
   };
 }

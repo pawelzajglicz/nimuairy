@@ -7,7 +7,7 @@ import type {
   MovementResult,
   Reachability,
 } from './movement';
-import { isWithinBudget } from './movement-cost';
+import { actionPointCost } from './movement-cost';
 import { movementRules, walkPath } from './movement-rules';
 import { findReachable } from './pathfinding';
 import { err, ok, type Result } from './result';
@@ -25,8 +25,9 @@ const OPPONENT: Record<PlayerSide, PlayerSide> = {
  */
 export class BattleEngine {
   /**
-   * Validates the caller-selected path and charges its actual cost. It does
+   * Validates the caller-selected path and charges its actual AP cost. It does
    * not search for or require a minimum-cost path; that is reachability's job.
+   * The whole path is charged or rejected: there is no partial move.
    */
   execute(
     state: BattleState,
@@ -59,21 +60,20 @@ export class BattleEngine {
       return err({ type: 'INVALID_PATH', reason: walked.error });
     }
 
-    const { steps, cost } = walked.value;
-    if (!isWithinBudget(cost, unit.remainingMovement)) {
+    const { steps } = walked.value;
+    const cost = actionPointCost(walked.value.cost);
+    if (cost > unit.remainingActionPoints) {
       return err({
-        type: 'INSUFFICIENT_MOVEMENT',
+        type: 'INSUFFICIENT_ACTION_POINTS',
         required: cost,
-        available: unit.remainingMovement,
+        available: unit.remainingActionPoints,
       });
     }
 
     const moved: Unit = {
       ...unit,
       position: command.destination,
-      // The budget check tolerates rounding error, so the difference can be
-      // marginally negative.
-      remainingMovement: Math.max(0, unit.remainingMovement - cost),
+      remainingActionPoints: unit.remainingActionPoints - cost,
     };
     return ok({
       state: {
@@ -92,10 +92,10 @@ export class BattleEngine {
 
   /**
    * Hands the turn to the other player, leaves the new turn unclaimed, and
-   * restores the movement of every unit of the player whose turn starts.
-   * Always legal, whatever movement remains. Movement is restored at turn
-   * start rather than turn end, so the units of the player whose turn ends
-   * keep what they have left until their owner's next turn.
+   * restores the AP of every unit of the player whose turn starts. Always
+   * legal, whatever AP remain, including 0. AP are restored at turn start
+   * rather than turn end, so the units of the player whose turn ends keep
+   * what they have left until their owner's next turn.
    */
   endTurn(state: BattleState): BattleState {
     const nextPlayer = OPPONENT[state.currentPlayer];
@@ -104,8 +104,9 @@ export class BattleEngine {
       currentPlayer: nextPlayer,
       activeUnitId: undefined,
       units: state.units.map((unit) =>
-        unit.owner === nextPlayer && unit.remainingMovement !== unit.moveRange
-          ? { ...unit, remainingMovement: unit.moveRange }
+        unit.owner === nextPlayer &&
+        unit.remainingActionPoints !== unit.actionPointBudget
+          ? { ...unit, remainingActionPoints: unit.actionPointBudget }
           : unit,
       ),
     };
@@ -113,7 +114,7 @@ export class BattleEngine {
 
   /**
    * Minimum-cost paths from the unit's anchor to every cell within its
-   * remaining movement, for highlighting and path previews. An inspection
+   * remaining AP, for highlighting and path previews. An inspection
    * query for any unit: it does not check `currentPlayer`, so it does not
    * grant permission to move; `execute` decides that.
    */
@@ -131,7 +132,7 @@ export class BattleEngine {
       findReachable(
         movementRules(state, unit),
         unit.position,
-        unit.remainingMovement,
+        unit.remainingActionPoints,
       ),
     );
   }
@@ -181,16 +182,16 @@ function mayAct(state: BattleState, unit: Unit): boolean {
 }
 
 /**
- * Asks reachability rather than checking remainingMovement > 0: a leftover
- * smaller than any step (e.g. 5 - 3√2) or a boxed-in unit leaves nowhere to
- * go, and MOVE must not be reported legal when execution would reject every
- * path.
+ * Asks reachability rather than checking remainingActionPoints > 0: AP below
+ * the cheapest step (e.g. 1 AP with movementCostFactor 2) or a boxed-in unit
+ * leaves nowhere to go, and MOVE must not be reported legal when execution
+ * would reject every path.
  */
 function canMoveAnywhere(state: BattleState, unit: Unit): boolean {
   const { cells } = findReachable(
     movementRules(state, unit),
     unit.position,
-    unit.remainingMovement,
+    unit.remainingActionPoints,
   );
   // The origin itself is always included at cost 0.
   return cells.size > 1;
