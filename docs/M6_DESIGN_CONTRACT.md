@@ -640,12 +640,20 @@ only (`required(...)`). Candidate boundaries:
 - the frontend mapper, failing fast like `required(...)`, because the
   frontend engine is the one that relies on the invariants in M6.
 
+> *Resolved in M6.2:* both. The Java `Unit` compact constructor rejects
+> non-positive values, and the frontend mapper rejects missing, non-integer
+> and non-positive values.
+
 ### 18.2 Implementation details already noted in this contract
 
 Not open decisions, listed so they are not lost: the AP conversion returns
 `0`, not `-0` (§8.2); the `Math.max(0, …)` clamp and the `COST_EPSILON`
 and `canMoveAnywhere` comments are revised (§8.2, §9.2); the field name of
 the AP cost on `ReachableCell` (§9.3).
+
+> *Resolved in M6.1–M6.2:* the conversion returns `0`; the clamp is removed,
+> because the charged AP and `remainingActionPoints` are integers; the
+> comments are revised; the field is `ReachableCell.actionPointCost`.
 
 ### 18.3 Proposed M6 steps
 
@@ -664,3 +672,5 @@ BATTLE_PLAN.md says the M6 steps are defined in the design review. Proposal:
   error text as AP; component and Playwright tests.
 - **M6.4 — Verification and documentation.** Check acceptance criteria,
   close test gaps, record the M6 steps and status in BATTLE_PLAN.md.
+
+> *Implemented as proposed (M6.1–M6.4);* see the M6 steps in BATTLE_PLAN.md.

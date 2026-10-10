@@ -497,6 +497,26 @@ describe('BattleStore', () => {
         });
       });
 
+      it('charges exactly the previewed AP cost for a diagonal move, exhausting the AP', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.hoverDestination({ x: 0, y: 0 });
+        const previewedCost = store.movementPreview()?.cost;
+
+        store.moveSelectedUnit({ x: 0, y: 0 });
+
+        expect(previewedCost).toBe(2);
+        expect(store.lastOutcome()).toMatchObject({
+          kind: 'MOVED',
+          cost: previewedCost,
+        });
+        expect(leftUnit(store)).toMatchObject({
+          position: { x: 0, y: 0 },
+          remainingActionPoints: 0,
+        });
+        expect(store.reachableDestinations()).toEqual([]);
+      });
+
       it('is kept across selection, mode, hover and turn changes', async () => {
         const store = await loadedStore();
         store.selectUnit('left-unit-1');

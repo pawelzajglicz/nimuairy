@@ -84,6 +84,31 @@ describe('BattleEngine MOVE_UNIT', () => {
     });
   });
 
+  it('applies the new position, the AP deduction and the turn claim together in one new state', () => {
+    const state = testState();
+    const before = structuredClone(state);
+
+    const { state: next } = expectMoved(
+      state,
+      moveCommand([
+        { x: 3, y: 2 },
+        { x: 4, y: 3 },
+      ]),
+    );
+
+    expect({
+      position: unitIn(next)?.position,
+      remainingActionPoints: unitIn(next)?.remainingActionPoints,
+      activeUnitId: next.activeUnitId,
+    }).toEqual({
+      position: { x: 4, y: 3 },
+      remainingActionPoints: 2,
+      activeUnitId: 'left-1x1',
+    });
+    expect(state).toEqual(before);
+    expect(state.activeUnitId).toBeUndefined();
+  });
+
   it('charges the summed cost of every step, rounded up once', () => {
     const result = expectMoved(
       testState(),

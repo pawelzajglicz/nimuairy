@@ -61,9 +61,8 @@ battle rules.
 
 Status:
 
-- M1–M5 — done
-- **M6 — Action Points — next**
-- M7 — Combat / Attacks — planned
+- M1–M6 — done
+- **M7 — Combat / Attacks — next**
 - M8 — Victory — planned
 - M9 — Refactoring — planned
 
@@ -417,8 +416,46 @@ M6 scope:
 - battle UI shows AP instead of movement.
 
 M6 does not design ATTACK or ABILITY, and does not introduce terrain with a
-cost other than `1`. A dedicated design contract and the M6 steps are defined
-in the M6 design review.
+cost other than `1`. The concrete M6 rules and acceptance criteria are defined
+in [`M6_DESIGN_CONTRACT.md`](./M6_DESIGN_CONTRACT.md).
+
+#### M6 steps
+
+- **M6.1 — AP cost functions** (done). Pure domain functions in
+  `movement-cost.ts`, not yet wired: the step cost includes
+  `movementCostFactor`, and `actionPointCost` converts a fractional path cost
+  into integer AP as `ceil(pathCost - COST_EPSILON)`, returning `0` rather
+  than `-0`.
+- **M6.2 — AP model end to end** (done). Java `Unit`/`UnitDto`, demo values,
+  OpenAPI and the regenerated client, mapper, domain `Unit`, engine, error
+  rename, fixtures, and the minimal component updates needed to compile. One
+  step, because removing `moveRange` from the API breaks the mapper. Key
+  decisions:
+  - the unit-statistic invariants are validated in both places: the Java
+    `Unit` compact constructor, where battle state originates, and the
+    frontend mapper, which the frontend engine relies on;
+  - `ReachableCell` keeps its fractional `cost` as the search key and gains an
+    integer `actionPointCost`; the path preview shows the AP cost;
+  - reachability still prunes with `isWithinBudget` on the fractional cost,
+    while execution compares integer AP (`actionPointCost(cost) <=
+    remainingActionPoints`). For an integer AP budget, the fractional
+    reachability check and the rounded execution check admit the same
+    destinations. The charged AP and the remaining AP are integers, so the
+    `Math.max(0, …)` clamp is gone;
+  - `remainingActionPoints` and `activeUnitId` stay out of the API, and a
+    loaded battle starts with full AP.
+- **M6.3 — AP presentation** (done). The battle UI shows AP instead of
+  movement. UI decisions:
+  - wording "cost N AP": the panel shows `AP spent x / y · remaining z`, and
+    the preview, last move, insufficient-AP error and target labels show
+    integer AP costs;
+  - target labels read `ReachableCell.actionPointCost`; AP are integers, so
+    no decimal formatting is applied;
+  - component names, CSS classes and the movement panel's label are kept;
+  - END TURN stays always enabled, including at 0 AP.
+- **M6.4 — Verification and documentation** (done). Verify the
+  implementation against the acceptance criteria in `M6_DESIGN_CONTRACT.md`,
+  close the remaining test gaps, and record the M6 steps.
 
 ### M7 — Combat / Attacks
 
