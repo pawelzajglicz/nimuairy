@@ -119,7 +119,17 @@ test.describe('movement with real pointer interaction', () => {
 
     await expect(targets(page)).toHaveCount(5);
     await expect(
-      page.getByRole('button', { name: 'Move to (2, 0), cost 2' }),
+      page.getByRole('button', {
+        name: 'Move to (2, 0), cost 2 AP',
+        exact: true,
+      }),
+    ).toBeVisible();
+    // One diagonal step costs √2, charged as 2 whole AP.
+    await expect(
+      page.getByRole('button', {
+        name: 'Move to (1, 1), cost 2 AP',
+        exact: true,
+      }),
     ).toBeVisible();
   });
 
@@ -145,7 +155,7 @@ test.describe('movement with real pointer interaction', () => {
     await expect(page.locator('.preview-cost')).toHaveCount(0);
   });
 
-  test('clicking a target moves the unit and spends its movement', async ({
+  test('clicking a target moves the unit and spends its AP', async ({
     page,
   }) => {
     await openBoard(page);
@@ -196,7 +206,10 @@ test.describe('movement with real pointer interaction', () => {
     await openBoard(page);
     await clickCell(page, 5, 0);
     await expect(
-      page.getByRole('button', { name: 'Move to (4, 0), cost 1' }),
+      page.getByRole('button', {
+        name: 'Move to (4, 0), cost 1 AP',
+        exact: true,
+      }),
     ).toBeVisible();
 
     await hoverCell(page, 4, 0);
@@ -212,7 +225,7 @@ test.describe('movement with real pointer interaction', () => {
       'Move rejected: UNIT_CANNOT_MOVE',
     );
     await expect(page.locator('.unit-movement')).toHaveText(
-      'right-small (RIGHT) · Move 0 / 3 · remaining 3',
+      'right-small (RIGHT) · AP spent 0 / 3 · remaining 3',
     );
     expect(await unitCells(page)).toContain('RIGHT@5,0');
   });
@@ -232,28 +245,28 @@ test.describe('movement with real pointer interaction', () => {
 });
 
 test.describe('movement information', () => {
-  test('the panel shows the preview, spent and remaining movement, and the last move', async ({
+  test('the panel shows the preview, spent and remaining AP, and the last move', async ({
     page,
   }) => {
     await openBoard(page);
     await clickCell(page, 0, 0);
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · Move 0 / 2 · remaining 2',
+      'left-small (LEFT) · AP spent 0 / 2 · remaining 2',
     );
 
     await hoverCell(page, 2, 0);
     await expect(page.locator('.preview')).toHaveText(
-      'Preview: cost 2 · (0,0) → (1,0) → (2,0)',
+      'Preview: cost 2 AP · (0,0) → (1,0) → (2,0)',
     );
 
     await clickCell(page, 2, 0);
 
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · Move 2 / 2 · remaining 0',
+      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
     );
     await expect(page.locator('.spent-label')).toHaveText('2');
     await expect(page.locator('.last-outcome')).toHaveText(
-      'LEFT moved left-small (0,0) → (2,0) · cost 2',
+      'LEFT moved left-small (0,0) → (2,0) · cost 2 AP',
     );
   });
 });
@@ -263,7 +276,7 @@ test.describe('turns', () => {
   const endTurn = (page: Page) =>
     page.getByRole('button', { name: 'END TURN' }).click();
 
-  test('the same unit moves more than once in a turn, and running out of movement keeps the turn', async ({
+  test('the same unit moves more than once in a turn, and running out of AP keeps the turn', async ({
     page,
   }) => {
     await openBoard(page);
@@ -272,21 +285,21 @@ test.describe('turns', () => {
     await clickCell(page, 1, 0);
     await expect.poll(() => unitCells(page)).toContain('LEFT@1,0');
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · Move 1 / 2 · remaining 1',
+      'left-small (LEFT) · AP spent 1 / 2 · remaining 1',
     );
 
     await clickCell(page, 2, 0);
     await expect.poll(() => unitCells(page)).toContain('LEFT@2,0');
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · Move 2 / 2 · remaining 0',
+      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
     );
     await expect(page.locator('.last-outcome')).toHaveText(
-      'LEFT moved left-small (1,0) → (2,0) · cost 1',
+      'LEFT moved left-small (1,0) → (2,0) · cost 1 AP',
     );
     await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
   });
 
-  test('one unit acts per turn, and END TURN hands over the turn and restores movement', async ({
+  test('one unit acts per turn, and END TURN at 0 AP hands over the turn and restores AP', async ({
     page,
   }) => {
     await openBoard(page);
@@ -295,6 +308,10 @@ test.describe('turns', () => {
     await clickCell(page, 0, 0);
     await clickCell(page, 2, 0);
     await expect(targets(page)).toHaveCount(0);
+    await expect(page.locator('.unit-movement')).toHaveText(
+      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
+    );
+    await expect(page.getByRole('button', { name: 'END TURN' })).toBeEnabled();
 
     // The turn now belongs to left-small, so left-wide cannot move.
     await clickCell(page, 2, 2);
@@ -314,7 +331,7 @@ test.describe('turns', () => {
     await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
     await clickCell(page, 2, 0);
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · Move 0 / 2 · remaining 2',
+      'left-small (LEFT) · AP spent 0 / 2 · remaining 2',
     );
   });
 

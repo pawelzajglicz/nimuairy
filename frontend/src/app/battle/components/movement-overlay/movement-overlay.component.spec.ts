@@ -10,7 +10,7 @@ import { MovementOverlayComponent } from './movement-overlay.component';
 
 const BOARD: Board = { width: 21, height: 11, terrain: [] };
 
-/** A reachable cell; the overlay only reads its position and cost. */
+/** A reachable cell; the overlay only reads its position and AP cost. */
 function destination(x: number, y: number, cost: number): ReachableCell {
   const position = { x, y };
   return {
@@ -28,7 +28,7 @@ const PREVIEW: MovementPreview = {
     { from: { x: 2, y: 2 }, to: { x: 3, y: 2 }, cost: 1 },
     { from: { x: 3, y: 2 }, to: { x: 4, y: 3 }, cost: Math.SQRT2 },
   ],
-  cost: 1 + Math.SQRT2,
+  cost: 3,
 };
 
 const TWO_DESTINATIONS = [
@@ -85,7 +85,7 @@ describe('MovementOverlayComponent', () => {
       ]);
     });
 
-    it('labels each target with its position and movement cost', () => {
+    it('labels each target with its position and AP cost', () => {
       const targets = all(
         render({ destinations: TWO_DESTINATIONS }),
         '.movement-target',
@@ -93,7 +93,7 @@ describe('MovementOverlayComponent', () => {
 
       expect(
         targets.map((target) => target.getAttribute('aria-label')),
-      ).toEqual(['Move to (3, 2), cost 1', 'Move to (4, 3), cost 2.41']);
+      ).toEqual(['Move to (3, 2), cost 1 AP', 'Move to (4, 3), cost 3 AP']);
     });
 
     it('reports pointer and keyboard hover, and their end, as the hovered destination', () => {
@@ -170,13 +170,13 @@ describe('MovementOverlayComponent', () => {
       );
     });
 
-    it('shows the previewed cost at the destination', () => {
+    it('shows the previewed AP cost at the destination', () => {
       const [label] = all(
         render({ destinations: TWO_DESTINATIONS, preview: PREVIEW }),
         '.preview-cost',
       );
 
-      expect(label.textContent?.trim()).toBe('2.41');
+      expect(label.textContent?.trim()).toBe('3');
       expect(gridPosition(label)).toEqual(
         toGridPosition({ x: 4, y: 3 }, BOARD.height),
       );

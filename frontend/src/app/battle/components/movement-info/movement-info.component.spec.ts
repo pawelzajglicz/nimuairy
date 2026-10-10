@@ -44,7 +44,7 @@ describe('MovementInfoComponent', () => {
       const fixture = render({ unit: movedUnit });
 
       expect(text(fixture, '.unit-movement')).toBe(
-        'unit-left-2 (LEFT) · Move 3 / 5 · remaining 2',
+        'unit-left-2 (LEFT) · AP spent 3 / 5 · remaining 2',
       );
     });
 
@@ -52,11 +52,11 @@ describe('MovementInfoComponent', () => {
       const fixture = render({ unit: testUnit() });
 
       expect(text(fixture, '.unit-movement')).toBe(
-        'left-1x1 (LEFT) · Move 0 / 5 · remaining 5',
+        'left-1x1 (LEFT) · AP spent 0 / 5 · remaining 5',
       );
     });
 
-    it('shows the previewed path from the unit and its cost', () => {
+    it('shows the previewed path from the unit and its AP cost', () => {
       const fixture = render({
         unit: movedUnit,
         preview: {
@@ -65,12 +65,12 @@ describe('MovementInfoComponent', () => {
             { from: { x: 4, y: 3 }, to: { x: 5, y: 3 }, cost: 1 },
             { from: { x: 5, y: 3 }, to: { x: 6, y: 4 }, cost: Math.SQRT2 },
           ],
-          cost: 1 + Math.SQRT2,
+          cost: 3,
         },
       });
 
       expect(text(fixture, '.preview')).toBe(
-        'Preview: cost 2.41 · (4,3) → (5,3) → (6,4)',
+        'Preview: cost 3 AP · (4,3) → (5,3) → (6,4)',
       );
     });
 
@@ -83,7 +83,7 @@ describe('MovementInfoComponent', () => {
   });
 
   describe('last outcome', () => {
-    it('describes a move with its owner, unit, start, end and cost', () => {
+    it('describes a move with its owner, unit, start, end and AP cost', () => {
       const fixture = render({
         lastOutcome: {
           kind: 'MOVED',
@@ -93,12 +93,12 @@ describe('MovementInfoComponent', () => {
             { from: { x: 5, y: 4 }, to: { x: 6, y: 4 }, cost: 1 },
             { from: { x: 6, y: 4 }, to: { x: 7, y: 5 }, cost: Math.SQRT2 },
           ],
-          cost: 1 + Math.SQRT2,
+          cost: 3,
         },
       });
 
       expect(text(fixture, '.last-outcome')).toBe(
-        'LEFT moved unit-left-2 (5,4) → (7,5) · cost 2.41',
+        'LEFT moved unit-left-2 (5,4) → (7,5) · cost 3 AP',
       );
     });
 
@@ -121,7 +121,8 @@ describe('MovementInfoComponent', () => {
             available: 2,
           },
         },
-        expected: 'Move rejected: INSUFFICIENT_ACTION_POINTS (needs 3, has 2)',
+        expected:
+          'Move rejected: INSUFFICIENT_ACTION_POINTS (needs 3 AP, has 2 AP)',
       },
       {
         outcome: {
