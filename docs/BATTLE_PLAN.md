@@ -162,6 +162,11 @@ The fixture contains, for each player:
 - one 2×2 unit,
 - one vertical 1×3 unit.
 
+> **Later change:** the vertical 1×3 unit was replaced by a three-cell L-shaped
+> unit, because a 1×3 footprint could not get past the demo ROCK layout to the
+> other side of the board. The LEFT and RIGHT L-shapes are horizontal mirror
+> images of each other.
+
 The demo board also contains a small deterministic set of ROCK terrain cells
 that can be used for future movement tests, including a compact obstacle, a
 narrow passage, and a diagonal/corner configuration.

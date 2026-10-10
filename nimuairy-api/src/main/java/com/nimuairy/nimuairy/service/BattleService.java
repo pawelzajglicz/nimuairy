@@ -29,8 +29,12 @@ public class BattleService {
             new Position(0, 0), new Position(1, 0)));
     private static final Footprint FOOTPRINT_2X2 = new Footprint(List.of(
             new Position(0, 0), new Position(1, 0), new Position(0, 1), new Position(1, 1)));
-    private static final Footprint FOOTPRINT_1X3 = new Footprint(List.of(
-            new Position(0, 0), new Position(0, 1), new Position(0, 2)));
+    // A straight 1x3 could not cross the demo rocks, so the three-cell units are L-shaped.
+    // The two sides use horizontal mirror images so the starting layout stays symmetric.
+    private static final Footprint FOOTPRINT_L_LEFT = new Footprint(List.of(
+            new Position(0, 0), new Position(1, 0), new Position(0, 1)));
+    private static final Footprint FOOTPRINT_L_RIGHT = new Footprint(List.of(
+            new Position(0, 0), new Position(1, 0), new Position(1, 1)));
     private static final Footprint WALL_FOOTPRINT = wallFootprint();
 
     public BattleState getDemoBattle() {
@@ -99,11 +103,11 @@ public class BattleService {
                 unit("unit-left-1", PlayerSide.LEFT, new Position(5, 2), FOOTPRINT_1X1),
                 unit("unit-left-2", PlayerSide.LEFT, new Position(5, 4), FOOTPRINT_2X1),
                 unit("unit-left-3", PlayerSide.LEFT, new Position(5, 6), FOOTPRINT_2X2),
-                unit("unit-left-4", PlayerSide.LEFT, new Position(5, 8), FOOTPRINT_1X3),
+                unit("unit-left-4", PlayerSide.LEFT, new Position(5, 8), FOOTPRINT_L_LEFT),
                 unit("unit-right-1", PlayerSide.RIGHT, new Position(15, 2), FOOTPRINT_1X1),
                 unit("unit-right-2", PlayerSide.RIGHT, new Position(14, 4), FOOTPRINT_2X1),
                 unit("unit-right-3", PlayerSide.RIGHT, new Position(14, 6), FOOTPRINT_2X2),
-                unit("unit-right-4", PlayerSide.RIGHT, new Position(15, 8), FOOTPRINT_1X3)
+                unit("unit-right-4", PlayerSide.RIGHT, new Position(14, 8), FOOTPRINT_L_RIGHT)
         );
     }
 

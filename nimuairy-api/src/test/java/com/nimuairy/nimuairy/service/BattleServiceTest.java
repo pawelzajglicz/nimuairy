@@ -207,7 +207,7 @@ class BattleServiceTest {
                 .toList();
 
         assertThat(footprintCellCounts)
-                .as("%s footprint cell counts (1x1, 2x1, 2x2, 1x3)", side)
+                .as("%s footprint cell counts (1x1, 2x1, 2x2, L)", side)
                 .containsExactlyInAnyOrder(1, 2, 4, 3);
     }
 
@@ -229,11 +229,11 @@ class BattleServiceTest {
         assertOccupiedCells(units, "unit-right-3",
                 new Position(14, 6), new Position(15, 6), new Position(14, 7), new Position(15, 7));
 
-        // 1x3: three cells stacked in the same column (vertical).
+        // L: three cells; the RIGHT unit is the horizontal mirror image of the LEFT one.
         assertOccupiedCells(units, "unit-left-4",
-                new Position(5, 8), new Position(5, 9), new Position(5, 10));
+                new Position(5, 8), new Position(6, 8), new Position(5, 9));
         assertOccupiedCells(units, "unit-right-4",
-                new Position(15, 8), new Position(15, 9), new Position(15, 10));
+                new Position(14, 8), new Position(15, 8), new Position(15, 9));
     }
 
     @Test
