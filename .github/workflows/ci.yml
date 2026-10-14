@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
 
 permissions:
   contents: read
@@ -15,7 +17,48 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # PRs run only the areas they touch. Pushes to master, nightly and manual runs always run
+  # everything as a safety net. Backend PRs reach the frontend only through openapi.json,
+  # the committed contract snapshot guarded by OpenApiSnapshotTest.
+  #
+  # TODO(2027-04): revisit test selection. Filtering is per area only, so a touched area runs
+  # all of its tests. If a job regularly exceeds ~10 min, consider running only the tests
+  # affected by the change (e.g. Vitest `--changed`); until then it is not worth the risk
+  # of skipping a relevant test.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A PR checks out its merge commit, so HEAD^1 is the base branch tip.
+          fetch-depth: 2
+      - id: filter
+        run: |
+          frontend=false
+          backend=false
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            frontend=true
+            backend=true
+          else
+            while read -r file; do
+              case "$file" in
+                .github/workflows/* | nimuairy-api/openapi.json) frontend=true; backend=true ;;
+                frontend/*) frontend=true ;;
+                nimuairy-api/*) backend=true ;;
+              esac
+            done < <(git diff --name-only HEAD^1 HEAD)
+          fi
+          echo "frontend=$frontend backend=$backend"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -43,6 +86,8 @@ jobs:
           retention-days: 7
 
   backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -56,3 +101,49 @@ jobs:
           java-version: '25'
           cache: maven
       - run: ./mvnw test
+
+  # Nightly-only: catches advisories published after the last PR. Only high/critical fail the
+  # run; lower ones are left to the weekly Dependabot updates.
+  npm-audit:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.8.2
+      - run: npm audit --audit-level=high
+
+  # Nightly-only: the images build from moving base tags (dhi.io/node:26-…, …), so they can
+  # break without any change in this repo. DHI_USERNAME and DHI_TOKEN must exist as Actions
+  # secrets; the Dependabot secrets of the same name are a separate store.
+  docker-images:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        context: [frontend, nimuairy-api]
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+      - run: docker build ${{ matrix.context }}
+
+  # The single check to mark as required in branch protection: skipped jobs count as passed,
+  # failed or cancelled ones do not.
+  ci-result:
+    needs: [changes, frontend, backend, npm-audit, docker-images]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
