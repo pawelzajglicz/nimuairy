@@ -31,6 +31,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,9 +41,11 @@ jobs:
         run: |
           frontend=false
           backend=false
+          docker=false
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
             frontend=true
             backend=true
+            if [ "$GITHUB_EVENT_NAME" != push ]; then docker=true; fi
           else
             while read -r file; do
               case "$file" in
@@ -50,11 +53,22 @@ jobs:
                 frontend/*) frontend=true ;;
                 nimuairy-api/*) backend=true ;;
               esac
+              # A separate case, because case stops at the first match and these files also
+              # belong to an area above.
+              case "$file" in
+                .github/workflows/* | */Dockerfile | */.dockerignore | frontend/nginx.conf \
+                  | frontend/package.json | frontend/package-lock.json \
+                  | nimuairy-api/docker/* | nimuairy-api/pom.xml | nimuairy-api/.mvn/* \
+                  | nimuairy-api/mvnw) docker=true ;;
+              esac
             done < <(git diff --name-only HEAD^1 HEAD)
           fi
-          echo "frontend=$frontend backend=$backend"
-          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
-          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend backend=$backend docker=$docker"
+          {
+            echo "frontend=$frontend"
+            echo "backend=$backend"
+            echo "docker=$docker"
+          } >> "$GITHUB_OUTPUT"
 
   frontend:
     needs: changes
@@ -118,11 +132,13 @@ jobs:
           node-version: 26.8.2
       - run: npm audit --audit-level=high
 
-  # Nightly-only: the images build from moving base tags (dhi.io/node:26-…, …), so they can
-  # break without any change in this repo. DHI_USERNAME and DHI_TOKEN must exist as Actions
-  # secrets; the Dependabot secrets of the same name are a separate store.
+  # Runs nightly, because the images build from moving base tags (dhi.io/node:26-…, …) and can
+  # break without any change in this repo, and on PRs that touch Docker or dependency files.
+  # DHI_USERNAME and DHI_TOKEN must exist as Actions secrets; the Dependabot secrets of the
+  # same name are a separate store.
   docker-images:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
