@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCi,
   retries: isCi ? 2 : 0,
-  reporter: 'html',
+  // 'github' turns failures into annotations on the PR diff; the HTML report is uploaded as an artifact.
+  reporter: isCi ? [['github'], ['html']] : 'html',
   use: {
     baseURL: 'http://localhost:4200',
     trace: 'on-first-retry',
