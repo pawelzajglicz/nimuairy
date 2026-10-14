@@ -61,7 +61,9 @@ jobs:
                   | nimuairy-api/docker/* | nimuairy-api/pom.xml | nimuairy-api/.mvn/* \
                   | nimuairy-api/mvnw) docker=true ;;
               esac
-            done < <(git diff --name-only HEAD^1 HEAD)
+            # --no-renames lists both paths of a move, so moving a file out of an area still
+            # runs that area's checks.
+            done < <(git diff --no-renames --name-only HEAD^1 HEAD)
           fi
           echo "frontend=$frontend backend=$backend docker=$docker"
           {
