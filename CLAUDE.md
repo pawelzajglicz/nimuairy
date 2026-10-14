@@ -87,6 +87,11 @@ Generated API code must not be edited manually.
 
 When an API contract changes, regenerate the Angular API client.
 
+`nimuairy-api/openapi.json` is a committed snapshot of the served contract, enforced by
+`OpenApiSnapshotTest`. After an intended API change, refresh it with
+`./mvnw test -Dtest=OpenApiSnapshotTest -Dopenapi.update=true` and commit it together with the
+regenerated client. CI runs the frontend checks for backend PRs only when this file changes.
+
 ## My preferences
 
 <!-- Project-wide rules. e.g. commit message style, when to plan before coding,

@@ -1,0 +1,574 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "paths" : {
+    "/api/characters/{id}" : {
+      "get" : {
+        "tags" : [ "character-controller" ],
+        "operationId" : "getById",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CharacterResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "character-controller" ],
+        "operationId" : "update",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CharacterRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CharacterResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "character-controller" ],
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/characters" : {
+      "get" : {
+        "tags" : [ "character-controller" ],
+        "operationId" : "getAll",
+        "parameters" : [ {
+          "name" : "pageable",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/Pageable"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageCharacterResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "character-controller" ],
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CharacterRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CharacterResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/battles/demo" : {
+      "get" : {
+        "tags" : [ "battle-controller" ],
+        "operationId" : "getDemoBattle",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BattleStateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "CharacterRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "maxLength" : 255,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "name" ]
+      },
+      "CharacterResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RegisterRequest" : {
+        "type" : "object",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "maxLength" : 50,
+            "minLength" : 3
+          },
+          "password" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 6
+          }
+        },
+        "required" : [ "password", "username" ]
+      },
+      "AuthResponse" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LoginRequest" : {
+        "type" : "object",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "password", "username" ]
+      },
+      "BattleStateResponse" : {
+        "type" : "object",
+        "properties" : {
+          "board" : {
+            "$ref" : "#/components/schemas/BoardDto"
+          },
+          "orbs" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/OrbDto"
+            }
+          },
+          "walls" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/WallDto"
+            }
+          },
+          "units" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/UnitDto"
+            }
+          },
+          "currentPlayer" : {
+            "$ref" : "#/components/schemas/PlayerSide"
+          }
+        }
+      },
+      "BoardDto" : {
+        "type" : "object",
+        "properties" : {
+          "width" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "height" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "terrain" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TerrainCellDto"
+            }
+          }
+        }
+      },
+      "OrbDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "owner" : {
+            "$ref" : "#/components/schemas/PlayerSide"
+          },
+          "position" : {
+            "$ref" : "#/components/schemas/PositionDto"
+          },
+          "footprint" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PositionDto"
+            }
+          },
+          "health" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "PlayerSide" : {
+        "type" : "string",
+        "enum" : [ "LEFT", "RIGHT" ]
+      },
+      "PositionDto" : {
+        "type" : "object",
+        "properties" : {
+          "x" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "y" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "TerrainCellDto" : {
+        "type" : "object",
+        "properties" : {
+          "position" : {
+            "$ref" : "#/components/schemas/PositionDto"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/TerrainType"
+          }
+        }
+      },
+      "TerrainType" : {
+        "type" : "string",
+        "enum" : [ "PLAIN", "ROCK" ]
+      },
+      "UnitDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "owner" : {
+            "$ref" : "#/components/schemas/PlayerSide"
+          },
+          "unitType" : {
+            "$ref" : "#/components/schemas/UnitType"
+          },
+          "position" : {
+            "$ref" : "#/components/schemas/PositionDto"
+          },
+          "footprint" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PositionDto"
+            }
+          },
+          "health" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "attack" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "defense" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "actionPointBudget" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "movementCostFactor" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "UnitType" : {
+        "type" : "string",
+        "enum" : [ "SWORDSMAN" ]
+      },
+      "WallDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "owner" : {
+            "$ref" : "#/components/schemas/PlayerSide"
+          },
+          "position" : {
+            "$ref" : "#/components/schemas/PositionDto"
+          },
+          "footprint" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PositionDto"
+            }
+          },
+          "health" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "Pageable" : {
+        "type" : "object",
+        "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          },
+          "sort" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "PageCharacterResponse" : {
+        "type" : "object",
+        "properties" : {
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalElements" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CharacterResponse"
+            }
+          },
+          "number" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sort" : {
+            "$ref" : "#/components/schemas/SortObject"
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableObject"
+          },
+          "numberOfElements" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "first" : {
+            "type" : "boolean"
+          },
+          "last" : {
+            "type" : "boolean"
+          },
+          "empty" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "PageableObject" : {
+        "type" : "object",
+        "properties" : {
+          "offset" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paged" : {
+            "type" : "boolean"
+          },
+          "pageNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sort" : {
+            "$ref" : "#/components/schemas/SortObject"
+          },
+          "unpaged" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SortObject" : {
+        "type" : "object",
+        "properties" : {
+          "empty" : {
+            "type" : "boolean"
+          },
+          "sorted" : {
+            "type" : "boolean"
+          },
+          "unsorted" : {
+            "type" : "boolean"
+          }
+        }
+      }
+    }
+  }
+}
