@@ -1,0 +1,53 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.sender.type != 'Bot' &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check OpenRouter secret
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Add OPENROUTER_API_KEY to the repository secrets."
+            exit 1
+          fi
+
+      - name: Review with PR-Agent via OpenRouter
+        uses: docker://pragent/pr-agent@sha256:7d98954c29289846a08faf00aaea0f1f1375b1676cd8a2ed303e0af07010af7a # 0.47.0
+        with:
+          entrypoint: python
+          args: -m pr_agent.servers.github_action_runner
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # PR-Agent reads .pr_agent.toml from the default branch unless told otherwise. The
+          # PR branch already controls this workflow file, so reading its config adds no new trust
+          # and lets a PR that changes the config be reviewed with it. Falls back to the default
+          # branch when the PR branch has no .pr_agent.toml.
+          PR_AGENT_CONFIG_BRANCH: ${{ github.head_ref }}
+          OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CONFIG__PROPAGATE_TOOL_ERRORS: "true"
+          CONFIG__USE_GLOBAL_SETTINGS_FILE: "false"
+          GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG__AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "false"
+          GITHUB_ACTION_CONFIG__HANDLE_PUSH_TRIGGER: "true"
+          GITHUB_ACTION_CONFIG__PUSH_COMMANDS: '["/review"]'
