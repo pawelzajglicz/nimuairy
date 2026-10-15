@@ -1,0 +1,48 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.sender.type != 'Bot' &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Sprawdź sekret OpenRouter
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Dodaj OPENROUTER_API_KEY w Repository secrets."
+            exit 1
+          fi
+
+      - name: Review przez PR-Agent i OpenRouter
+        uses: docker://pragent/pr-agent@sha256:3b039b143c221fff76a09fbfc2c81292662ad86bd6d304123ccbb22b00ecb114
+        with:
+          entrypoint: python
+          args: -m pr_agent.servers.github_action_runner
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CONFIG__PROPAGATE_TOOL_ERRORS: "true"
+          CONFIG__USE_GLOBAL_SETTINGS_FILE: "false"
+          GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG__AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "false"
+          GITHUB_ACTION_CONFIG__HANDLE_PUSH_TRIGGER: "true"
+          GITHUB_ACTION_CONFIG__PUSH_COMMANDS: '["/review"]'
