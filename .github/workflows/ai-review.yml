@@ -22,16 +22,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Sprawdź sekret OpenRouter
+      - name: Check OpenRouter secret
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           if [ -z "$OPENROUTER_API_KEY" ]; then
-            echo "::error::Dodaj OPENROUTER_API_KEY w Repository secrets."
+            echo "::error::Add OPENROUTER_API_KEY to the repository secrets."
             exit 1
           fi
 
-      - name: Review przez PR-Agent i OpenRouter
+      - name: Review with PR-Agent via OpenRouter
         uses: docker://pragent/pr-agent@sha256:7d98954c29289846a08faf00aaea0f1f1375b1676cd8a2ed303e0af07010af7a # 0.47.0
         with:
           entrypoint: python
