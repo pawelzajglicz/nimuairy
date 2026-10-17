@@ -20,8 +20,8 @@ concurrency:
 # that is why master pushes and the nightly run (new advisories) scan too. The exit-code gate
 # stays, because an uploaded alert alone does not fail the run.
 #
-# Third-party actions are pinned to a commit SHA: in March 2026 the trivy-action tags were
-# force-pushed to credential-stealing code (CVE-2026-33634).
+# All actions are pinned to a commit SHA (checked by zizmor): in March 2026 the trivy-action
+# tags were force-pushed to credential-stealing code (CVE-2026-33634).
 #
 # limit-severities-for-sarif must stay true: with SARIF output, trivy-action otherwise drops
 # the severity filter, and exit-code then fails on every finding, LOW included.
@@ -36,7 +36,9 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Trivy filesystem (SCA)
         id: sca
@@ -85,19 +87,19 @@ jobs:
       # A fork PR gets a read-only token, so the upload would fail; the gate below still runs.
       - name: Upload SCA results
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-sca.sarif
           category: trivy-sca
       - name: Upload secret results
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-secret.sarif
           category: trivy-secret
       - name: Upload IaC results
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-iac.sarif
           category: trivy-iac
@@ -142,7 +144,9 @@ jobs:
       matrix:
         context: [frontend, nimuairy-api]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - env:
           DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
           DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
@@ -172,7 +176,7 @@ jobs:
 
       - name: Upload image results
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image-${{ matrix.context }}
