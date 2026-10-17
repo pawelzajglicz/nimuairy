@@ -1,0 +1,166 @@
+# M7 Design Contract — Combat / Attacks
+
+## 1. Purpose and scope
+
+M7 introduces the first combat action to the existing turn-based battle domain. The battle rules continue to run in the frontend `BattleEngine`; the backend continues to provide the initial battle state. This milestone does not move the engine to the backend or introduce persistence/networked actions.
+
+This contract records agreed gameplay rules and implementation constraints. Items explicitly marked **Open decision** must be resolved before the affected implementation step; they must not be guessed by the implementation agent.
+
+## 2. Existing turn and Action Point rules
+
+M7 preserves the M5/M6 turn model:
+
+- Only `BattleState.currentPlayer` may perform gameplay actions.
+- At the start of a turn there is no active unit. The first successful unit action claims the turn by setting `activeUnitId`.
+- Once claimed, only that active unit may perform actions until `END_TURN`.
+- A failed action does not claim the turn and must not change battle state.
+- `END_TURN` remains the only way to end a turn. Having 0 AP does not end it.
+- All actions use `remainingActionPoints`; AP are restored to `actionPointBudget` for the incoming player's units when their turn starts.
+- Selection in the UI does not grant the right to act.
+
+## 3. M7 attack rules
+
+### 3.1 Action and cost
+
+- Introduce an `ATTACK` unit action in the existing domain/action model.
+- A successful attack costs exactly **2 AP**.
+- An attack is legal only if the acting unit may act under the existing turn rules, has at least 2 AP, and has a valid target in attack range.
+- An attack that deals 0 damage is still legal and consumes 2 AP.
+- A rejected attack consumes no AP and has no other side effects.
+
+### 3.2 Valid targets
+
+M7 supports attacks against:
+- enemy units;
+- the enemy orb;
+- the enemy wall.
+
+Friendly units, the attacker's own orb/wall, and other non-target objects are not valid targets. Walls are destructible combat structures in M7 because they protect the orbs and must be destroyed to allow units to reach them.
+
+**Open decision — wall combat statistics:** the current design/model must be checked for wall HP and defense (and whether wall attack damage uses the attacker's `attack` and the target's `defense`). Do not invent wall statistics or silently add unrelated API changes. Resolve the required wall data and initial demo values before implementing damage to walls.
+
+### 3.3 Range and footprint
+
+- M7 implements melee attacks only; ranged attacks and area-of-effect attacks remain out of scope.
+- The attacker and target are in range when at least one cell occupied by the attacker shares an edge with at least one cell occupied by the target.
+- Diagonal-only contact does not count as in range.
+- Range checks use the full footprints of both objects, not only their anchor positions.
+- The target must be present in the current battle state and must be an eligible enemy target.
+- Walls block movement according to the existing movement rules while present. Once a wall is destroyed and removed/marked destroyed according to the agreed state model, its cells must no longer block movement.
+
+### 3.4 Damage and hit points
+
+The initial damage formula specified by the battle plan is:
+
+`damage = max(0, attacker.attack - target.defense)`
+
+- A damage result of 0 is valid; it does not make an otherwise valid attack illegal.
+- HP must never fall below 0.
+- A successful attack applies damage and deducts AP atomically in one new state.
+- Failed execution leaves the input state unchanged.
+- **Open decision — wall defense:** confirm whether the same formula applies to walls and, if so, where the wall's defense value comes from. If walls have no defense statistic, agree on the exact alternative before implementation.
+
+### 3.5 Destruction and victory boundary
+
+- A unit whose HP reaches 0 is removed from the battle state's unit collection. M7 does not add a separate dead-unit status unless existing model constraints require it.
+- Wall destruction must make the wall cease blocking its footprint. The implementation must follow the existing structure/state representation where possible.
+- An orb's HP may be reduced to 0 in M7, but full battle completion, winner determination, and victory UI belong to M8. M7 must not introduce a partial or competing victory-state model.
+
+**Open decision — orb/wall destruction representation:** inspect the current state model and settle whether destroyed structures/objectives are removed from their collection or represented with zero HP. For units, removal at 0 HP is agreed. For an orb, preserve enough state for M8 to detect destruction; do not remove the orb if that would lose the information required to determine victory.
+
+## 4. Validation, errors, and legal actions
+
+Attack validation belongs in the battle domain/engine, not in Angular components or the store. The legality query and execution path must use the same rules.
+
+The engine must reject an attack when any required condition fails, including:
+- attacker does not exist;
+- attacker cannot act because it is not owned by the current player or another unit has already claimed the turn;
+- target does not exist;
+- target is not an eligible enemy unit, wall, or orb;
+- target is not in orthogonal melee range;
+- attacker has fewer than 2 AP.
+
+Use explicit attack-domain errors rather than reusing movement-specific errors. The exact error discriminants and payload shape should be aligned with existing error/result conventions during implementation. Candidate distinctions are `UNIT_NOT_FOUND`, `UNIT_CANNOT_ATTACK`, `TARGET_NOT_FOUND`, `INVALID_TARGET`, `TARGET_OUT_OF_RANGE`, and `INSUFFICIENT_ACTION_POINTS { required, available }`. Avoid adding duplicate variants if existing shared errors already express the same condition clearly.
+
+`ATTACK` should appear in legal actions only when the unit may act and at least one valid target is attackable with its remaining AP. The domain should expose legal attack targets through a query that UI can consume; the UI must not reimplement targeting, range, damage, or AP legality.
+
+## 5. State transition and immutability
+
+A successful attack must produce one new battle state that atomically includes:
+- the attacker claiming the turn if it was not already claimed;
+- deduction of exactly 2 AP from the attacker;
+- target HP reduced by the calculated damage, clamped to 0;
+- target destruction handling when HP reaches 0, according to the target-specific rules above.
+
+The input state and its nested objects must not be mutated. On failure, the engine returns a domain error and the caller retains the unchanged input state. No partial damage, AP deduction, active-unit claim, or structure removal is allowed on failure.
+
+The result should expose enough domain information for the UI/store to present the attack outcome without duplicating combat calculations. Prefer existing result conventions; do not introduce a generic combat framework solely for M7.
+
+## 6. UI requirements
+
+- Add an attack interaction mode consistent with existing movement/selection patterns.
+- The UI presents only targets supplied by the domain's legal-target query.
+- A successful attack updates the rendered HP/AP from the resulting battle state and visibly highlights the attacked target.
+- Display the result using domain outcome data; the UI must not calculate damage or decide legality.
+- Support selecting a wall as an attack target and reflect its destruction in the board rendering.
+- Do not add victory/winner UI in M7; that belongs to M8.
+- Keep the SignalStore as the state-management boundary. It orchestrates calls to the domain and stores results but contains no battle rules.
+
+## 7. API and backend impact
+
+The current architecture and M6 contract keep battle actions and transient turn state in the frontend domain. M7 does not add backend action endpoints, persistence, database changes, or `remainingActionPoints`/`activeUnitId` to the API.
+
+If wall combat requires adding HP/defense to the initial wall model or DTO, make only the minimal change required by the agreed wall-statistics decision. Keep DTO and generated frontend client changes in the same implementation step and regenerate generated API code rather than editing it manually.
+
+## 8. Out of scope
+
+- Ranged attacks, line-of-sight rules, area attacks, damage types, critical hits, status effects, and special abilities.
+- Full victory/loss resolution and victory UI (M8).
+- Moving the authoritative engine to Java/backend, networking, persistence, or a database.
+- Broad combat abstractions or unrelated refactoring.
+- Changes to existing movement and turn rules beyond what is strictly required for destroyed walls to stop blocking movement.
+
+## 9. Proposed implementation steps
+
+### M7.1 — Finalize rules and contract
+Resolve the open decisions about wall statistics and destruction representation. Confirm current model support and add any required demo values to this contract before coding combat rules.
+
+**Exit criteria:** all rules required for the first attack implementation are unambiguous.
+
+### M7.2 — Combat domain and engine
+Add attack command/action, validation, range/footprint checks, damage calculation, AP consumption, destruction behavior, domain errors and result. Add focused unit tests.
+
+**Exit criteria:** deterministic tests cover successful attacks, 0 damage, insufficient AP, invalid targets, out-of-range targets, footprint adjacency, destruction, atomicity and immutability.
+
+### M7.3 — Legal actions and target query
+Integrate ATTACK into legal actions and expose valid attack targets using the same rules as execution.
+
+**Exit criteria:** every target offered by the domain can be attacked successfully from the same state, and illegal targets are never offered.
+
+### M7.4 — UI integration
+Add attack mode and target interaction, wire the store, display AP/HP/outcome, highlight the target, and render destroyed units/walls correctly.
+
+**Exit criteria:** UI consumes domain decisions and does not duplicate combat rules.
+
+### M7.5 — Verification and close-out
+Run relevant frontend unit/component tests, backend tests if DTOs change, build/lint and Playwright regression tests. Update `BATTLE_PLAN.md` with completed steps and final scope.
+
+**Exit criteria:** all acceptance criteria pass, movement/turn regressions are absent, and documentation matches the implementation.
+
+## 10. Acceptance criteria
+
+1. A successful attack costs exactly 2 AP.
+2. An attack requires at least 2 AP; insufficient AP leaves state unchanged.
+3. Only the current player and the active unit (if claimed) may attack.
+4. A successful first action claims the turn; a failed attack does not.
+5. Targets are enemy units, the enemy wall, or the enemy orb only.
+6. Range requires orthogonal edge contact between occupied footprint cells; diagonal-only contact is insufficient.
+7. Damage follows the agreed formula and can be 0; zero-damage attacks remain legal.
+8. HP is clamped at 0 and never becomes negative.
+9. Unit death, wall destruction, and orb-at-zero behavior follow the target-specific rules in this contract.
+10. A successful attack updates AP and target state atomically in an immutable transition.
+11. Attack legality and execution share the same domain rules; UI does not calculate legality or damage.
+12. ATTACK is offered only when at least one valid target can be attacked with available AP.
+13. Destroyed walls no longer block movement.
+14. M7 does not implement full victory resolution or victory UI.
+15. Existing movement and turn behavior continues to pass regression tests.
