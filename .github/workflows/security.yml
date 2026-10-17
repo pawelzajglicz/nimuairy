@@ -1,0 +1,207 @@
+name: Security
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * *'
+
+permissions:
+  contents: read
+
+# A new push to a PR supersedes the run in progress; master runs are never cancelled.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Results go to Code Scanning as SARIF, which compares a PR against the latest master analysis;
+# that is why master pushes and the nightly run (new advisories) scan too. The exit-code gate
+# stays, because an uploaded alert alone does not fail the run.
+#
+# Third-party actions are pinned to a commit SHA: in March 2026 the trivy-action tags were
+# force-pushed to credential-stealing code (CVE-2026-33634).
+#
+# limit-severities-for-sarif must stay true: with SARIF output, trivy-action otherwise drops
+# the severity filter, and exit-code then fails on every finding, LOW included.
+#
+# ignore-unfixed: a vulnerability without a fixed version cannot be resolved in a PR, so it
+# would only block unrelated changes. Dependabot alerts still report it.
+jobs:
+  repo-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Trivy filesystem (SCA)
+        id: sca
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-sca.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'
+
+      - name: Trivy filesystem (Secret)
+        id: secret
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-secret.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Trivy config (IaC)
+        id: iac
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-iac.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      # A fork PR gets a read-only token, so the upload would fail; the gate below still runs.
+      - name: Upload SCA results
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-sca.sarif
+          category: trivy-sca
+      - name: Upload secret results
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-secret.sarif
+          category: trivy-secret
+      - name: Upload IaC results
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-iac.sarif
+          category: trivy-iac
+
+      - name: Security gate
+        if: always()
+        env:
+          SCA: ${{ steps.sca.outcome }}
+          SECRET: ${{ steps.secret.outcome }}
+          IAC: ${{ steps.iac.outcome }}
+        run: |
+          {
+            echo "## Repository scan"
+            echo
+            echo "| Scanner | Outcome |"
+            echo "|---|---|"
+            echo "| SCA | $SCA |"
+            echo "| Secret | $SECRET |"
+            echo "| IaC | $IAC |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          failed=()
+          [ "$SCA" = success ] || failed+=(SCA)
+          [ "$SECRET" = success ] || failed+=(Secret)
+          [ "$IAC" = success ] || failed+=(IaC)
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::HIGH/CRITICAL findings or scanner errors: ${failed[*]}. See Security > Code scanning."
+            exit 1
+          fi
+
+  # Builds on every PR, as base images can gain vulnerabilities without any change in this repo.
+  # Only CRITICAL fails here: images with no HIGH findings are rare, so HIGH would mostly block
+  # unrelated PRs. DHI_USERNAME and DHI_TOKEN are not passed to fork PRs, hence the skip.
+  image-scan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        context: [frontend, nimuairy-api]
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          load: true
+          tags: nimuairy-${{ matrix.context }}:scan
+          # Without a scope, both matrix entries would overwrite one shared cache.
+          cache-from: type=gha,scope=${{ matrix.context }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.context }}
+
+      - name: Trivy image
+        id: image
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nimuairy-${{ matrix.context }}:scan
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+          limit-severities-for-sarif: true
+          exit-code: '1'
+
+      - name: Upload image results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image-${{ matrix.context }}
+
+      - name: Security gate
+        if: always()
+        env:
+          CONTEXT: ${{ matrix.context }}
+          IMAGE: ${{ steps.image.outcome }}
+        run: |
+          {
+            echo "## Image scan: $CONTEXT"
+            echo
+            echo "| Scanner | Outcome |"
+            echo "|---|---|"
+            echo "| Container | $IMAGE |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$IMAGE" != success ]; then
+            echo "::error::CRITICAL findings or scanner error in the $CONTEXT image. See Security > Code scanning."
+            exit 1
+          fi
+
+  # The single check to mark as required in branch protection: skipped jobs count as passed,
+  # failed or cancelled ones do not.
+  security-result:
+    needs: [repo-scan, image-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
