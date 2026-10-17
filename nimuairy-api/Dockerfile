@@ -3,7 +3,7 @@
 # Multi-stage build using Docker Hardened Images (dhi.io). Requires `docker
 # login dhi.io` with a Docker Hub account enrolled in the free Community tier
 # (docker.com/products/hardened-images) before these can be pulled.
-FROM dhi.io/eclipse-temurin:25-jdk-alpine3.24-dev AS build
+FROM dhi.io/eclipse-temurin:26-jdk-alpine3.24-dev AS build
 WORKDIR /app
 
 # Resolve dependencies first so they're cached across source-only changes.
@@ -23,7 +23,7 @@ RUN javac -d /app/healthcheck docker/HealthCheck.java
 # The non-dev runtime tag is distroless-style: no shell, no package manager,
 # and it already runs as a non-root user by default, so there's nothing left
 # to install or harden here.
-FROM dhi.io/eclipse-temurin:25-alpine3.24
+FROM dhi.io/eclipse-temurin:26-alpine3.24
 # Same UID as the base image default; stated here so the guarantee doesn't
 # depend on the base tag and the Trivy IaC scan (DS-0002) can see it.
 USER 65532
