@@ -16,6 +16,9 @@
 
 	<properties>
 		<java.version>25</java.version>
+		<!-- Spring Boot 4.1.1 manages Tomcat 11.0.24 (CVE-2026-65182, CVE-2026-65905,
+		     CVE-2026-68525). Remove once the parent manages 11.0.25 or later. -->
+		<tomcat.version>11.0.27</tomcat.version>
 	</properties>
 
 	<dependencies>
