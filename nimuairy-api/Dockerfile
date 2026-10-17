@@ -24,6 +24,9 @@ RUN javac -d /app/healthcheck docker/HealthCheck.java
 # and it already runs as a non-root user by default, so there's nothing left
 # to install or harden here.
 FROM dhi.io/eclipse-temurin:25-alpine3.24
+# Same UID as the base image default; stated here so the guarantee doesn't
+# depend on the base tag and the Trivy IaC scan (DS-0002) can see it.
+USER 65532
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 COPY --from=build /app/healthcheck ./healthcheck
