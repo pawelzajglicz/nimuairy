@@ -195,10 +195,23 @@ jobs:
             exit 1
           fi
 
+  # Fails a PR that adds or upgrades to a dependency with a known HIGH/CRITICAL advisory, judging
+  # only the diff, so existing issues never block unrelated PRs. It reads GitHub's dependency
+  # graph, which for Maven holds only what pom.xml declares; transitive, BOM-managed versions
+  # (Tomcat, for one) are left to the Trivy image scan. Like Trivy, dev dependencies are ignored.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
   # The single check to mark as required in branch protection: skipped jobs count as passed,
   # failed or cancelled ones do not.
   security-result:
-    needs: [repo-scan, image-scan]
+    needs: [repo-scan, image-scan, dependency-review]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
