@@ -105,10 +105,11 @@ jobs:
             StrictHostKeyChecking yes
           EOF
 
-      - name: Copy Compose manifests to VPS
+      - name: Copy Compose manifests and scripts to VPS
         run: |
-          ssh vps "mkdir -p '$PROJECT_PATH'"
+          ssh vps "mkdir -p '$PROJECT_PATH/scripts'"
           scp compose.yaml compose.prod.yaml "vps:$PROJECT_PATH/"
+          scp scripts/backup-db.sh "vps:$PROJECT_PATH/scripts/"
 
       # The token goes through stdin, so it never appears in a command line on the VPS.
       - name: Log in to GHCR on VPS
@@ -128,6 +129,15 @@ jobs:
           PREVIOUS_SHA=$(ssh vps "grep '^APP_SHA=' '$PROJECT_PATH/.env' 2>/dev/null | cut -d= -f2" || true)
           echo "sha=$PREVIOUS_SHA" >> "$GITHUB_OUTPUT"
           echo "Previous APP_SHA: ${PREVIOUS_SHA:-<none>}"
+
+      # Rolling back APP_SHA reverts the code but not Liquibase migrations, so this dump is the way
+      # back to the previous schema. It runs before .env changes, so a failed backup stops the deploy
+      # without a rollback. A first deploy has no database container yet and skips it.
+      - name: Back up database
+        run: |
+          ssh vps "docker container inspect postgres-nimuairy > /dev/null 2>&1 \
+            || { echo 'No database container yet, skipping backup.'; exit 0; }; \
+            bash '$PROJECT_PATH/scripts/backup-db.sh' 'pre-deploy-${IMAGE_TAG:0:12}'"
 
       - name: Set APP_SHA in .env
         id: set_sha
