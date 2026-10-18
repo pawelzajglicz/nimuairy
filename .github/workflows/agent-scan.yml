@@ -59,9 +59,11 @@ jobs:
 
       # .claude/skills and .junie/skills are synced copies of .agents/skills, but agents load the
       # copies, so a copy edited directly must be scanned too.
+      # --ci refuses to run without --dangerously-run-mcp-servers (exit code 2). It starts no server
+      # here: explicit paths disable config discovery, and only skill directories are passed.
       - name: Scan skills
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          "$RUNNER_TEMP/agent-scan" scan --ci \
+          "$RUNNER_TEMP/agent-scan" scan --ci --dangerously-run-mcp-servers \
             .agents/skills .claude/skills .junie/skills frontend/.claude/skills
