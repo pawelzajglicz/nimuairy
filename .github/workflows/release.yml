@@ -70,7 +70,7 @@ jobs:
 
   deploy:
     needs: [resolve-tag, validate-image]
-    uses: ./.github/workflows/deploy-on-vps.yml
+    uses: $/.github/workflows/deploy-on-vps.yml
     with:
       image_tag: ${{ needs.resolve-tag.outputs.image_tag }}
       environment: production
