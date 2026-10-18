@@ -19,7 +19,7 @@ updates:
     # Skip releases that get yanked or compromised within days of publishing.
     # Security updates are not delayed.
     cooldown:
-      default-days: 3
+      default-days: 7
     # A dependency joins the first group it matches, so order matters.
     groups:
       # @angular/* packages pin each other as exact peer dependencies,
@@ -43,7 +43,7 @@ updates:
     commit-message:
       prefix: chore(deps)
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       spring-boot:
         patterns:
@@ -59,6 +59,8 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore(deps)
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -75,7 +77,7 @@ updates:
     commit-message:
       prefix: chore(deps)
     cooldown:
-      default-days: 3
+      default-days: 7
 
   - package-ecosystem: docker-compose
     directory: /
@@ -86,4 +88,4 @@ updates:
     commit-message:
       prefix: chore(deps)
     cooldown:
-      default-days: 3
+      default-days: 7
