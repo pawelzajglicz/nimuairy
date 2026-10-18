@@ -212,10 +212,28 @@ jobs:
         with:
           fail-on-severity: high
 
+  # Audits the workflows and dependabot.yml for supply-chain issues (unpinned actions, persisted
+  # credentials, missing cooldown) that CodeQL's `actions` analysis does not cover. Like CodeQL, it
+  # only uploads to Code Scanning, so the ruleset's "Require code scanning results" rule is the gate.
+  # The zizmor version is left at the action's default: each action release maps it to one image
+  # digest, so the SHA pin below fixes the zizmor version too and Dependabot bumps both together.
+  workflow-scan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+
   # The single check to mark as required in branch protection: skipped jobs count as passed,
   # failed or cancelled ones do not.
   security-result:
-    needs: [repo-scan, image-scan, dependency-review]
+    needs: [repo-scan, image-scan, dependency-review, workflow-scan]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
