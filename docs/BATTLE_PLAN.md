@@ -62,7 +62,7 @@ battle rules.
 Status:
 
 - M1–M6 — done
-- **M7 — Combat / Attacks — next**
+- **M7 — Combat / Attacks — in progress**
 - M8 — Victory — planned
 - M9 — Refactoring — planned
 
@@ -464,27 +464,43 @@ in [`M6_DESIGN_CONTRACT.md`](./M6_DESIGN_CONTRACT.md).
 
 ### M7 — Combat / Attacks
 
-Combat uses the AP system from M6: an attack spends the attacking unit's
-`remainingActionPoints`. The AP cost of attacks is defined in M7.
+M7 adds melee attacks using the Action Point system from M6. The frontend
+`BattleEngine` remains authoritative for the current prototype; the backend
+continues to provide the initial battle state.
 
-Implement:
+M7 includes:
 
-- selecting an enemy target,
-- attack validation,
-- damage calculation,
-- HP changes,
-- attacked-unit highlighting,
-- unit death.
+- attack validation and execution against enemy units, walls, and orbs;
+- footprint-aware orthogonal melee range (diagonal-only contact is not enough);
+- damage, HP updates, AP charging, and target destruction;
+- legal-action and legal-target queries shared with execution;
+- ATTACK-mode target interaction, result feedback, and attacked-target
+  highlighting;
+- visualizing the selected unit's melee-range cells in ATTACK mode, using
+  positions computed by the domain;
+- displaying each unit's current/max HP (for example, `350/500`) beside its
+  board representation.
 
-Combat targets are not limited to units. An orb is a valid combat target.
+The damage formula is:
 
-Destroying the opponent's orb immediately ends the battle and determines the
-winner, regardless of the number or state of the remaining units.
+    damage = max(0, attacker.attack - target.defense)
 
-Initial damage formula:
+The attack AP cost is a unit statistic, `attackActionPointCost`. It is
+**2 AP for every unit in the initial MVP**, but the engine reads the value
+from the attacking unit rather than using a global constant. Unit maximum HP
+is represented separately from current HP by `maxHealth`.
 
-    damage = max(0, attacker.attack - defender.defense)
+The new unit statistics require an end-to-end model/API update: backend
+`Unit` and `UnitDto`, OpenAPI snapshot, regenerated Orval client, frontend
+domain `Unit`, mapper, fixtures, and relevant tests. The demo units initially
+use `attackActionPointCost = 2` and `maxHealth = health`.
 
+Destroying the opponent's orb remains the primary victory condition, but M7
+does not resolve victory. A destroyed orb stays in the domain state at 0 HP;
+M8 implements battle completion, winner determination, and victory UI.
+
+M7.4 UI work is being extended with these agreed refinements before M7.5:
+per-unit attack cost, an attack-range overlay, and per-unit HP labels.
 ### M8 — Victory
 
 Implement:
