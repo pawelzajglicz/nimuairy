@@ -89,7 +89,8 @@ script to the VPS; cron and rclone are set up once by hand.
 One-time setup on the VPS, after the first deploy that copied the script:
 
 1. In Cloudflare, create the R2 bucket `nimuairy-backups` with a lifecycle rule deleting objects
-   after 90 days, and an R2 API token with *Object Read & Write* on that bucket only.
+   after 90 days and a 30-day bucket lock rule (dumps cannot be deleted even with a stolen token),
+   and an R2 API token with *Object Read & Write* on that bucket only.
 2. As root: `apt install rclone`.
 3. As `deploy` (`su - deploy`); `read -rs` keeps the values out of the shell history. Store the
    crypt password in a password manager: without it the off-site dumps cannot be decrypted.
@@ -97,12 +98,15 @@ One-time setup on the VPS, after the first deploy that copied the script:
    read -rs R2_KEY_ID; read -rs R2_SECRET; read -rs CRYPT_PASSWORD
    rclone config create r2 s3 provider=Cloudflare access_key_id="$R2_KEY_ID" \
      secret_access_key="$R2_SECRET" endpoint=https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
-     no_check_bucket=true
+     no_check_bucket=true no_head=true
    rclone config create r2crypt crypt remote=r2:nimuairy-backups password="$CRYPT_PASSWORD" --obscure
    BACKUP_REMOTE=r2crypt: bash /var/nimuairy/scripts/backup-db.sh manual
    rclone ls r2crypt:
    ```
-   `no_check_bucket` is needed because a bucket-scoped token may not create buckets.
+   `no_check_bucket` is needed because a bucket-scoped token may not create buckets. `no_head`
+   skips rclone's check after each upload: with a bucket lock R2 versions objects, and that check
+   asks for a specific version, which R2 answers with `501 Not Implemented` although the upload
+   succeeded.
 4. As root, `/etc/cron.d/nimuairy-backup` (output goes to the journal:
    `journalctl -t nimuairy-backup`):
    ```
