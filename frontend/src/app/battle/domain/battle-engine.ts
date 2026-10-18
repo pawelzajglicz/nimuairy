@@ -1,11 +1,12 @@
 import type { ActionType, UnitActionType } from './actions';
 import type { BattleState, Orb, PlayerSide, Unit, Wall } from './battle-state';
-import type {
-  AttackCommand,
-  AttackError,
-  AttackResult,
-  AttackTarget,
-  AttackTargetKind,
+import {
+  ATTACK_TARGET_KINDS,
+  type AttackCommand,
+  type AttackError,
+  type AttackResult,
+  type AttackTarget,
+  type AttackTargetKind,
 } from './combat';
 import {
   ATTACK_ACTION_POINT_COST,
@@ -127,28 +128,12 @@ export class BattleEngine {
       return found;
     }
     const attacker = found.value;
-    if (!mayAct(state, attacker)) {
-      return err({ type: 'UNIT_CANNOT_ATTACK', unitId: attacker.id });
-    }
-
     const { target } = command;
-    const attacked = findTarget(state, target);
-    if (!attacked) {
-      return err({ type: 'TARGET_NOT_FOUND', target });
+    const validated = validateAttack(state, attacker, target);
+    if (!validated.ok) {
+      return validated;
     }
-    if (attacked.owner === attacker.owner) {
-      return err({ type: 'INVALID_TARGET', target });
-    }
-    if (!inMeleeRange(attacker, attacked)) {
-      return err({ type: 'TARGET_OUT_OF_RANGE', target });
-    }
-    if (attacker.remainingActionPoints < ATTACK_ACTION_POINT_COST) {
-      return err({
-        type: 'INSUFFICIENT_ACTION_POINTS',
-        required: ATTACK_ACTION_POINT_COST,
-        available: attacker.remainingActionPoints,
-      });
-    }
+    const attacked = validated.value;
 
     const damage = attackDamage(attacker, attacked);
     const remainingHealth = Math.max(0, attacked.health - damage);
@@ -239,7 +224,7 @@ export class BattleEngine {
   /**
    * Unit action types the unit may perform in this state; empty for an
    * unknown unit, another player's unit, or a unit other than the one that
-   * has claimed the turn.
+   * has claimed the turn. ATTACK needs at least one legal attack target.
    */
   legalUnitActions(
     state: BattleState,
@@ -248,13 +233,73 @@ export class BattleEngine {
     const unit = state.units.find(({ id }) => id === unitId);
     return new Set(unit ? unitActions(state, unit) : []);
   }
+
+  /**
+   * Every target the unit may attack in this state: units first, then walls,
+   * then orbs, each in collection order. Empty for an unknown unit or one that
+   * may not attack now. Each target offered is accepted by `attack` from the
+   * same state.
+   */
+  legalAttackTargets(
+    state: BattleState,
+    unitId: string,
+  ): readonly AttackTarget[] {
+    const unit = state.units.find(({ id }) => id === unitId);
+    return unit ? attackTargets(state, unit) : [];
+  }
 }
 
 function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
   if (!mayAct(state, unit)) {
     return [];
   }
-  return canMoveAnywhere(state, unit) ? ['MOVE'] : [];
+  const actions: UnitActionType[] = [];
+  if (canMoveAnywhere(state, unit)) {
+    actions.push('MOVE');
+  }
+  if (attackTargets(state, unit).length > 0) {
+    actions.push('ATTACK');
+  }
+  return actions;
+}
+
+/**
+ * Every attack rule except the attacker's existence. `attack` reports the
+ * first violation and the legal-target query keeps only the targets with
+ * none, so an offered target is never rejected on execution.
+ */
+function validateAttack(
+  state: BattleState,
+  attacker: Unit,
+  target: AttackTarget,
+): Result<Unit | Wall | Orb, AttackError> {
+  if (!mayAct(state, attacker)) {
+    return err({ type: 'UNIT_CANNOT_ATTACK', unitId: attacker.id });
+  }
+  const attacked = findTarget(state, target);
+  if (!attacked) {
+    return err({ type: 'TARGET_NOT_FOUND', target });
+  }
+  if (attacked.owner === attacker.owner) {
+    return err({ type: 'INVALID_TARGET', target });
+  }
+  if (!inMeleeRange(attacker, attacked)) {
+    return err({ type: 'TARGET_OUT_OF_RANGE', target });
+  }
+  if (attacker.remainingActionPoints < ATTACK_ACTION_POINT_COST) {
+    return err({
+      type: 'INSUFFICIENT_ACTION_POINTS',
+      required: ATTACK_ACTION_POINT_COST,
+      available: attacker.remainingActionPoints,
+    });
+  }
+  return ok(attacked);
+}
+
+function attackTargets(state: BattleState, attacker: Unit): AttackTarget[] {
+  return ATTACK_TARGET_KINDS.flatMap((kind) =>
+    targetsOfKind(state, kind).map(({ id }): AttackTarget => ({ kind, id })),
+  ).filter((target) => validateAttack(state, attacker, target).ok);
 }
 
 /**

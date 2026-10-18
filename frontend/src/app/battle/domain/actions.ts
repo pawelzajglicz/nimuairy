@@ -4,6 +4,6 @@
  * END_TURN belongs to the player, not to a unit. Selecting a unit is UI state,
  * not an action.
  */
-export type UnitActionType = 'MOVE';
+export type UnitActionType = 'MOVE' | 'ATTACK';
 
 export type ActionType = UnitActionType | 'END_TURN';

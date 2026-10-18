@@ -1,6 +1,12 @@
 import type { BattleState } from './battle-state';
 
-export type AttackTargetKind = 'UNIT' | 'WALL' | 'ORB';
+/**
+ * The kind type is derived from this list, so the legal-target query, which
+ * walks the list, cannot miss a kind.
+ */
+export const ATTACK_TARGET_KINDS = ['UNIT', 'WALL', 'ORB'] as const;
+
+export type AttackTargetKind = (typeof ATTACK_TARGET_KINDS)[number];
 
 /**
  * Identifies the attacked object. The kind is part of the identity because ids

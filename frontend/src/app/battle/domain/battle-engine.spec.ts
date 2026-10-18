@@ -1692,4 +1692,355 @@ describe('BattleEngine ATTACK', () => {
       expect(unitIn(next, 'right-1x1')).toBe(enemyUnit);
     });
   });
+
+  describe('legal attack targets', () => {
+    const friend = testUnit({ id: 'left-other', position: { x: 2, y: 3 } });
+
+    it('offers an adjacent enemy unit, wall and orb, each with its kind', () => {
+      const state = testState({
+        units: [besideStructures, enemy()],
+        walls: [testWall()],
+        orbs: [testOrb({ position: { x: 4, y: 1 } })],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([
+        ENEMY,
+        ENEMY_WALL,
+        ENEMY_ORB,
+      ]);
+    });
+
+    it('offers a target the attack would deal 0 damage to', () => {
+      const state = testState({ units: [testUnit(), enemy({ defense: 10 })] });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([ENEMY]);
+    });
+
+    it("never offers friendly units, the attacker itself, or the attacker's own wall and orb", () => {
+      const state = testState({
+        units: [testUnit(), friend],
+        walls: [
+          testWall({
+            id: 'left-wall',
+            owner: 'LEFT',
+            position: { x: 3, y: 1 },
+          }),
+        ],
+        orbs: [
+          testOrb({ id: 'left-orb', owner: 'LEFT', position: { x: 1, y: 2 } }),
+        ],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([]);
+    });
+
+    it('never offers a target out of range or touching only diagonally', () => {
+      const state = testState({
+        units: [
+          testUnit(),
+          enemy({ position: { x: 4, y: 2 } }),
+          enemy({ id: 'right-diagonal', position: { x: 3, y: 3 } }),
+        ],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([]);
+    });
+
+    it('compares the whole footprints of a multi-cell attacker and its targets', () => {
+      const state = testState({
+        units: [
+          testUnit({ footprint: FOOTPRINTS['2x2'] }),
+          // Meets the attacker's (2,3) only at a corner.
+          enemy({ position: { x: 1, y: 4 } }),
+        ],
+        // (4,3) touches the attacker's non-anchor cell (3,3).
+        walls: [testWall({ position: { x: 4, y: 3 } })],
+        orbs: [testOrb({ position: { x: 1, y: 1 } })],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([
+        ENEMY_WALL,
+      ]);
+    });
+
+    it.each([
+      [2, [ENEMY]],
+      [1, []],
+      [0, []],
+    ])('with %i AP left offers %o', (remainingActionPoints, targets) => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints }), enemy()],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual(targets);
+    });
+
+    it("offers nothing to the other player's unit", () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+
+      expect(engine.legalAttackTargets(state, 'right-1x1')).toEqual([]);
+    });
+
+    it('reads the current player from the battle state', () => {
+      const state = testState({
+        units: [testUnit(), enemy()],
+        currentPlayer: 'RIGHT',
+      });
+
+      expect(engine.legalAttackTargets(state, 'right-1x1')).toEqual([
+        { kind: 'UNIT', id: 'left-1x1' },
+      ]);
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([]);
+    });
+
+    it('offers nothing while another unit holds the turn, and keeps the targets of the unit that holds it', () => {
+      const units = [testUnit(), friend, enemy()];
+
+      expect(
+        engine.legalAttackTargets(
+          testState({ units, activeUnitId: 'left-other' }),
+          'left-1x1',
+        ),
+      ).toEqual([]);
+      expect(
+        engine.legalAttackTargets(
+          testState({ units, activeUnitId: 'left-1x1' }),
+          'left-1x1',
+        ),
+      ).toEqual([ENEMY]);
+    });
+
+    it('offers nothing to an unknown unit', () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+
+      expect(engine.legalAttackTargets(state, 'ghost')).toEqual([]);
+    });
+
+    it('tells apart targets whose ids collide across collections', () => {
+      const unitAndDistantWall = testState({
+        units: [testUnit(), enemy({ id: 'shared' })],
+        walls: [testWall({ id: 'shared', position: { x: 7, y: 0 } })],
+      });
+      const adjacentWallAndOrb = testState({
+        units: [besideStructures],
+        walls: [testWall({ id: 'shared' })],
+        orbs: [testOrb({ id: 'shared', position: { x: 4, y: 1 } })],
+      });
+
+      expect(engine.legalAttackTargets(unitAndDistantWall, 'left-1x1')).toEqual(
+        [{ kind: 'UNIT', id: 'shared' }],
+      );
+      expect(engine.legalAttackTargets(adjacentWallAndOrb, 'left-1x1')).toEqual(
+        [
+          { kind: 'WALL', id: 'shared' },
+          { kind: 'ORB', id: 'shared' },
+        ],
+      );
+    });
+
+    it('leaves the battle state untouched', () => {
+      const state = testState({
+        units: [besideStructures, friend, enemy()],
+        walls: [testWall()],
+        orbs: [testOrb({ position: { x: 4, y: 1 } })],
+      });
+      const before = structuredClone(state);
+
+      for (const { id } of state.units) {
+        engine.legalAttackTargets(state, id);
+        engine.legalUnitActions(state, id);
+      }
+      engine.legalActions(state);
+
+      expect(state).toEqual(before);
+    });
+  });
+
+  describe('legal actions', () => {
+    const friend = testUnit({ id: 'left-other', position: { x: 6, y: 6 } });
+
+    it('offers ATTACK next to MOVE when an enemy is in range', () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE', 'ATTACK']),
+      );
+    });
+
+    it('offers ATTACK alone to a unit boxed in by enemies', () => {
+      // From the corner, both orthogonal steps are taken and the diagonal
+      // would cut between the two enemies.
+      const state = testState({
+        units: [
+          testUnit({ position: { x: 0, y: 0 } }),
+          enemy({ id: 'right-east', position: { x: 1, y: 0 } }),
+          enemy({ id: 'right-north', position: { x: 0, y: 1 } }),
+        ],
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['ATTACK']),
+      );
+    });
+
+    it('offers no ATTACK without a target in range', () => {
+      const state = testState({
+        units: [testUnit(), enemy({ position: { x: 4, y: 2 } })],
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+    });
+
+    it('offers no ATTACK with 1 AP left, though MOVE still fits', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 1 }), enemy()],
+      });
+
+      expect(engine.legalUnitActions(state, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+    });
+
+    it('offers no ATTACK to a unit that may not act, even next to an enemy', () => {
+      const units = [testUnit(), friend, enemy()];
+
+      expect(
+        engine.legalUnitActions(testState({ units }), 'right-1x1'),
+      ).toEqual(new Set());
+      expect(
+        engine.legalUnitActions(
+          testState({ units, activeUnitId: 'left-other' }),
+          'left-1x1',
+        ),
+      ).toEqual(new Set());
+    });
+
+    it('includes ATTACK in the legal actions when an eligible unit can attack', () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+
+      expect(engine.legalActions(state)).toEqual(
+        new Set(['MOVE', 'ATTACK', 'END_TURN']),
+      );
+    });
+
+    it('leaves ATTACK out when only a unit that does not hold the turn is next to an enemy', () => {
+      const units = [testUnit(), friend, enemy({ position: { x: 7, y: 6 } })];
+
+      expect(engine.legalActions(testState({ units }))).toEqual(
+        new Set(['MOVE', 'ATTACK', 'END_TURN']),
+      );
+      expect(
+        engine.legalActions(testState({ units, activeUnitId: 'left-1x1' })),
+      ).toEqual(new Set(['MOVE', 'END_TURN']));
+    });
+
+    it('offers only END_TURN once the active unit is at 0 AP next to an enemy', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 0 }), enemy()],
+        activeUnitId: 'left-1x1',
+      });
+
+      expect(engine.legalActions(state)).toEqual(new Set(['END_TURN']));
+    });
+  });
+
+  describe('legal targets and execution', () => {
+    /**
+     * A 2×2 attacker at (2,2) with, around it: an enemy unit, wall and orb in
+     * range; an enemy touching only diagonally; a friend; its own wall; a
+     * distant enemy; and a distant enemy wall sharing the enemy unit's id.
+     */
+    function battlefield(
+      options: Pick<TestStateOptions, 'activeUnitId' | 'currentPlayer'> & {
+        readonly attackerActionPoints?: number;
+      } = {},
+    ): BattleState {
+      return testState({
+        units: [
+          testUnit({
+            footprint: FOOTPRINTS['2x2'],
+            remainingActionPoints: options.attackerActionPoints ?? 5,
+          }),
+          enemy({ position: { x: 4, y: 2 } }),
+          enemy({ id: 'right-diagonal', position: { x: 4, y: 4 } }),
+          enemy({ id: 'right-far', position: { x: 7, y: 7 } }),
+          testUnit({ id: 'left-other', position: { x: 1, y: 2 } }),
+        ],
+        walls: [
+          testWall({ position: { x: 2, y: 4 } }),
+          testWall({
+            id: 'left-wall',
+            owner: 'LEFT',
+            position: { x: 1, y: 3 },
+            footprint: FOOTPRINTS['1x1'],
+          }),
+          testWall({
+            id: 'right-1x1',
+            position: { x: 6, y: 0 },
+            footprint: FOOTPRINTS['1x1'],
+          }),
+        ],
+        orbs: [testOrb({ position: { x: 3, y: 1 } })],
+        activeUnitId: options.activeUnitId,
+        currentPlayer: options.currentPlayer,
+      });
+    }
+
+    function everyTarget(state: BattleState): AttackTarget[] {
+      return [
+        ...state.units.map(({ id }): AttackTarget => ({ kind: 'UNIT', id })),
+        ...state.walls.map(({ id }): AttackTarget => ({ kind: 'WALL', id })),
+        ...state.orbs.map(({ id }): AttackTarget => ({ kind: 'ORB', id })),
+      ];
+    }
+
+    const inRange = [ENEMY, ENEMY_WALL, ENEMY_ORB];
+
+    it.each<
+      [string, BattleState, Readonly<Record<string, readonly AttackTarget[]>>]
+    >([
+      ['an unclaimed turn', battlefield(), { 'left-1x1': inRange }],
+      [
+        'a turn claimed by the attacker',
+        battlefield({ activeUnitId: 'left-1x1' }),
+        { 'left-1x1': inRange },
+      ],
+      [
+        'a turn claimed by another unit',
+        battlefield({ activeUnitId: 'left-other' }),
+        {},
+      ],
+      [
+        'an attacker with exactly 2 AP',
+        battlefield({ attackerActionPoints: 2 }),
+        { 'left-1x1': inRange },
+      ],
+      ['an attacker with 1 AP', battlefield({ attackerActionPoints: 1 }), {}],
+      [
+        "RIGHT's turn",
+        battlefield({ currentPlayer: 'RIGHT' }),
+        { 'right-1x1': [{ kind: 'UNIT', id: 'left-1x1' }] },
+      ],
+    ])(
+      'in %s, offers exactly the targets that execution accepts',
+      (_, state, expected) => {
+        for (const { id: unitId } of state.units) {
+          const offered = engine.legalAttackTargets(state, unitId);
+          const executable = everyTarget(state).filter(
+            (target) =>
+              engine.attack(state, attackCommand(target, { unitId })).ok,
+          );
+
+          expect(offered, unitId).toEqual(expected[unitId] ?? []);
+          expect(executable, unitId).toEqual(offered);
+          expect(
+            engine.legalUnitActions(state, unitId).has('ATTACK'),
+            unitId,
+          ).toBe(offered.length > 0);
+        }
+      },
+    );
+  });
 });
