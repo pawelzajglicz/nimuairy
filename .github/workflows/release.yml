@@ -1,0 +1,82 @@
+name: Release - deploy on VPS
+
+# Manual production deploy: choosing which build goes live is a deliberate decision, so this runs
+# only via workflow_dispatch. build-and-push.yml builds images on every master push; this workflow
+# only picks a tag (= full commit SHA) and hands it to deploy-on-vps.yml.
+#
+# image_tag left empty deploys the SHA of the branch the workflow was started from (normally
+# master's latest commit). An explicit older SHA is a manual rollback.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full 40-character commit SHA to deploy. Empty = latest commit of the selected branch.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-tag:
+    name: Resolve SHA to deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - id: tag
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          BRANCH_SHA: ${{ github.sha }}
+        run: |
+          TAG="${INPUT_TAG:-$BRANCH_SHA}"
+          if [[ ! "$TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::image_tag must be a full 40-character lowercase SHA, got: $TAG"
+            exit 1
+          fi
+          echo "Deploying $TAG"
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  # Fails before touching the VPS, instead of leaving the missing image to the deploy's rollback.
+  validate-image:
+    name: Check images exist in GHCR
+    needs: resolve-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      packages: read
+    steps:
+      - env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ needs.resolve-tag.outputs.image_tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          missing=0
+          for image in nimuairy-api nimuairy-frontend; do
+            ref="ghcr.io/${OWNER,,}/$image:$IMAGE_TAG"
+            if docker manifest inspect "$ref" > /dev/null 2>&1; then
+              echo "Found $ref"
+            else
+              echo "::error::$ref not found. Did build-and-push.yml succeed for this commit?"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+  deploy:
+    needs: [resolve-tag, validate-image]
+    uses: ./.github/workflows/deploy-on-vps.yml
+    with:
+      image_tag: ${{ needs.resolve-tag.outputs.image_tag }}
+      environment: production
+    secrets:
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
