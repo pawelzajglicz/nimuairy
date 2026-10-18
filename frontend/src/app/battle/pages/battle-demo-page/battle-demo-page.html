@@ -28,6 +28,8 @@
       [interactionMode]="store.interactionMode()"
       [reachableDestinations]="store.reachableDestinations()"
       [movementPreview]="store.movementPreview()"
+      [attackTargets]="store.attackTargets()"
+      [attackedTarget]="store.attackedTarget()"
       (interaction)="onBoardInteraction($event)"
       (destinationHover)="store.hoverDestination($event)"
     />

@@ -1,12 +1,13 @@
 import { Component, computed, input } from '@angular/core';
 import type { Position, Unit } from '../../domain/battle-state';
+import type { AttackError } from '../../domain/combat';
 import type { MovementError } from '../../domain/movement';
-import type { LastMovementOutcome } from '../../movement-outcome';
+import type { LastActionOutcome } from '../../action-outcome';
 import type { MovementPreview } from '../../movement-preview';
 
 /**
- * Technical movement information for manual testing: the selected unit's
- * AP, the hovered preview, and the last move outcome. Every number
+ * Technical movement and combat information for manual testing: the selected
+ * unit's HP and AP, the hovered preview, and the last action outcome. Every number
  * comes from the domain; this component only formats it.
  */
 @Component({
@@ -17,7 +18,7 @@ import type { MovementPreview } from '../../movement-preview';
 export class MovementInfoComponent {
   readonly unit = input<Unit>();
   readonly preview = input<MovementPreview>();
-  readonly lastOutcome = input<LastMovementOutcome>();
+  readonly lastOutcome = input<LastActionOutcome>();
 
   /** Display arithmetic on two domain fields, not a movement-cost calculation. */
   protected readonly spent = computed(() => {
@@ -42,8 +43,13 @@ export class MovementInfoComponent {
         const to = outcome.steps[outcome.steps.length - 1].to;
         return `${outcome.owner} moved ${outcome.unitId} ${cell(from)} → ${cell(to)} · cost ${cost(outcome.cost)}`;
       }
+      case 'ATTACKED': {
+        const { kind, id } = outcome.target;
+        const destroyed = outcome.remainingHealth === 0 ? ' · destroyed' : '';
+        return `${outcome.owner} ${outcome.unitId} attacked ${kind} ${id} · damage ${outcome.damage} · remaining HP ${outcome.remainingHealth} · cost ${cost(outcome.cost)}${destroyed}`;
+      }
       case 'REJECTED':
-        return `Move rejected: ${errorText(outcome.error)}`;
+        return `${outcome.action === 'MOVE' ? 'Move' : 'Attack'} rejected: ${errorText(outcome.error)}`;
     }
   });
 }
@@ -56,7 +62,7 @@ function cost(actionPoints: number): string {
   return `${actionPoints} AP`;
 }
 
-function errorText(error: MovementError): string {
+function errorText(error: MovementError | AttackError): string {
   switch (error.type) {
     case 'INVALID_PATH':
       return `INVALID_PATH (${error.reason})`;

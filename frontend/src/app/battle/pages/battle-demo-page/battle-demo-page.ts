@@ -30,6 +30,9 @@ export class BattleDemoPage {
       case 'destination-clicked':
         this.store.moveSelectedUnit(interaction.position);
         break;
+      case 'attack-target-clicked':
+        this.store.attackTarget(interaction.target);
+        break;
     }
   }
 }

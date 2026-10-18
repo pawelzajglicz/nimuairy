@@ -2,14 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { Unit } from '../../domain/battle-state';
 import { testUnit } from '../../domain/testing/battle-fixtures';
-import type { LastMovementOutcome } from '../../movement-outcome';
+import type { LastActionOutcome } from '../../action-outcome';
 import type { MovementPreview } from '../../movement-preview';
 import { MovementInfoComponent } from './movement-info.component';
 
 interface Inputs {
   unit?: Unit;
   preview?: MovementPreview;
-  lastOutcome?: LastMovementOutcome;
+  lastOutcome?: LastActionOutcome;
 }
 
 function render(inputs: Inputs = {}) {
@@ -40,11 +40,11 @@ const movedUnit = testUnit({
 
 describe('MovementInfoComponent', () => {
   describe('selected unit', () => {
-    it('shows AP spent, the budget and what remains', () => {
+    it('shows HP, AP spent, the budget and what remains', () => {
       const fixture = render({ unit: movedUnit });
 
       expect(text(fixture, '.unit-movement')).toBe(
-        'unit-left-2 (LEFT) · AP spent 3 / 5 · remaining 2',
+        'unit-left-2 (LEFT) · HP 10 · AP spent 3 / 5 · remaining 2',
       );
     });
 
@@ -52,7 +52,7 @@ describe('MovementInfoComponent', () => {
       const fixture = render({ unit: testUnit() });
 
       expect(text(fixture, '.unit-movement')).toBe(
-        'left-1x1 (LEFT) · AP spent 0 / 5 · remaining 5',
+        'left-1x1 (LEFT) · HP 10 · AP spent 0 / 5 · remaining 5',
       );
     });
 
@@ -102,7 +102,43 @@ describe('MovementInfoComponent', () => {
       );
     });
 
-    it.each<{ outcome: LastMovementOutcome; expected: string }>([
+    it("describes an attack with the engine's damage, remaining HP and AP cost", () => {
+      const fixture = render({
+        lastOutcome: {
+          kind: 'ATTACKED',
+          unitId: 'unit-left-1',
+          owner: 'LEFT',
+          target: { kind: 'UNIT', id: 'unit-right-1' },
+          damage: 10,
+          remainingHealth: 90,
+          cost: 2,
+        },
+      });
+
+      expect(text(fixture, '.last-outcome')).toBe(
+        'LEFT unit-left-1 attacked UNIT unit-right-1 · damage 10 · remaining HP 90 · cost 2 AP',
+      );
+    });
+
+    it('reports a target the attack destroyed, though it may be gone from the board', () => {
+      const fixture = render({
+        lastOutcome: {
+          kind: 'ATTACKED',
+          unitId: 'unit-left-1',
+          owner: 'LEFT',
+          target: { kind: 'WALL', id: 'wall-right' },
+          damage: 150,
+          remainingHealth: 0,
+          cost: 2,
+        },
+      });
+
+      expect(text(fixture, '.last-outcome')).toBe(
+        'LEFT unit-left-1 attacked WALL wall-right · damage 150 · remaining HP 0 · cost 2 AP · destroyed',
+      );
+    });
+
+    it.each<{ outcome: LastActionOutcome; expected: string }>([
       {
         outcome: {
           kind: 'REJECTED',
@@ -131,6 +167,30 @@ describe('MovementInfoComponent', () => {
           error: { type: 'UNIT_CANNOT_MOVE', unitId: 'unit-right-1' },
         },
         expected: 'Move rejected: UNIT_CANNOT_MOVE',
+      },
+      {
+        outcome: {
+          kind: 'REJECTED',
+          action: 'ATTACK',
+          error: {
+            type: 'TARGET_OUT_OF_RANGE',
+            target: { kind: 'UNIT', id: 'unit-right-1' },
+          },
+        },
+        expected: 'Attack rejected: TARGET_OUT_OF_RANGE',
+      },
+      {
+        outcome: {
+          kind: 'REJECTED',
+          action: 'ATTACK',
+          error: {
+            type: 'INSUFFICIENT_ACTION_POINTS',
+            required: 2,
+            available: 1,
+          },
+        },
+        expected:
+          'Attack rejected: INSUFFICIENT_ACTION_POINTS (needs 2 AP, has 1 AP)',
       },
     ])('describes a rejection: $expected', ({ outcome, expected }) => {
       expect(text(render({ lastOutcome: outcome }), '.last-outcome')).toBe(

@@ -1,7 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { BattleState, Position } from '../../domain/battle-state';
-import { testUnit } from '../../domain/testing/battle-fixtures';
+import type { AttackTarget } from '../../domain/combat';
+import {
+  testOrb,
+  testUnit,
+  testWall,
+} from '../../domain/testing/battle-fixtures';
 import { InteractionMode } from '../../interaction-mode';
 import { toGridPosition } from '../../utils/coordinate-mapper';
 import { EntityLayerComponent } from './entity-layer.component';
@@ -501,6 +506,203 @@ describe('EntityLayerComponent', () => {
           '.entity-cell.selected[data-selection-mode="ATTACK"]',
         ),
       ).toHaveLength(3);
+    });
+  });
+
+  describe('attack targets', () => {
+    const attacker = testUnit({ id: 'left-1', position: { x: 2, y: 2 } });
+    const friend = testUnit({ id: 'left-2', position: { x: 2, y: 3 } });
+    const enemy = testUnit({
+      id: 'right-1',
+      owner: 'RIGHT',
+      position: { x: 3, y: 2 },
+    });
+    const state = buildBattleState({
+      units: [attacker, friend, enemy],
+      walls: [testWall({ id: 'shared', position: { x: 1, y: 1 } })],
+      orbs: [testOrb({ id: 'shared', position: { x: 0, y: 2 } })],
+    });
+
+    function renderTargets(
+      battleState: BattleState,
+      {
+        targets = [],
+        attacked,
+        mode = InteractionMode.ATTACK,
+      }: {
+        targets?: readonly AttackTarget[];
+        attacked?: AttackTarget;
+        mode?: InteractionMode;
+      } = {},
+    ) {
+      const fixture = TestBed.createComponent(EntityLayerComponent);
+      fixture.componentRef.setInput('battleState', battleState);
+      fixture.componentRef.setInput('selectedUnitId', 'left-1');
+      fixture.componentRef.setInput('interactionMode', mode);
+      fixture.componentRef.setInput('attackTargets', targets);
+      fixture.componentRef.setInput('attackedTarget', attacked);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function cellsOf(
+      fixture: ReturnType<typeof renderTargets>,
+      kind: string,
+    ): HTMLElement[] {
+      return Array.from(
+        fixture.nativeElement.querySelectorAll(
+          `.entity-cell[data-kind="${kind}"]`,
+        ),
+      );
+    }
+
+    function capture(fixture: ReturnType<typeof renderTargets>) {
+      const attacks: AttackTarget[] = [];
+      const units: string[] = [];
+      fixture.componentInstance.attackTargetClick.subscribe((target) =>
+        attacks.push(target),
+      );
+      fixture.componentInstance.unitClick.subscribe((id) => units.push(id));
+      return { attacks, units };
+    }
+
+    it('marks only the given targets, and leaves walls and orbs inert otherwise', () => {
+      const fixture = renderTargets(state, {
+        targets: [{ kind: 'UNIT', id: 'right-1' }],
+      });
+      const targets: HTMLElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('.attack-target'),
+      );
+
+      expect(targets.map((cell) => cell.getAttribute('data-kind'))).toEqual([
+        'unit',
+      ]);
+      for (const cell of [
+        ...cellsOf(fixture, 'wall'),
+        ...cellsOf(fixture, 'orb'),
+      ]) {
+        expect(cell.tagName).toBe('DIV');
+      }
+    });
+
+    it('does not dim an attack target while a unit is selected', () => {
+      const fixture = renderTargets(state, {
+        targets: [{ kind: 'UNIT', id: 'right-1' }],
+      });
+      const [friendCell, enemyCell] = cellsOf(fixture, 'unit').slice(1);
+
+      expect(friendCell.classList).toContain('dimmed');
+      expect(enemyCell.classList).not.toContain('dimmed');
+    });
+
+    it('emits an attack, not a selection, when a target unit is clicked', () => {
+      const fixture = renderTargets(state, {
+        targets: [{ kind: 'UNIT', id: 'right-1' }],
+      });
+      const emitted = capture(fixture);
+
+      cellsOf(fixture, 'unit')[2].click();
+
+      expect(emitted.attacks).toEqual([{ kind: 'UNIT', id: 'right-1' }]);
+      expect(emitted.units).toEqual([]);
+    });
+
+    it('still selects a unit that is not a target', () => {
+      const fixture = renderTargets(state, {
+        targets: [{ kind: 'UNIT', id: 'right-1' }],
+      });
+      const emitted = capture(fixture);
+
+      cellsOf(fixture, 'unit')[1].click();
+
+      expect(emitted.units).toEqual(['left-2']);
+      expect(emitted.attacks).toEqual([]);
+    });
+
+    it('turns a wall or orb target into a button that emits its own kind', () => {
+      const fixture = renderTargets(state, {
+        targets: [
+          { kind: 'WALL', id: 'shared' },
+          { kind: 'ORB', id: 'shared' },
+        ],
+      });
+      const emitted = capture(fixture);
+      const [wallCell] = cellsOf(fixture, 'wall');
+      const [orbCell] = cellsOf(fixture, 'orb');
+
+      expect(wallCell.tagName).toBe('BUTTON');
+      expect(orbCell.tagName).toBe('BUTTON');
+      wallCell.click();
+      orbCell.click();
+
+      expect(emitted.attacks).toEqual([
+        { kind: 'WALL', id: 'shared' },
+        { kind: 'ORB', id: 'shared' },
+      ]);
+    });
+
+    it('tells apart a wall and an orb that share an id', () => {
+      const fixture = renderTargets(state, {
+        targets: [{ kind: 'ORB', id: 'shared' }],
+        attacked: { kind: 'ORB', id: 'shared' },
+      });
+
+      expect(cellsOf(fixture, 'orb')[0].classList).toContain('attack-target');
+      expect(cellsOf(fixture, 'orb')[0].classList).toContain('attacked');
+      for (const cell of cellsOf(fixture, 'wall')) {
+        expect(cell.classList).not.toContain('attack-target');
+        expect(cell.classList).not.toContain('attacked');
+      }
+    });
+
+    it("labels a target with what a click does and the target's current HP", () => {
+      const fixture = renderTargets(state, {
+        targets: [
+          { kind: 'UNIT', id: 'right-1' },
+          { kind: 'WALL', id: 'shared' },
+        ],
+      });
+
+      expect(cellsOf(fixture, 'unit')[2].getAttribute('aria-label')).toBe(
+        'Attack RIGHT unit right-1, 10 HP',
+      );
+      expect(cellsOf(fixture, 'wall')[0].getAttribute('aria-label')).toBe(
+        'Attack RIGHT wall shared, 30 HP',
+      );
+      expect(cellsOf(fixture, 'unit')[1].getAttribute('aria-label')).toBe(
+        'LEFT unit',
+      );
+    });
+
+    it('highlights every footprint cell of the attacked target, and nothing else', () => {
+      const fixture = renderTargets(state, {
+        attacked: { kind: 'WALL', id: 'shared' },
+        mode: InteractionMode.MOVE,
+      });
+      const highlighted: HTMLElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('.attacked'),
+      );
+
+      // testWall is a 1×3 column.
+      expect(highlighted).toHaveLength(3);
+      expect(
+        highlighted.every((cell) => cell.getAttribute('data-kind') === 'wall'),
+      ).toBe(true);
+    });
+
+    it('shows an orb at 0 HP as destroyed, and one with HP left as intact', () => {
+      const fixture = renderTargets(
+        buildBattleState({
+          orbs: [
+            testOrb({ id: 'destroyed', health: 0, position: { x: 0, y: 0 } }),
+            testOrb({ id: 'intact', health: 1, position: { x: 5, y: 0 } }),
+          ],
+        }),
+      );
+      const [destroyed, intact] = cellsOf(fixture, 'orb');
+
+      expect(destroyed.getAttribute('data-destroyed')).toBe('true');
+      expect(intact.hasAttribute('data-destroyed')).toBe(false);
     });
   });
 });

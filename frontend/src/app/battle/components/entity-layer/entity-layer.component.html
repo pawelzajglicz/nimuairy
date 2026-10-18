@@ -6,16 +6,21 @@
     [style.aspect-ratio]="board.width + ' / ' + board.height"
   >
     @for (cell of entityCells(); track cell.key) {
-      @if (cell.kind === 'unit') {
+      @if (cell.kind === 'unit' || isAttackTarget(cell)) {
         <button
           type="button"
           class="entity-cell"
           [class.selected]="isSelected(cell)"
           [class.dimmed]="isDimmed(cell)"
+          [class.attack-target]="isAttackTarget(cell)"
+          [class.attacked]="isAttacked(cell)"
           [attr.data-selection-mode]="selectionMode(cell)"
           [attr.data-kind]="cell.kind"
           [attr.data-owner]="cell.owner"
-          [attr.aria-label]="cell.owner + ' unit'"
+          [attr.data-destroyed]="cell.destroyed || null"
+          [attr.aria-label]="
+            isAttackTarget(cell) ? attackLabel(cell) : cell.owner + ' unit'
+          "
           [style.grid-column]="cell.gridColumn"
           [style.grid-row]="cell.gridRow"
           (click)="onEntityCellClick(cell)"
@@ -23,8 +28,10 @@
       } @else {
         <div
           class="entity-cell"
+          [class.attacked]="isAttacked(cell)"
           [attr.data-kind]="cell.kind"
           [attr.data-owner]="cell.owner"
+          [attr.data-destroyed]="cell.destroyed || null"
           [style.grid-column]="cell.gridColumn"
           [style.grid-row]="cell.gridRow"
         ></div>

@@ -9,7 +9,7 @@
       <app-cell
         [position]="cell.position"
         [terrainType]="cell.terrainType"
-        [occupiedByUnit]="cell.occupiedByUnit"
+        [coveredByEntity]="cell.coveredByEntity"
         [style.grid-column]="cell.gridColumn"
         [style.grid-row]="cell.gridRow"
         (cellClick)="cellClick.emit($event)"

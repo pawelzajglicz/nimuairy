@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { BoardInteraction } from '../../board-interaction';
 import type { BattleState, Position } from '../../domain/battle-state';
 import type { ReachableCell } from '../../domain/movement';
-import { FOOTPRINTS, testUnit } from '../../domain/testing/battle-fixtures';
+import type { AttackTarget } from '../../domain/combat';
+import {
+  FOOTPRINTS,
+  testUnit,
+  testWall,
+} from '../../domain/testing/battle-fixtures';
+import { InteractionMode } from '../../interaction-mode';
 import type { MovementPreview } from '../../movement-preview';
 import { BattleBoardComponent } from './battle-board.component';
 
@@ -332,6 +338,91 @@ describe('BattleBoardComponent', () => {
       expect(
         fixture.nativeElement.querySelectorAll('.footprint-preview'),
       ).toHaveLength(2);
+    });
+  });
+
+  describe('attack targets', () => {
+    // Terrain index = position in this list: (1,0), (2,0), (1,1), (2,1).
+    const state = buildBattleState({
+      board: terrainAt([1, 0], [2, 0], [1, 1], [2, 1]),
+      units: [
+        testUnit({ id: 'left-1', position: { x: 1, y: 0 } }),
+        testUnit({ id: 'right-1', owner: 'RIGHT', position: { x: 2, y: 0 } }),
+      ],
+      walls: [
+        testWall({
+          id: 'right-wall',
+          position: { x: 1, y: 1 },
+          footprint: FOOTPRINTS['2x1'],
+        }),
+      ],
+    });
+
+    function renderWithTargets(targets: readonly AttackTarget[]) {
+      const fixture = TestBed.createComponent(BattleBoardComponent);
+      fixture.componentRef.setInput('battleState', state);
+      fixture.componentRef.setInput('selectedUnitId', 'left-1');
+      fixture.componentRef.setInput('interactionMode', InteractionMode.ATTACK);
+      fixture.componentRef.setInput('attackTargets', targets);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function entityButton(
+      fixture: ReturnType<typeof renderWithTargets>,
+      kind: string,
+    ): HTMLElement {
+      return fixture.nativeElement.querySelector(
+        `button.entity-cell[data-kind="${kind}"][data-owner="RIGHT"]`,
+      );
+    }
+
+    it('emits an AttackTargetClicked interaction for a target unit', () => {
+      const fixture = renderWithTargets([{ kind: 'UNIT', id: 'right-1' }]);
+      const emitted = captureInteraction(fixture);
+
+      entityButton(fixture, 'unit').click();
+
+      expect(emitted).toEqual([
+        {
+          kind: 'attack-target-clicked',
+          target: { kind: 'UNIT', id: 'right-1' },
+        },
+      ]);
+    });
+
+    it('emits a UnitClicked interaction for a unit that is not a target', () => {
+      const fixture = renderWithTargets([]);
+      const emitted = captureInteraction(fixture);
+
+      entityButton(fixture, 'unit').click();
+
+      expect(emitted).toEqual([{ kind: 'unit-clicked', unitId: 'right-1' }]);
+    });
+
+    it('makes a target wall the only interactive element on its cells', () => {
+      const fixture = renderWithTargets([{ kind: 'WALL', id: 'right-wall' }]);
+      const emitted = captureInteraction(fixture);
+
+      expect(terrainButton(fixture, 2)).toBeNull();
+      expect(terrainButton(fixture, 3)).toBeNull();
+
+      entityButton(fixture, 'wall').click();
+
+      expect(emitted).toEqual([
+        {
+          kind: 'attack-target-clicked',
+          target: { kind: 'WALL', id: 'right-wall' },
+        },
+      ]);
+    });
+
+    it('keeps the terrain under a wall that is not a target clickable', () => {
+      const fixture = renderWithTargets([]);
+
+      expect(terrainButton(fixture, 2)).not.toBeNull();
+      expect(terrainButton(fixture, 3)).not.toBeNull();
+      expect(entityButton(fixture, 'wall')).toBeNull();
     });
   });
 });

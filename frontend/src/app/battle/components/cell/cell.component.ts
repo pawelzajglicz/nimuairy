@@ -10,8 +10,8 @@ import type { Position, TerrainType } from '../../domain/battle-state';
 export class CellComponent {
   readonly position = input.required<Position>();
   readonly terrainType = input<TerrainType>();
-  /** True when a unit covers this cell; the unit is then the sole click/keyboard target, so the terrain is inert. */
-  readonly occupiedByUnit = input(false);
+  /** True when an interactive entity covers this cell; it is then the sole click/keyboard target, so the terrain is inert. */
+  readonly coveredByEntity = input(false);
 
   readonly cellClick = output<Position>();
 }

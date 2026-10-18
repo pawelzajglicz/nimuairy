@@ -5,12 +5,12 @@ import { CellComponent } from './cell.component';
 
 function render(
   position: Position,
-  occupiedByUnit = false,
+  coveredByEntity = false,
   terrainType?: TerrainType,
 ) {
   const fixture = TestBed.createComponent(CellComponent);
   fixture.componentRef.setInput('position', position);
-  fixture.componentRef.setInput('occupiedByUnit', occupiedByUnit);
+  fixture.componentRef.setInput('coveredByEntity', coveredByEntity);
   if (terrainType !== undefined) {
     fixture.componentRef.setInput('terrainType', terrainType);
   }
@@ -33,7 +33,7 @@ describe('CellComponent', () => {
     });
   });
 
-  describe('when not covered by a unit', () => {
+  describe('when not covered by an interactive entity', () => {
     it('renders as a native button, so it is keyboard operable by construction', () => {
       const fixture = render({ x: 3, y: 2 });
       const cell: HTMLElement = fixture.nativeElement.querySelector('.cell');
@@ -55,7 +55,7 @@ describe('CellComponent', () => {
     });
   });
 
-  describe('when covered by a unit', () => {
+  describe('when covered by an interactive entity', () => {
     it('still renders the terrain, but not as a button or focusable element', () => {
       const fixture = render({ x: 3, y: 2 }, true);
       const cell: HTMLElement = fixture.nativeElement.querySelector('.cell');
