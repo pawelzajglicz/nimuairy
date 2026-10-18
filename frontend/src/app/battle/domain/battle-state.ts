@@ -56,6 +56,7 @@ export interface Wall {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  readonly defense: number;
 }
 
 export interface Orb {
@@ -63,7 +64,12 @@ export interface Orb {
   readonly owner: PlayerSide;
   readonly position: Position;
   readonly footprint: readonly Position[];
+  /**
+   * An orb at 0 HP is destroyed but stays in the battle state, unlike units
+   * and walls, so that victory can be determined from it.
+   */
   readonly health: number;
+  readonly defense: number;
 }
 
 export interface BattleState {

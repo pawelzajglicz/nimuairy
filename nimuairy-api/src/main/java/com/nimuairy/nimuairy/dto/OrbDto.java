@@ -10,7 +10,8 @@ public record OrbDto(
         PlayerSide owner,
         PositionDto position,
         List<PositionDto> footprint,
-        int health
+        int health,
+        int defense
 ) {
 
     public static OrbDto from(Orb orb) {
@@ -19,7 +20,8 @@ public record OrbDto(
                 orb.owner(),
                 PositionDto.from(orb.position()),
                 orb.footprint().offsets().stream().map(PositionDto::from).toList(),
-                orb.health()
+                orb.health(),
+                orb.defense()
         );
     }
 }

@@ -13,4 +13,5 @@ export interface OrbDto {
   position?: PositionDto;
   footprint?: PositionDto[];
   health?: number;
+  defense?: number;
 }

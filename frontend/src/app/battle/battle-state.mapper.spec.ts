@@ -19,6 +19,7 @@ function response(): BattleStateResponse {
         position: { x: 0, y: 5 },
         footprint: [{ x: 0, y: 0 }],
         health: 50,
+        defense: 0,
       },
     ],
     walls: [
@@ -31,6 +32,7 @@ function response(): BattleStateResponse {
           { x: 0, y: 1 },
         ],
         health: 30,
+        defense: 100,
       },
     ],
     units: [
@@ -119,6 +121,25 @@ describe('toBattleState', () => {
       delete incomplete.units![0][field];
 
       expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
+    },
+  );
+
+  it('maps the defense of walls and orbs', () => {
+    const state = toBattleState(response());
+
+    expect(state.walls[0].defense).toBe(100);
+    expect(state.orbs[0].defense).toBe(0);
+  });
+
+  it.each(['walls', 'orbs'] as const)(
+    'rejects %s without defense instead of defaulting it',
+    (collection) => {
+      const incomplete = response();
+      delete incomplete[collection]![0].defense;
+
+      expect(() => toBattleState(incomplete)).toThrow(
+        `${collection.slice(0, -1)}.defense`,
+      );
     },
   );
 

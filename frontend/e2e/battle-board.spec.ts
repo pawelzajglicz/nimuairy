@@ -37,6 +37,7 @@ const battleState: BattleStateResponse = {
       position: { x: 4, y: 1 },
       footprint: [{ x: 0, y: 0 }],
       health: 75,
+      defense: 0,
     },
   ],
   walls: [
@@ -50,6 +51,7 @@ const battleState: BattleStateResponse = {
         { x: 0, y: 2 },
       ],
       health: 1500,
+      defense: 100,
     },
   ],
   currentPlayer: 'LEFT',

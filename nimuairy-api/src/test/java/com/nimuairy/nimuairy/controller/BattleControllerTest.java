@@ -51,8 +51,8 @@ class BattleControllerTest {
         Footprint unitFootprint = new Footprint(List.of(new Position(0, 0)));
         BattleState battleState = new BattleState(
                 new Board(21, 11, List.of(new Terrain(new Position(0, 0), TerrainType.PLAIN))),
-                List.of(new Orb("orb-left", PlayerSide.LEFT, new Position(0, 5), unitFootprint, 75)),
-                List.of(new Wall("wall-left", PlayerSide.LEFT, new Position(1, 0), unitFootprint, 1500)),
+                List.of(new Orb("orb-left", PlayerSide.LEFT, new Position(0, 5), unitFootprint, 75, 0)),
+                List.of(new Wall("wall-left", PlayerSide.LEFT, new Position(1, 0), unitFootprint, 1000, 100)),
                 List.of(new Unit("unit-left-1", PlayerSide.LEFT, UnitType.SWORDSMAN, new Position(3, 2),
                         unitFootprint, 500, 200, 50, 3, 1)),
                 PlayerSide.RIGHT
@@ -68,8 +68,11 @@ class BattleControllerTest {
                 .andExpect(jsonPath("$.orbs[0].owner").value("LEFT"))
                 .andExpect(jsonPath("$.orbs[0].position.x").value(0))
                 .andExpect(jsonPath("$.orbs[0].position.y").value(5))
+                .andExpect(jsonPath("$.orbs[0].health").value(75))
+                .andExpect(jsonPath("$.orbs[0].defense").value(0))
                 .andExpect(jsonPath("$.walls[0].id").value("wall-left"))
-                .andExpect(jsonPath("$.walls[0].health").value(1500))
+                .andExpect(jsonPath("$.walls[0].health").value(1000))
+                .andExpect(jsonPath("$.walls[0].defense").value(100))
                 .andExpect(jsonPath("$.units[0].id").value("unit-left-1"))
                 .andExpect(jsonPath("$.units[0].unitType").value("SWORDSMAN"))
                 .andExpect(jsonPath("$.units[0].actionPointBudget").value(3))

@@ -70,6 +70,7 @@ function toWall(dto: WallDto): Wall {
     position: toPosition(required(dto.position, 'wall.position')),
     footprint: required(dto.footprint, 'wall.footprint').map(toPosition),
     health: required(dto.health, 'wall.health'),
+    defense: required(dto.defense, 'wall.defense'),
   };
 }
 
@@ -80,6 +81,7 @@ function toOrb(dto: OrbDto): Orb {
     position: toPosition(required(dto.position, 'orb.position')),
     footprint: required(dto.footprint, 'orb.footprint').map(toPosition),
     health: required(dto.health, 'orb.health'),
+    defense: required(dto.defense, 'orb.defense'),
   };
 }
 

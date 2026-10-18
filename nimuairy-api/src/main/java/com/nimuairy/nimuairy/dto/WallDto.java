@@ -10,7 +10,8 @@ public record WallDto(
         PlayerSide owner,
         PositionDto position,
         List<PositionDto> footprint,
-        int health
+        int health,
+        int defense
 ) {
 
     public static WallDto from(Wall wall) {
@@ -19,7 +20,8 @@ public record WallDto(
                 wall.owner(),
                 PositionDto.from(wall.position()),
                 wall.footprint().offsets().stream().map(PositionDto::from).toList(),
-                wall.health()
+                wall.health(),
+                wall.defense()
         );
     }
 }

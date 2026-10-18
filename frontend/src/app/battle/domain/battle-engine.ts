@@ -1,5 +1,17 @@
 import type { ActionType, UnitActionType } from './actions';
-import type { BattleState, PlayerSide, Unit } from './battle-state';
+import type { BattleState, Orb, PlayerSide, Unit, Wall } from './battle-state';
+import type {
+  AttackCommand,
+  AttackError,
+  AttackResult,
+  AttackTarget,
+  AttackTargetKind,
+} from './combat';
+import {
+  ATTACK_ACTION_POINT_COST,
+  attackDamage,
+  inMeleeRange,
+} from './combat-rules';
 import { samePosition } from './geometry';
 import type {
   MoveUnitCommand,
@@ -16,6 +28,17 @@ import { err, ok, type Result } from './result';
 const OPPONENT: Record<PlayerSide, PlayerSide> = {
   LEFT: 'RIGHT',
   RIGHT: 'LEFT',
+};
+
+/**
+ * Whether a target at 0 HP leaves the battle state. Removing a wall is what
+ * frees its cells for movement; an orb stays so that victory can be
+ * determined from it.
+ */
+const REMOVED_WHEN_DESTROYED: Record<AttackTargetKind, boolean> = {
+  UNIT: true,
+  WALL: true,
+  ORB: false,
 };
 
 /**
@@ -87,6 +110,71 @@ export class BattleEngine {
       },
       steps,
       cost,
+    });
+  }
+
+  /**
+   * Melee attack on an enemy unit, wall or orb. Damage, the AP charge, the
+   * turn claim and the target's destruction are applied together in one new
+   * state, or not at all.
+   */
+  attack(
+    state: BattleState,
+    command: AttackCommand,
+  ): Result<AttackResult, AttackError> {
+    const found = findUnit(state, command.unitId);
+    if (!found.ok) {
+      return found;
+    }
+    const attacker = found.value;
+    if (!mayAct(state, attacker)) {
+      return err({ type: 'UNIT_CANNOT_ATTACK', unitId: attacker.id });
+    }
+
+    const { target } = command;
+    const attacked = findTarget(state, target);
+    if (!attacked) {
+      return err({ type: 'TARGET_NOT_FOUND', target });
+    }
+    if (attacked.owner === attacker.owner) {
+      return err({ type: 'INVALID_TARGET', target });
+    }
+    if (!inMeleeRange(attacker, attacked)) {
+      return err({ type: 'TARGET_OUT_OF_RANGE', target });
+    }
+    if (attacker.remainingActionPoints < ATTACK_ACTION_POINT_COST) {
+      return err({
+        type: 'INSUFFICIENT_ACTION_POINTS',
+        required: ATTACK_ACTION_POINT_COST,
+        available: attacker.remainingActionPoints,
+      });
+    }
+
+    const damage = attackDamage(attacker, attacked);
+    const remainingHealth = Math.max(0, attacked.health - damage);
+    const charged: Unit = {
+      ...attacker,
+      remainingActionPoints:
+        attacker.remainingActionPoints - ATTACK_ACTION_POINT_COST,
+    };
+    const afterCharge: BattleState = {
+      ...state,
+      units: state.units.map((unit) =>
+        unit.id === attacker.id ? charged : unit,
+      ),
+    };
+
+    return ok({
+      state: {
+        ...withTargetHealth(afterCharge, target, remainingHealth),
+        // A successful attack claims an unclaimed turn; for the unit that
+        // already holds it this is a no-op.
+        activeUnitId: attacker.id,
+      },
+      target,
+      damage,
+      remainingHealth,
+      cost: ATTACK_ACTION_POINT_COST,
     });
   }
 
@@ -200,9 +288,71 @@ function canMoveAnywhere(state: BattleState, unit: Unit): boolean {
 function findUnit(
   state: BattleState,
   unitId: string,
-): Result<Unit, MovementError> {
+): Result<Unit, { readonly type: 'UNIT_NOT_FOUND'; readonly unitId: string }> {
   const unit = state.units.find(({ id }) => id === unitId);
   return unit ? ok(unit) : err({ type: 'UNIT_NOT_FOUND', unitId });
+}
+
+function targetsOfKind(
+  state: BattleState,
+  kind: AttackTargetKind,
+): readonly (Unit | Wall | Orb)[] {
+  switch (kind) {
+    case 'UNIT':
+      return state.units;
+    case 'WALL':
+      return state.walls;
+    case 'ORB':
+      return state.orbs;
+  }
+}
+
+function findTarget(
+  state: BattleState,
+  target: AttackTarget,
+): Unit | Wall | Orb | undefined {
+  return targetsOfKind(state, target.kind).find(({ id }) => id === target.id);
+}
+
+/** Only the target's own collection changes; the others keep their references. */
+function withTargetHealth(
+  state: BattleState,
+  target: AttackTarget,
+  health: number,
+): BattleState {
+  const removed = health === 0 && REMOVED_WHEN_DESTROYED[target.kind];
+  switch (target.kind) {
+    case 'UNIT':
+      return {
+        ...state,
+        units: updatedHealth(state.units, target.id, health, removed),
+      };
+    case 'WALL':
+      return {
+        ...state,
+        walls: updatedHealth(state.walls, target.id, health, removed),
+      };
+    case 'ORB':
+      return {
+        ...state,
+        orbs: updatedHealth(state.orbs, target.id, health, removed),
+      };
+  }
+}
+
+function updatedHealth<
+  T extends { readonly id: string; readonly health: number },
+>(
+  objects: readonly T[],
+  id: string,
+  health: number,
+  removed: boolean,
+): readonly T[] {
+  return removed
+    ? objects.filter((object) => object.id !== id)
+    : objects.map((object) =>
+        object.id === id ? { ...object, health } : object,
+      );
 }
 
 function actingUnit(

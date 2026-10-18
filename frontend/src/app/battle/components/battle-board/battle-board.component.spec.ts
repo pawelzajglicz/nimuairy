@@ -166,6 +166,7 @@ describe('BattleBoardComponent', () => {
               id: 'wall-left',
               owner: 'LEFT',
               health: 100,
+              defense: 100,
               position: { x: 1, y: 0 },
               footprint: [
                 { x: 0, y: 0 },
@@ -203,6 +204,7 @@ describe('BattleBoardComponent', () => {
               id: 'orb-right',
               owner: 'RIGHT',
               health: 100,
+              defense: 0,
               position: { x: 20, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },

@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { BattleState, Position, Unit } from './battle-state';
 import { BattleEngine } from './battle-engine';
 import type {
+  AttackCommand,
+  AttackError,
+  AttackResult,
+  AttackTarget,
+} from './combat';
+import type {
   MoveUnitCommand,
   MovementError,
   MovementResult,
@@ -9,8 +15,10 @@ import type {
 import { pathTo } from './pathfinding';
 import {
   FOOTPRINTS,
+  testOrb,
   testState,
   testUnit,
+  testWall,
   type TestStateOptions,
 } from './testing/battle-fixtures';
 
@@ -255,6 +263,7 @@ describe('BattleEngine MOVE_UNIT', () => {
           position: { x: 0, y: 7 },
           footprint: FOOTPRINTS['2x1'],
           health: 30,
+          defense: 100,
         },
       ],
       orbs: [
@@ -264,6 +273,7 @@ describe('BattleEngine MOVE_UNIT', () => {
           position: { x: 7, y: 0 },
           footprint: FOOTPRINTS['1x1'],
           health: 50,
+          defense: 0,
         },
       ],
     });
@@ -425,6 +435,7 @@ describe('BattleEngine MOVE_UNIT', () => {
               position: { x: 3, y: 2 },
               footprint: FOOTPRINTS['1x1'],
               health: 50,
+              defense: 0,
             },
           ],
         },
@@ -1226,6 +1237,459 @@ describe('BattleEngine endTurn', () => {
     expectRejected(next, moveCommand([{ x: 4, y: 2 }]), {
       type: 'UNIT_CANNOT_MOVE',
       unitId: 'left-1x1',
+    });
+  });
+});
+
+describe('BattleEngine ATTACK', () => {
+  const ENEMY: AttackTarget = { kind: 'UNIT', id: 'right-1x1' };
+  const ENEMY_WALL: AttackTarget = { kind: 'WALL', id: 'right-wall' };
+  const ENEMY_ORB: AttackTarget = { kind: 'ORB', id: 'right-orb' };
+
+  /** An ATTACK by the default `left-1x1` unit, which has attack 4 and 5 AP. */
+  function attackCommand(
+    target: AttackTarget,
+    overrides: Partial<AttackCommand> = {},
+  ): AttackCommand {
+    return { type: 'ATTACK', unitId: 'left-1x1', target, ...overrides };
+  }
+
+  /** A RIGHT unit orthogonally next to the default attacker, with defense 2. */
+  function enemy(overrides: Partial<Unit> = {}): Unit {
+    return testUnit({
+      id: 'right-1x1',
+      owner: 'RIGHT',
+      position: { x: 3, y: 2 },
+      ...overrides,
+    });
+  }
+
+  /** The default wall and orb at (5,2) are next to an attacker at (4,2). */
+  const besideStructures = testUnit({ position: { x: 4, y: 2 } });
+
+  function expectAttacked(
+    state: BattleState,
+    command: AttackCommand,
+  ): AttackResult {
+    const result = engine.attack(state, command);
+    if (!result.ok) {
+      throw new Error(
+        `expected a successful attack, got ${JSON.stringify(result.error)}`,
+      );
+    }
+    return result.value;
+  }
+
+  function expectAttackRejected(
+    state: BattleState,
+    command: AttackCommand,
+    error: AttackError,
+  ): void {
+    const before = structuredClone(state);
+
+    expect(engine.attack(state, command)).toEqual({ ok: false, error });
+    expect(state).toEqual(before);
+  }
+
+  describe('against each target type', () => {
+    it("damages an enemy unit by the attack minus the unit's defense and charges 2 AP", () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result).toMatchObject({
+        target: ENEMY,
+        damage: 2,
+        remainingHealth: 8,
+        cost: 2,
+      });
+      expect(unitIn(result.state, 'right-1x1')?.health).toBe(8);
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(3);
+    });
+
+    it("damages an enemy wall using the wall's own defense", () => {
+      const state = testState({
+        units: [besideStructures],
+        walls: [testWall({ defense: 1 })],
+      });
+
+      const result = expectAttacked(state, attackCommand(ENEMY_WALL));
+
+      expect(result).toMatchObject({
+        target: ENEMY_WALL,
+        damage: 3,
+        remainingHealth: 27,
+        cost: 2,
+      });
+      expect(result.state.walls[0].health).toBe(27);
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(3);
+    });
+
+    it("damages the enemy orb using the orb's own defense", () => {
+      const state = testState({
+        units: [besideStructures],
+        orbs: [testOrb({ defense: 0 })],
+      });
+
+      const result = expectAttacked(state, attackCommand(ENEMY_ORB));
+
+      expect(result).toMatchObject({
+        target: ENEMY_ORB,
+        damage: 4,
+        remainingHealth: 16,
+        cost: 2,
+      });
+      expect(result.state.orbs[0].health).toBe(16);
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(3);
+    });
+
+    it.each([
+      [0, 4],
+      [1, 3],
+      [3, 1],
+    ])(
+      'deals the attack minus a target defense of %i: %i damage',
+      (defense, damage) => {
+        const state = testState({ units: [testUnit(), enemy({ defense })] });
+
+        expect(expectAttacked(state, attackCommand(ENEMY)).damage).toBe(damage);
+      },
+    );
+
+    it('accepts an attack that deals 0 damage and still charges 2 AP', () => {
+      const state = testState({ units: [testUnit(), enemy({ defense: 4 })] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result).toMatchObject({ damage: 0, remainingHealth: 10, cost: 2 });
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(3);
+      expect(result.state.activeUnitId).toBe('left-1x1');
+    });
+
+    it('accepts an attack with exactly 2 AP left and leaves 0', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 2 }), enemy()],
+      });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(0);
+    });
+  });
+
+  describe('destruction', () => {
+    it('removes a unit whose HP the damage exactly uses up', () => {
+      const state = testState({ units: [testUnit(), enemy({ health: 2 })] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result).toMatchObject({ damage: 2, remainingHealth: 0 });
+      expect(unitIn(result.state, 'right-1x1')).toBeUndefined();
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(3);
+    });
+
+    it('clamps overkill damage at 0 HP', () => {
+      const state = testState({ units: [testUnit(), enemy({ health: 1 })] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result).toMatchObject({ damage: 2, remainingHealth: 0 });
+      expect(unitIn(result.state, 'right-1x1')).toBeUndefined();
+    });
+
+    it('removes a wall at 0 HP', () => {
+      const state = testState({
+        units: [besideStructures],
+        walls: [testWall({ health: 3, defense: 1 })],
+      });
+
+      const result = expectAttacked(state, attackCommand(ENEMY_WALL));
+
+      expect(result.remainingHealth).toBe(0);
+      expect(result.state.walls).toEqual([]);
+    });
+
+    it('keeps an orb in the state at 0 HP, never below', () => {
+      const orb = testOrb({ health: 1, defense: 0 });
+      const state = testState({ units: [besideStructures], orbs: [orb] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY_ORB));
+
+      expect(result).toMatchObject({ damage: 4, remainingHealth: 0 });
+      expect(result.state.orbs).toEqual([{ ...orb, health: 0 }]);
+    });
+
+    it('frees the cells of a destroyed wall for movement', () => {
+      const state = testState({
+        units: [besideStructures],
+        walls: [testWall({ health: 3, defense: 1 })],
+      });
+      const intoWall = moveCommand([{ x: 5, y: 3 }]);
+      expectRejected(state, intoWall, {
+        type: 'INVALID_DESTINATION',
+        destination: { x: 5, y: 3 },
+      });
+
+      const { state: afterAttack } = expectAttacked(
+        state,
+        attackCommand(ENEMY_WALL),
+      );
+
+      expect(unitIn(expectMoved(afterAttack, intoWall).state)).toMatchObject({
+        position: { x: 5, y: 3 },
+        remainingActionPoints: 1,
+      });
+    });
+  });
+
+  describe('rejections', () => {
+    const friend = testUnit({ id: 'left-other', position: { x: 2, y: 3 } });
+
+    it('rejects an unknown attacker', () => {
+      expectAttackRejected(
+        testState({ units: [testUnit(), enemy()] }),
+        attackCommand(ENEMY, { unitId: 'ghost' }),
+        { type: 'UNIT_NOT_FOUND', unitId: 'ghost' },
+      );
+    });
+
+    it("rejects an attack by the other player's unit", () => {
+      expectAttackRejected(
+        testState({ units: [testUnit(), enemy()] }),
+        attackCommand(
+          { kind: 'UNIT', id: 'left-1x1' },
+          { unitId: 'right-1x1' },
+        ),
+        { type: 'UNIT_CANNOT_ATTACK', unitId: 'right-1x1' },
+      );
+    });
+
+    it('rejects an attack by a unit other than the one that claimed the turn', () => {
+      expectAttackRejected(
+        testState({
+          units: [testUnit(), friend, enemy()],
+          activeUnitId: 'left-other',
+        }),
+        attackCommand(ENEMY),
+        { type: 'UNIT_CANNOT_ATTACK', unitId: 'left-1x1' },
+      );
+    });
+
+    it('checks the turn before the target', () => {
+      expectAttackRejected(
+        testState({ units: [testUnit(), friend], activeUnitId: 'left-other' }),
+        attackCommand({ kind: 'UNIT', id: 'ghost' }),
+        { type: 'UNIT_CANNOT_ATTACK', unitId: 'left-1x1' },
+      );
+    });
+
+    it.each<AttackTarget>([
+      { kind: 'UNIT', id: 'ghost' },
+      { kind: 'WALL', id: 'ghost' },
+      { kind: 'ORB', id: 'ghost' },
+      // The id exists, but in another collection.
+      { kind: 'WALL', id: 'right-orb' },
+      { kind: 'UNIT', id: 'right-wall' },
+    ])('rejects a missing target %o', (target) => {
+      expectAttackRejected(
+        testState({
+          units: [besideStructures],
+          walls: [testWall()],
+          orbs: [testOrb()],
+        }),
+        attackCommand(target),
+        { type: 'TARGET_NOT_FOUND', target },
+      );
+    });
+
+    it('rejects a friendly unit as the target', () => {
+      const target: AttackTarget = { kind: 'UNIT', id: 'left-other' };
+
+      expectAttackRejected(
+        testState({ units: [testUnit(), friend] }),
+        attackCommand(target),
+        { type: 'INVALID_TARGET', target },
+      );
+    });
+
+    it('rejects the attacker itself as the target', () => {
+      const target: AttackTarget = { kind: 'UNIT', id: 'left-1x1' };
+
+      expectAttackRejected(testState(), attackCommand(target), {
+        type: 'INVALID_TARGET',
+        target,
+      });
+    });
+
+    it("rejects the attacker's own wall and orb", () => {
+      const state = testState({
+        units: [besideStructures],
+        walls: [testWall({ id: 'left-wall', owner: 'LEFT' })],
+        orbs: [
+          testOrb({ id: 'left-orb', owner: 'LEFT', position: { x: 4, y: 3 } }),
+        ],
+      });
+      const ownWall: AttackTarget = { kind: 'WALL', id: 'left-wall' };
+      const ownOrb: AttackTarget = { kind: 'ORB', id: 'left-orb' };
+
+      expectAttackRejected(state, attackCommand(ownWall), {
+        type: 'INVALID_TARGET',
+        target: ownWall,
+      });
+      expectAttackRejected(state, attackCommand(ownOrb), {
+        type: 'INVALID_TARGET',
+        target: ownOrb,
+      });
+    });
+
+    it.each([
+      { x: 4, y: 2 },
+      { x: 3, y: 3 },
+    ])('rejects an enemy at %o, out of melee range', (position) => {
+      expectAttackRejected(
+        testState({ units: [testUnit(), enemy({ position })] }),
+        attackCommand(ENEMY),
+        { type: 'TARGET_OUT_OF_RANGE', target: ENEMY },
+      );
+    });
+
+    it('rejects a structure out of melee range', () => {
+      expectAttackRejected(
+        testState({ walls: [testWall()] }),
+        attackCommand(ENEMY_WALL),
+        { type: 'TARGET_OUT_OF_RANGE', target: ENEMY_WALL },
+      );
+    });
+
+    it.each([1, 0])('rejects an attack with %i AP left', (available) => {
+      expectAttackRejected(
+        testState({
+          units: [testUnit({ remainingActionPoints: available }), enemy()],
+        }),
+        attackCommand(ENEMY),
+        { type: 'INSUFFICIENT_ACTION_POINTS', required: 2, available },
+      );
+    });
+  });
+
+  describe('active unit', () => {
+    const other = testUnit({ id: 'left-other', position: { x: 6, y: 6 } });
+    const moveOther = moveCommand([{ x: 6, y: 5 }], { unitId: 'left-other' });
+
+    it('is claimed by a successful first attack', () => {
+      const state = testState({ units: [testUnit(), other, enemy()] });
+
+      const { state: next } = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(next.activeUnitId).toBe('left-1x1');
+      expectRejected(next, moveOther, {
+        type: 'UNIT_CANNOT_MOVE',
+        unitId: 'left-other',
+      });
+    });
+
+    it('stays with the claimed unit while it attacks and moves again', () => {
+      const state = testState({
+        units: [testUnit(), other, enemy({ health: 100 })],
+        activeUnitId: 'left-1x1',
+      });
+
+      const first = expectAttacked(state, attackCommand(ENEMY));
+      const second = expectAttacked(first.state, attackCommand(ENEMY));
+      const moved = expectMoved(second.state, moveCommand([{ x: 2, y: 3 }]));
+
+      expect(second.state.activeUnitId).toBe('left-1x1');
+      expect(unitIn(moved.state)?.remainingActionPoints).toBe(0);
+      expect(unitIn(moved.state, 'right-1x1')?.health).toBe(96);
+    });
+
+    it('is not claimed by a rejected attack', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 1 }), other, enemy()],
+      });
+
+      expect(engine.attack(state, attackCommand(ENEMY)).ok).toBe(false);
+      expect(state.activeUnitId).toBeUndefined();
+      expect(expectMoved(state, moveOther).state.activeUnitId).toBe(
+        'left-other',
+      );
+    });
+  });
+
+  describe('immutability', () => {
+    it('applies the AP charge, the damage and the turn claim together in one new state', () => {
+      const attacker = testUnit();
+      const target = enemy();
+      const bystander = testUnit({
+        id: 'left-other',
+        position: { x: 6, y: 6 },
+      });
+      const state = testState({
+        units: [attacker, bystander, target],
+        walls: [testWall({ position: { x: 0, y: 5 } })],
+        orbs: [testOrb({ position: { x: 7, y: 0 } })],
+      });
+      const before = structuredClone(state);
+
+      const { state: next } = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(state).toEqual(before);
+      expect(next).not.toBe(state);
+      expect(next).toEqual({
+        ...state,
+        units: [
+          { ...attacker, remainingActionPoints: 3 },
+          bystander,
+          { ...target, health: 8 },
+        ],
+        activeUnitId: 'left-1x1',
+      });
+      expect(next.board).toBe(state.board);
+      expect(next.walls).toBe(state.walls);
+      expect(next.orbs).toBe(state.orbs);
+      expect(unitIn(next, 'left-other')).toBe(bystander);
+    });
+
+    it('leaves the input untouched when destroying targets', () => {
+      const state = testState({
+        units: [besideStructures, enemy({ health: 1 })],
+        walls: [testWall({ health: 1 })],
+      });
+      const before = structuredClone(state);
+
+      const { state: afterWall } = expectAttacked(
+        state,
+        attackCommand(ENEMY_WALL),
+      );
+      const { state: afterUnit } = expectAttacked(
+        afterWall,
+        attackCommand(ENEMY),
+      );
+
+      expect(afterUnit.walls).toEqual([]);
+      expect(unitIn(afterUnit, 'right-1x1')).toBeUndefined();
+      expect(state).toEqual(before);
+    });
+
+    it('changes only the attacker among the units when attacking a structure', () => {
+      const bystander = testUnit({
+        id: 'left-other',
+        position: { x: 0, y: 0 },
+      });
+      const enemyUnit = enemy({ position: { x: 7, y: 7 } });
+      const state = testState({
+        units: [besideStructures, bystander, enemyUnit],
+        walls: [testWall()],
+        orbs: [testOrb({ position: { x: 7, y: 0 } })],
+      });
+
+      const { state: next } = expectAttacked(state, attackCommand(ENEMY_WALL));
+
+      expect(next.walls).not.toBe(state.walls);
+      expect(next.orbs).toBe(state.orbs);
+      expect(unitIn(next)).not.toBe(besideStructures);
+      expect(unitIn(next, 'left-other')).toBe(bystander);
+      expect(unitIn(next, 'right-1x1')).toBe(enemyUnit);
     });
   });
 });
