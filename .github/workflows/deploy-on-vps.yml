@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       environment:
-        description: Target GitHub environment; holds the SMOKE_URL and VPS_KNOWN_HOSTS variables.
+        description: Target GitHub environment; holds the SMOKE_URL, VPS_KNOWN_HOSTS and VPS_PORT variables.
         required: false
         type: string
         default: production
@@ -81,9 +81,14 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER || 'deploy' }}
           VPS_KNOWN_HOSTS: ${{ vars.VPS_KNOWN_HOSTS }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
         run: |
           if [ -z "$VPS_KNOWN_HOSTS" ]; then
-            echo "::error::Set the VPS_KNOWN_HOSTS variable (output of ssh-keyscan run against the VPS)."
+            echo "::error::Set the VPS_KNOWN_HOSTS variable (output of ssh-keyscan -p <port> run against the VPS)."
+            exit 1
+          fi
+          if [[ ! "$VPS_PORT" =~ ^[0-9]+$ ]]; then
+            echo "::error::VPS_PORT must be a number, got: $VPS_PORT"
             exit 1
           fi
           install -m 700 -d ~/.ssh
@@ -93,6 +98,7 @@ jobs:
           cat > ~/.ssh/config <<EOF
           Host vps
             HostName $VPS_HOST
+            Port $VPS_PORT
             User $VPS_USER
             IdentityFile ~/.ssh/deploy_key
             IdentitiesOnly yes
