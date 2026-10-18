@@ -129,9 +129,12 @@ jobs:
             exit 1
           fi
 
-  # Builds on every PR, as base images can gain vulnerabilities without any change in this repo.
+  # Builds on every PR, as base images come from moving tags (dhi.io/node:26-…, …) and can gain
+  # vulnerabilities or break the build without any change in this repo. It is also the only image
+  # build check, so a broken Dockerfile fails security-result rather than ci-result.
   # Only CRITICAL fails here: images with no HIGH findings are rare, so HIGH would mostly block
-  # unrelated PRs. DHI_USERNAME and DHI_TOKEN are not passed to fork PRs, hence the skip.
+  # unrelated PRs. DHI_USERNAME and DHI_TOKEN must exist as Actions secrets (the Dependabot
+  # secrets of the same name are a separate store) and are not passed to fork PRs, hence the skip.
   image-scan:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
