@@ -8,11 +8,7 @@ import {
   type AttackTarget,
   type AttackTargetKind,
 } from './combat';
-import {
-  ATTACK_ACTION_POINT_COST,
-  attackDamage,
-  inMeleeRange,
-} from './combat-rules';
+import { attackDamage, inMeleeRange } from './combat-rules';
 import { samePosition } from './geometry';
 import type {
   MoveUnitCommand,
@@ -140,7 +136,7 @@ export class BattleEngine {
     const charged: Unit = {
       ...attacker,
       remainingActionPoints:
-        attacker.remainingActionPoints - ATTACK_ACTION_POINT_COST,
+        attacker.remainingActionPoints - attacker.attackActionPointCost,
     };
     const afterCharge: BattleState = {
       ...state,
@@ -159,7 +155,7 @@ export class BattleEngine {
       target,
       damage,
       remainingHealth,
-      cost: ATTACK_ACTION_POINT_COST,
+      cost: attacker.attackActionPointCost,
     });
   }
 
@@ -286,10 +282,10 @@ function validateAttack(
   if (!inMeleeRange(attacker, attacked)) {
     return err({ type: 'TARGET_OUT_OF_RANGE', target });
   }
-  if (attacker.remainingActionPoints < ATTACK_ACTION_POINT_COST) {
+  if (attacker.remainingActionPoints < attacker.attackActionPointCost) {
     return err({
       type: 'INSUFFICIENT_ACTION_POINTS',
-      required: ATTACK_ACTION_POINT_COST,
+      required: attacker.attackActionPointCost,
       available: attacker.remainingActionPoints,
     });
   }

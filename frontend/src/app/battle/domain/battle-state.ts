@@ -42,6 +42,8 @@ export interface Unit {
   readonly actionPointBudget: number;
   /** Multiplies the cost of every movement step. Integer > 0. */
   readonly movementCostFactor: number;
+  /** AP an ATTACK by this unit costs. Integer > 0. */
+  readonly attackActionPointCost: number;
   /**
    * AP left in the current turn, shared by all unit actions. Stored rather
    * than derived from action history so a turn can contain several actions

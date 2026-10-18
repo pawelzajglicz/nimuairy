@@ -19,6 +19,7 @@ const unit: Unit = {
   defense: 2,
   actionPointBudget: 5,
   movementCostFactor: 1,
+  attackActionPointCost: 2,
   remainingActionPoints: 5,
 };
 

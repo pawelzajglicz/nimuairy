@@ -112,7 +112,7 @@ public class BattleService {
     }
 
     private Unit unit(String id, PlayerSide side, Position position, Footprint footprint) {
-        return new Unit(id, side, UnitType.SWORDSMAN, position, footprint, 500, 200, 50, 3, 1);
+        return new Unit(id, side, UnitType.SWORDSMAN, position, footprint, 500, 200, 50, 3, 1, 2);
     }
 
     private static Footprint wallFootprint() {

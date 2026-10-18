@@ -45,6 +45,7 @@ function demoResponse(): BattleStateResponse {
         defense: 2,
         actionPointBudget: 3,
         movementCostFactor: 1,
+        attackActionPointCost: 2,
       },
     ],
     currentPlayer: 'LEFT',
@@ -247,6 +248,7 @@ describe('BattleStore', () => {
         defense: 2,
         actionPointBudget: 2,
         movementCostFactor: 1,
+        attackActionPointCost: 2,
       };
     }
 
@@ -652,6 +654,7 @@ describe('BattleStore', () => {
         defense: 5,
         actionPointBudget: 6,
         movementCostFactor: 1,
+        attackActionPointCost: 2,
       };
     }
 

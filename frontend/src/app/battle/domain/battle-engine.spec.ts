@@ -1946,6 +1946,91 @@ describe('BattleEngine ATTACK', () => {
     });
   });
 
+  describe('per-unit attack cost', () => {
+    /** An attacker whose attack costs 4 AP, with `ap` AP left. */
+    function costlyAttacker(ap: number): Unit {
+      return testUnit({
+        attackActionPointCost: 4,
+        actionPointBudget: 6,
+        remainingActionPoints: ap,
+      });
+    }
+
+    it("charges exactly the attacker's own cost and reports it", () => {
+      const state = testState({ units: [costlyAttacker(6), enemy()] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result.cost).toBe(4);
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(2);
+    });
+
+    it('accepts an attack that uses up exactly the attack cost', () => {
+      const state = testState({ units: [costlyAttacker(4), enemy()] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(0);
+    });
+
+    it("rejects an attack below the attacker's cost, with that cost as required", () => {
+      const state = testState({ units: [costlyAttacker(3), enemy()] });
+
+      expectAttackRejected(state, attackCommand(ENEMY), {
+        type: 'INSUFFICIENT_ACTION_POINTS',
+        required: 4,
+        available: 3,
+      });
+    });
+
+    it('charges the full cost for an attack that deals 0 damage', () => {
+      const state = testState({
+        units: [testUnit({ attackActionPointCost: 3 }), enemy({ defense: 10 })],
+      });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(result).toMatchObject({ damage: 0, cost: 3 });
+      expect(unitIn(result.state)?.remainingActionPoints).toBe(2);
+    });
+
+    it('offers targets and ATTACK only once the attacker can afford its own cost', () => {
+      const short = testState({ units: [costlyAttacker(3), enemy()] });
+      const enough = testState({ units: [costlyAttacker(4), enemy()] });
+
+      expect(engine.legalAttackTargets(short, 'left-1x1')).toEqual([]);
+      expect(engine.legalUnitActions(short, 'left-1x1')).toEqual(
+        new Set(['MOVE']),
+      );
+      expect(engine.legalAttackTargets(enough, 'left-1x1')).toEqual([ENEMY]);
+      expect(engine.legalUnitActions(enough, 'left-1x1')).toEqual(
+        new Set(['MOVE', 'ATTACK']),
+      );
+    });
+
+    it('reads the cost from each unit: with the same AP, only the cheaper attacker may attack', () => {
+      const state = testState({
+        units: [
+          costlyAttacker(2),
+          testUnit({
+            id: 'left-cheap',
+            position: { x: 3, y: 1 },
+            remainingActionPoints: 2,
+          }),
+          // Next to both attackers.
+          enemy({ position: { x: 3, y: 2 } }),
+        ],
+      });
+
+      expect(engine.legalAttackTargets(state, 'left-1x1')).toEqual([]);
+      expect(engine.legalAttackTargets(state, 'left-cheap')).toEqual([ENEMY]);
+      expect(
+        expectAttacked(state, attackCommand(ENEMY, { unitId: 'left-cheap' }))
+          .cost,
+      ).toBe(2);
+    });
+  });
+
   describe('legal targets and execution', () => {
     /**
      * A 2×2 attacker at (2,2) with, around it: an enemy unit, wall and orb in
@@ -1955,6 +2040,7 @@ describe('BattleEngine ATTACK', () => {
     function battlefield(
       options: Pick<TestStateOptions, 'activeUnitId' | 'currentPlayer'> & {
         readonly attackerActionPoints?: number;
+        readonly attackerAttackCost?: number;
       } = {},
     ): BattleState {
       return testState({
@@ -1962,6 +2048,7 @@ describe('BattleEngine ATTACK', () => {
           testUnit({
             footprint: FOOTPRINTS['2x2'],
             remainingActionPoints: options.attackerActionPoints ?? 5,
+            attackActionPointCost: options.attackerAttackCost ?? 2,
           }),
           enemy({ position: { x: 4, y: 2 } }),
           enemy({ id: 'right-diagonal', position: { x: 4, y: 4 } }),
@@ -2018,6 +2105,16 @@ describe('BattleEngine ATTACK', () => {
         { 'left-1x1': inRange },
       ],
       ['an attacker with 1 AP', battlefield({ attackerActionPoints: 1 }), {}],
+      [
+        'an attacker whose attack costs 3 AP, with 2 AP',
+        battlefield({ attackerActionPoints: 2, attackerAttackCost: 3 }),
+        {},
+      ],
+      [
+        'an attacker whose attack costs 3 AP, with 3 AP',
+        battlefield({ attackerActionPoints: 3, attackerAttackCost: 3 }),
+        { 'left-1x1': inRange },
+      ],
       [
         "RIGHT's turn",
         battlefield({ currentPlayer: 'RIGHT' }),

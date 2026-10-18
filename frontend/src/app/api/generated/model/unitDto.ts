@@ -19,4 +19,5 @@ export interface UnitDto {
   defense?: number;
   actionPointBudget?: number;
   movementCostFactor?: number;
+  attackActionPointCost?: number;
 }

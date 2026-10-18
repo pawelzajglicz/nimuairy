@@ -58,6 +58,10 @@ function toUnit(dto: UnitDto): Unit {
       required(dto.movementCostFactor, 'unit.movementCostFactor'),
       'unit.movementCostFactor',
     ),
+    attackActionPointCost: positiveInteger(
+      required(dto.attackActionPointCost, 'unit.attackActionPointCost'),
+      'unit.attackActionPointCost',
+    ),
     // The API carries no turn progress, so every unit starts with full AP.
     remainingActionPoints: actionPointBudget,
   };

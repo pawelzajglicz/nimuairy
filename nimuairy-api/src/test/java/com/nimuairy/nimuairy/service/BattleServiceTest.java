@@ -184,6 +184,7 @@ class BattleServiceTest {
             assertThat(unit.defense()).isEqualTo(50);
             assertThat(unit.actionPointBudget()).isEqualTo(3);
             assertThat(unit.movementCostFactor()).isEqualTo(1);
+            assertThat(unit.attackActionPointCost()).isEqualTo(2);
         });
 
         assertThat(units.stream().map(Unit::id)).containsExactlyInAnyOrder(

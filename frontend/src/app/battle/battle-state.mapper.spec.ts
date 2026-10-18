@@ -52,6 +52,7 @@ function response(): BattleStateResponse {
         defense: 2,
         actionPointBudget: 5,
         movementCostFactor: 2,
+        attackActionPointCost: 3,
       },
     ],
     currentPlayer: 'LEFT',
@@ -80,6 +81,7 @@ describe('toBattleState', () => {
 
     expect(unit.actionPointBudget).toBe(5);
     expect(unit.movementCostFactor).toBe(2);
+    expect(unit.attackActionPointCost).toBe(3);
     expect(unit.remainingActionPoints).toBe(5);
   });
 
@@ -114,15 +116,16 @@ describe('toBattleState', () => {
     expect(() => toBattleState(incomplete)).toThrow('unit.position');
   });
 
-  it.each(['actionPointBudget', 'movementCostFactor'] as const)(
-    'rejects a unit without %s',
-    (field) => {
-      const incomplete = response();
-      delete incomplete.units![0][field];
+  it.each([
+    'actionPointBudget',
+    'movementCostFactor',
+    'attackActionPointCost',
+  ] as const)('rejects a unit without %s', (field) => {
+    const incomplete = response();
+    delete incomplete.units![0][field];
 
-      expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
-    },
-  );
+    expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
+  });
 
   it('maps the defense of walls and orbs', () => {
     const state = toBattleState(response());
@@ -150,6 +153,9 @@ describe('toBattleState', () => {
     ['movementCostFactor', 0],
     ['movementCostFactor', -1],
     ['movementCostFactor', 1.5],
+    ['attackActionPointCost', 0],
+    ['attackActionPointCost', -1],
+    ['attackActionPointCost', 1.5],
   ] as const)('rejects a unit with %s = %s', (field, value) => {
     const invalid = response();
     invalid.units![0][field] = value;

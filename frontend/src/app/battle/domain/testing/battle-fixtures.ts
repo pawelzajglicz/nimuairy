@@ -30,7 +30,7 @@ export const FOOTPRINTS = {
   ],
 } as const satisfies Record<string, readonly Position[]>;
 
-/** A LEFT 1×1 unit at (2,2) with 5 AP and movement cost factor 1, unless overridden. */
+/** A LEFT 1×1 unit at (2,2) with 5 AP, movement cost factor 1 and attack cost 2, unless overridden. */
 export function testUnit(overrides: Partial<Unit> = {}): Unit {
   return {
     id: 'left-1x1',
@@ -43,6 +43,7 @@ export function testUnit(overrides: Partial<Unit> = {}): Unit {
     defense: 2,
     actionPointBudget: 5,
     movementCostFactor: 1,
+    attackActionPointCost: 2,
     remainingActionPoints: 5,
     ...overrides,
   };

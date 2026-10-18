@@ -1,9 +1,6 @@
 import type { Position } from './battle-state';
 import { occupiedCells, positionKey } from './geometry';
 
-/** A successful attack costs this much, whatever damage it deals. */
-export const ATTACK_ACTION_POINT_COST = 2;
-
 interface Placed {
   readonly position: Position;
   readonly footprint: readonly Position[];

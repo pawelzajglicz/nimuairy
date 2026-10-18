@@ -24,6 +24,7 @@ function unit(
     defense: 5,
     actionPointBudget: 6,
     movementCostFactor: 1,
+    attackActionPointCost: 2,
   };
 }
 

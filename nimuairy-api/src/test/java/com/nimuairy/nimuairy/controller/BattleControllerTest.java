@@ -54,7 +54,7 @@ class BattleControllerTest {
                 List.of(new Orb("orb-left", PlayerSide.LEFT, new Position(0, 5), unitFootprint, 75, 0)),
                 List.of(new Wall("wall-left", PlayerSide.LEFT, new Position(1, 0), unitFootprint, 1000, 100)),
                 List.of(new Unit("unit-left-1", PlayerSide.LEFT, UnitType.SWORDSMAN, new Position(3, 2),
-                        unitFootprint, 500, 200, 50, 3, 1)),
+                        unitFootprint, 500, 200, 50, 3, 1, 2)),
                 PlayerSide.RIGHT
         );
         when(battleService.getDemoBattle()).thenReturn(battleState);
@@ -77,6 +77,7 @@ class BattleControllerTest {
                 .andExpect(jsonPath("$.units[0].unitType").value("SWORDSMAN"))
                 .andExpect(jsonPath("$.units[0].actionPointBudget").value(3))
                 .andExpect(jsonPath("$.units[0].movementCostFactor").value(1))
+                .andExpect(jsonPath("$.units[0].attackActionPointCost").value(2))
                 .andExpect(jsonPath("$.units[0].moveRange").doesNotExist())
                 .andExpect(jsonPath("$.units[0].remainingActionPoints").doesNotExist())
                 .andExpect(jsonPath("$.activeUnitId").doesNotExist())

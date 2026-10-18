@@ -435,6 +435,10 @@
           "movementCostFactor" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "attackActionPointCost" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },

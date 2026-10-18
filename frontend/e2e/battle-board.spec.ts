@@ -28,6 +28,7 @@ const battleState: BattleStateResponse = {
       defense: 5,
       actionPointBudget: 3,
       movementCostFactor: 1,
+      attackActionPointCost: 2,
     },
   ],
   orbs: [
