@@ -136,6 +136,8 @@ jobs:
   # unrelated PRs. DHI_USERNAME and DHI_TOKEN must exist as Actions secrets (the Dependabot
   # secrets of the same name are a separate store) and are not passed to fork PRs, hence the skip.
   image-scan:
+    # Keeps the check names from before the matrix gained the image key.
+    name: image-scan (${{ matrix.context }})
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -145,7 +147,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        context: [frontend, nimuairy-api]
+        include:
+          - context: frontend
+            image: nimuairy-frontend
+          - context: nimuairy-api
+            image: nimuairy-api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -162,7 +168,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           load: true
-          tags: nimuairy-${{ matrix.context }}:scan
+          tags: ${{ matrix.image }}:scan
           # Without a scope, both matrix entries would overwrite one shared cache.
           cache-from: type=gha,scope=${{ matrix.context }}
           cache-to: type=gha,mode=max,scope=${{ matrix.context }}
@@ -172,7 +178,7 @@ jobs:
         continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: nimuairy-${{ matrix.context }}:scan
+          image-ref: ${{ matrix.image }}:scan
           severity: CRITICAL
           ignore-unfixed: true
           format: sarif
@@ -193,7 +199,7 @@ jobs:
         if: github.event_name == 'push'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: nimuairy-${{ matrix.context }}:scan
+          image-ref: ${{ matrix.image }}:scan
           format: cyclonedx
           output: sbom-${{ matrix.context }}.cdx.json
           skip-setup-trivy: true
