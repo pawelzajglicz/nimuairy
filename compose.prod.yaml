@@ -1,5 +1,7 @@
 # Production overlay, used instead of compose.override.yaml:
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+# On the VPS this is run by .github/workflows/deploy-on-vps.yml with prebuilt
+# GHCR images. Locally, `APP_SHA=local ... up -d --build` builds them instead.
 #
 # Public traffic arrives only through the Cloudflare Tunnel, which cloudflared
 # opens as an outbound connection, so no host ports are published. The tunnel
@@ -12,10 +14,16 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
 
+  # Images built and pushed by .github/workflows/build-and-push.yml. APP_SHA is the deployed
+  # commit; the deploy workflow writes it into the VPS .env and rolls it back on failure.
   backend:
+    image: ghcr.io/pawelzajglicz/nimuairy-api:${APP_SHA:?set APP_SHA in .env}
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+
+  frontend:
+    image: ghcr.io/pawelzajglicz/nimuairy-frontend:${APP_SHA:?set APP_SHA in .env}
 
   cloudflared:
     container_name: cloudflared-nimuairy

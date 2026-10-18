@@ -44,6 +44,12 @@ The app is reachable only through a Cloudflare Tunnel: the `cloudflared` contain
 outbound connection to Cloudflare, and the tunnel's route points at `http://frontend:8080`.
 Production also runs `cloudflare/cloudflared`, the only image not from DHI.
 
+The VPS runs prebuilt images instead: `build-and-push.yml` pushes
+`ghcr.io/pawelzajglicz/nimuairy-{api,frontend}:<commit SHA>` on every master push, and the manual
+`release.yml` workflow deploys a chosen SHA over SSH (`deploy-on-vps.yml`), recording it as
+`APP_SHA` in the VPS `.env` and rolling back if the smoke test fails. `APP_SHA` is required by
+`compose.prod.yaml`; for a local production build use any value, e.g. `APP_SHA=local`.
+
 `.env` must define `POSTGRES_PASSWORD`, `JWT_SECRET` and `CLOUDFLARED_TOKEN`; the stack
 refuses to start without them instead of falling back to the dev placeholders.
 `.env.example` leaves them empty on purpose, so a copied `.env` fails fast until real

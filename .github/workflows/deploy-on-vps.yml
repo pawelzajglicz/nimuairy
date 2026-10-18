@@ -1,0 +1,192 @@
+name: Deploy on VPS
+
+# Reusable: called by release.yml with an image tag that build-and-push.yml has already pushed.
+# The VPS holds no source code, only compose.yaml, compose.prod.yaml and its own .env; APP_SHA in
+# that .env selects the backend and frontend images.
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: Full 40-character commit SHA used as the GHCR image tag.
+        required: true
+        type: string
+      environment:
+        description: Target GitHub environment; holds the SMOKE_URL and VPS_KNOWN_HOSTS variables.
+        required: false
+        type: string
+        default: production
+      project_path:
+        description: Application directory on the VPS.
+        required: false
+        type: string
+        default: /var/nimuairy
+      compose_wait_timeout:
+        description: Seconds to wait for healthy containers. The backend healthcheck alone allows a 90 s start period.
+        required: false
+        type: string
+        default: "180"
+    secrets:
+      VPS_SSH_KEY:
+        description: Private SSH key of the deploy user.
+        required: true
+      VPS_HOST:
+        description: VPS hostname or IP address.
+        required: true
+      VPS_USER:
+        description: SSH user on the VPS; defaults to `deploy`.
+        required: false
+      GHCR_USERNAME:
+        description: GHCR user for pulling private images; defaults to the repository owner.
+        required: false
+      GHCR_TOKEN:
+        description: Token with read:packages, needed only while the GHCR packages are private.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.image_tag }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    # Values are passed through env rather than ${{ }} inside scripts, so they can never be
+    # interpreted as shell code. They are expanded on the runner, before ssh sends the command.
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      PROJECT_PATH: ${{ inputs.project_path }}
+      COMPOSE: docker compose -f compose.yaml -f compose.prod.yaml
+    steps:
+      # The tag also ends up inside remote shell commands, so only a plain hex SHA is accepted.
+      - name: Validate image tag
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::image_tag must be a full 40-character lowercase SHA, got: $IMAGE_TAG"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The host key comes from a variable instead of ssh-keyscan: scanning at deploy time would
+      # trust whatever answers on that address.
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER || 'deploy' }}
+          VPS_KNOWN_HOSTS: ${{ vars.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$VPS_KNOWN_HOSTS" ]; then
+            echo "::error::Set the VPS_KNOWN_HOSTS variable (output of ssh-keyscan run against the VPS)."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $VPS_HOST
+            User $VPS_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Copy Compose manifests to VPS
+        run: |
+          ssh vps "mkdir -p '$PROJECT_PATH'"
+          scp compose.yaml compose.prod.yaml "vps:$PROJECT_PATH/"
+
+      # The token goes through stdin, so it never appears in a command line on the VPS.
+      - name: Log in to GHCR on VPS
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.repository_owner }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          if [ -z "$GHCR_TOKEN" ]; then
+            echo "GHCR_TOKEN not set, assuming public packages."
+            exit 0
+          fi
+          printf '%s' "$GHCR_TOKEN" | ssh vps "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
+
+      - name: Read previous APP_SHA
+        id: previous
+        run: |
+          PREVIOUS_SHA=$(ssh vps "grep '^APP_SHA=' '$PROJECT_PATH/.env' 2>/dev/null | cut -d= -f2" || true)
+          echo "sha=$PREVIOUS_SHA" >> "$GITHUB_OUTPUT"
+          echo "Previous APP_SHA: ${PREVIOUS_SHA:-<none>}"
+
+      - name: Set APP_SHA in .env
+        id: set_sha
+        run: |
+          ssh vps "cd '$PROJECT_PATH' && touch .env && \
+            if grep -q '^APP_SHA=' .env; then \
+              sed -i.bak 's|^APP_SHA=.*|APP_SHA=$IMAGE_TAG|' .env; \
+            else \
+              echo 'APP_SHA=$IMAGE_TAG' >> .env; \
+            fi"
+
+      # Only the images built by this repository; postgres and cloudflared stay on their pinned tags.
+      - name: Pull images on VPS
+        run: ssh vps "cd '$PROJECT_PATH' && $COMPOSE pull backend frontend"
+
+      - name: Roll out stack
+        env:
+          COMPOSE_WAIT_TIMEOUT: ${{ inputs.compose_wait_timeout }}
+        run: ssh vps "cd '$PROJECT_PATH' && $COMPOSE up -d --no-build --wait --wait-timeout '$COMPOSE_WAIT_TIMEOUT'"
+
+      # Goes through Cloudflare, the tunnel and nginx; the backend's health was already checked by
+      # --wait, since the frontend starts only after the backend is healthy.
+      - name: Smoke test public URL
+        env:
+          SMOKE_URL: ${{ vars.SMOKE_URL }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [ -z "$SMOKE_URL" ]; then
+            echo "::error::Set the SMOKE_URL variable in the $ENVIRONMENT environment."
+            exit 1
+          fi
+          curl -fsS -o /dev/null --max-time 30 --retry 5 --retry-delay 5 --retry-all-errors "$SMOKE_URL"
+
+      # Every deploy leaves the previous SHA's images behind. The label filter limits pruning to
+      # images built from this repository (set by docker/metadata-action), so other images on the
+      # VPS are untouched; running containers' images are never pruned. A week's worth stays for a
+      # quick manual rollback, and anything older is pulled again from GHCR. Disk cleanup must not
+      # fail a deploy that already passed the smoke test.
+      - name: Prune old images on VPS
+        continue-on-error: true
+        env:
+          SOURCE_LABEL: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        run: ssh vps "docker image prune -af --filter 'label=$SOURCE_LABEL' --filter 'until=168h'"
+
+      # Runs for any failure after .env was changed (pull, rollout or smoke test), so .env never
+      # keeps pointing at a SHA that is not running.
+      - name: Roll back to previous APP_SHA
+        if: failure() && steps.set_sha.outcome == 'success'
+        env:
+          PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+          COMPOSE_WAIT_TIMEOUT: ${{ inputs.compose_wait_timeout }}
+          SMOKE_URL: ${{ vars.SMOKE_URL }}
+        run: |
+          if [[ ! "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No valid previous APP_SHA in .env (first deploy?). Rollback is impossible."
+            exit 1
+          fi
+          ssh vps "cd '$PROJECT_PATH' && \
+            sed -i.failed 's|^APP_SHA=.*|APP_SHA=$PREVIOUS_SHA|' .env && \
+            $COMPOSE pull backend frontend && \
+            $COMPOSE up -d --no-build --wait --wait-timeout '$COMPOSE_WAIT_TIMEOUT'"
+          curl -fsS -o /dev/null --max-time 30 --retry 5 --retry-delay 5 --retry-all-errors "$SMOKE_URL"
+          echo "::error::Deploy of $IMAGE_TAG failed. Stack rolled back to $PREVIOUS_SHA."
+          exit 1
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts ~/.ssh/config
