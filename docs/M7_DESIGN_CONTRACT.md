@@ -125,10 +125,22 @@ Add `defense` to the wall and orb models and DTOs: the initial demo walls use 10
 
 ## 9. Proposed implementation steps
 
-### M7.1 — Finalize rules and contract
-Confirm the contract and inspect the existing model to identify the minimal changes needed for wall statistics and destroyed-object representation.
+### M7.1 — Finalize rules and contract (completed)
 
-**Exit criteria:** all rules required for the first attack implementation are unambiguous.
+The current model was inspected before implementation. The required changes are now explicit:
+
+- Add `defense` to the backend `Wall` and `Orb` records, their `WallDto`/`OrbDto`, the frontend domain models, and mapper.
+- Initialize demo walls with **1000 HP / 100 defense** (the current demo has 1500 HP and no defense field).
+- Initialize demo orbs with **0 defense** (the current model has no orb defense field).
+- Update the committed OpenAPI snapshot and regenerate the Orval client; do not edit generated files by hand.
+- Extend backend service/controller tests, mapper/fixtures and domain tests to assert the new statistics and destruction rules.
+- Keep units, walls, orbs as separate domain types; do not introduce a generic target hierarchy unless implementation demonstrates a concrete need.
+- Remove a unit or wall from its collection when HP reaches 0. Keep an orb in state at 0 HP for M8 to resolve victory.
+- The current entity layer only emits clicks for units. M7.4 must also enable targeting walls and orbs in ATTACK mode, without making those objects selectable as units in MOVE mode.
+
+No database or persistence change is needed. Damage calculation remains one formula for every target type.
+
+**Exit criteria met:** target statistics, target destruction behavior, state model implications and API/code-generation touchpoints are unambiguous.
 
 ### M7.2 — Combat domain and engine
 Add attack command/action, validation, range/footprint checks, damage calculation, AP consumption, destruction behavior, domain errors and result. Add focused unit tests.
