@@ -20,7 +20,7 @@ Two players control units on the same board. Each player has an orb protected by
 
 The primary objective is to destroy the opponent's orb.
 
-Destroying the opponent's orb immediately ends the battle and determines the winner, regardless of how many units either player has remaining.
+Destroying the opponent's orb is the primary victory condition, regardless of how many units either player has remaining. M8 implements victory detection and winner resolution. Until then, an orb at 0 HP remains in the domain state so its destruction can be detected.
 
 ## 2. Turn Model
 
@@ -175,7 +175,7 @@ The orb:
 - belongs to a player,
 - has a position,
 - has a footprint,
-- has hit points,
+- has hit points and defense,
 - can be targeted by attacks,
 - is protected by that player's wall.
 
@@ -183,11 +183,9 @@ The initial orb can use a one-cell footprint, but the domain model should not re
 
 ### Victory condition
 
-Destroying a player's orb immediately ends the battle.
+Destroying a player's orb is the primary victory condition. The opponent wins, regardless of the number, health, or status of the remaining units.
 
-The opponent wins.
-
-The number, health, or status of the remaining units does not change this victory condition.
+M7 preserves an orb in the domain state at 0 HP. M8 adds the logic that detects the destroyed orb, ends the battle, and determines the winner.
 
 ## 6. Walls
 
@@ -238,17 +236,23 @@ The initial domain model includes:
 - id
 - player/owner
 - unit type
-- HP
+- current HP (`health`) and maximum HP (`maxHealth`)
 - defense
 - attack
 - position
 - footprint
+
+The invariant is `0 <= health <= maxHealth`, with a positive maximum HP value.
 
 From M6, a unit also has:
 
 - `actionPointBudget` — its AP per turn (see 2.4)
 - `movementCostFactor` — its movement cost multiplier (see 8.2)
 - `remainingActionPoints` — its current AP, as battle state
+
+From M7, a unit also has:
+
+- `attackActionPointCost` — the AP required to perform an attack. It is a unit statistic; the initial MVP value is 2 AP for every unit.
 
 `moveRange` is removed from the gameplay model in M6.
 
@@ -358,17 +362,17 @@ introduced later without changing the AP model.
 
 Combat is governed by unit statistics and battle rules.
 
-The initial unit model includes:
+The initial unit model includes attack, defense, current HP (`health`), maximum HP (`maxHealth`), and `attackActionPointCost`.
 
-- attack
-- defense
-- HP
+M7 uses melee attacks: an attacker and target are in range when any occupied cell of one shares an edge with an occupied cell of the other. Diagonal-only contact does not count, and the full footprints matter. The AP cost comes from the attacking unit's `attackActionPointCost`; the initial MVP value is 2 AP for every unit.
 
-The orb is also a valid combat objective.
+Damage uses the same formula for units, walls, and orbs:
 
-The exact attack ranges, targeting rules, damage calculation, and special abilities are defined by later gameplay milestones.
+`damage = max(0, attacker.attack - target.defense)`
 
-The domain model should not assume that all attacks target units only.
+The orb and the wall are valid combat targets, alongside enemy units. The domain remains the source of truth for target legality, attack range, AP cost, and damage.
+
+M7's UI presents the selected unit's attack range and legal attack targets. It also displays each unit's current and maximum HP (for example, `350/500`) near that unit on the board. These are presentation features; they do not introduce combat rules into UI components.
 
 ## 10. Domain Concepts
 
