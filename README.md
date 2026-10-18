@@ -77,6 +77,59 @@ Stop the stack and delete the Postgres data volume:
 docker compose down -v
 ```
 
+### Database backups
+
+`scripts/backup-db.sh` dumps the database (`pg_dump -Fc`) into `/var/nimuairy/backups`, keeps
+14 days locally and, with `BACKUP_REMOTE` set, copies the dumps to Cloudflare R2 through an
+rclone `crypt` remote, so they leave the VPS already encrypted. It runs daily from cron and before
+every rollout in `deploy-on-vps.yml`: rolling back `APP_SHA` reverts the code but not Liquibase
+migrations, so that pre-deploy dump is the way back to the previous schema. The deploy copies the
+script to the VPS; cron and rclone are set up once by hand.
+
+One-time setup on the VPS, after the first deploy that copied the script:
+
+1. In Cloudflare, create the R2 bucket `nimuairy-backups` with a lifecycle rule deleting objects
+   after 90 days, and an R2 API token with *Object Read & Write* on that bucket only.
+2. As root: `apt install rclone`.
+3. As `deploy` (`su - deploy`); `read -rs` keeps the values out of the shell history. Store the
+   crypt password in a password manager: without it the off-site dumps cannot be decrypted.
+   ```bash
+   read -rs R2_KEY_ID; read -rs R2_SECRET; read -rs CRYPT_PASSWORD
+   rclone config create r2 s3 provider=Cloudflare access_key_id="$R2_KEY_ID" \
+     secret_access_key="$R2_SECRET" endpoint=https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
+     no_check_bucket=true
+   rclone config create r2crypt crypt remote=r2:nimuairy-backups password="$CRYPT_PASSWORD" --obscure
+   BACKUP_REMOTE=r2crypt: bash /var/nimuairy/scripts/backup-db.sh manual
+   rclone ls r2crypt:
+   ```
+   `no_check_bucket` is needed because a bucket-scoped token may not create buckets.
+4. As root, `/etc/cron.d/nimuairy-backup` (output goes to the journal:
+   `journalctl -t nimuairy-backup`):
+   ```
+   BACKUP_REMOTE=r2crypt:
+   30 3 * * * deploy bash /var/nimuairy/scripts/backup-db.sh 2>&1 | logger -t nimuairy-backup
+   ```
+
+Test a restore into a scratch database, leaving production untouched:
+
+```bash
+f=$(ls -t /var/nimuairy/backups/*.dump | head -1)
+docker exec postgres-nimuairy sh -c 'createdb -U "$POSTGRES_USER" restore_test'
+docker exec -i postgres-nimuairy sh -c 'pg_restore -U "$POSTGRES_USER" -d restore_test --no-owner' < "$f"
+docker exec postgres-nimuairy sh -c 'psql -U "$POSTGRES_USER" -d restore_test -c "select count(*) from users"'
+docker exec postgres-nimuairy sh -c 'dropdb -U "$POSTGRES_USER" restore_test'
+```
+
+Restoring production (an off-site dump first comes back with
+`rclone copy r2crypt: /tmp/restore --include '<file name>'`):
+
+```bash
+cd /var/nimuairy
+docker compose stop backend frontend
+docker exec -i postgres-nimuairy sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' < <dump file>
+docker compose up -d
+```
+
 ### Container architecture
 
 ```text
