@@ -56,8 +56,10 @@ Damage is calculated using the same formula for units, walls, and orbs:
 - HP must never fall below 0.
 - A successful attack applies damage and deducts AP atomically in one new state.
 - Failed execution leaves the input state unchanged.
+- All attackable target types (`Unit`, `Wall`, and `Orb`) expose a `defense` statistic and use the same damage formula; the engine does not special-case the target type when calculating damage.
 - Walls have their own `defense` statistic. The initial demo wall values are **1000 HP** and **100 defense**.
-- These are provisional MVP values. Balance tuning for walls and units is intentionally deferred until after the MVP; do not introduce a separate balancing task within M7.
+- Orbs have their own `defense` statistic, set to **0** in the initial demo battle. This makes orb damage equal to the attacker's `attack` value without a special-case formula.
+- These are provisional MVP values. Balance tuning for walls, units, and orbs is intentionally deferred until after the MVP; do not introduce a separate balancing task within M7.
 
 ### 3.5 Destruction and victory boundary
 
@@ -110,7 +112,7 @@ The result should expose enough domain information for the UI/store to present t
 
 The current architecture and M6 contract keep battle actions and transient turn state in the frontend domain. M7 does not add backend action endpoints, persistence, database changes, or `remainingActionPoints`/`activeUnitId` to the API.
 
-If wall HP/defense need to be added to the initial wall model or DTO, make only the minimal change required to represent the agreed statistics (1000 HP / 100 defense). Keep DTO and generated frontend client changes in the same implementation step and regenerate generated API code rather than editing it manually.
+Add `defense` to the wall and orb models and DTOs: the initial demo walls use 1000 HP / 100 defense, and the initial demo orbs use defense 0. Keep DTO and generated frontend client changes in the same implementation step and regenerate generated API code rather than editing it manually.
 
 ## 8. Out of scope
 
@@ -159,7 +161,7 @@ Run relevant frontend unit/component tests, backend tests if DTOs change, build/
 7. Damage uses `max(0, attacker.attack - target.defense)` and can be 0; zero-damage attacks remain legal.
 8. HP is clamped at 0 and never becomes negative.
 9. A unit is removed at 0 HP; a wall is removed at 0 HP; an orb remains present at 0 HP for M8 to resolve victory.
-10. Initial demo walls have 1000 HP and 100 defense. These values are provisional until after MVP.
+10. Initial demo walls have 1000 HP and 100 defense; initial demo orbs have defense 0. These values are provisional until after MVP.
 11. A successful attack updates AP and target state atomically in an immutable transition.
 12. Attack legality and execution share the same domain rules; UI does not calculate legality or damage.
 13. ATTACK is offered only when at least one valid target can be attacked with available AP.
