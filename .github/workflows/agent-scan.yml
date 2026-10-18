@@ -1,0 +1,67 @@
+name: Agent Scan
+
+# Skills are prompts that coding agents load with the user's privileges, so a malicious change
+# (e.g. a prompt injection in an updated third-party skill) is effectively code. Runs when skills
+# change and weekly, as Snyk's analysis improves without any change here.
+on:
+  pull_request:
+    paths:
+      - .agents/skills/**
+      - .claude/skills/**
+      - .junie/skills/**
+      - frontend/.claude/skills/**
+      - .github/workflows/agent-scan.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-scan-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Informational only, not a required check: the scanner's output is experimental and depends on
+# Snyk's API, which must not block merges. MCP configs are not scanned, as that would start their
+# servers (npx packages) on the runner.
+jobs:
+  scan:
+    # SNYK_TOKEN is not passed to fork PRs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check Snyk secret
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "::error::Add SNYK_TOKEN (app.snyk.io/account) to the repository secrets."
+            exit 1
+          fi
+
+      # Dependabot cannot update a downloaded binary: bump VERSION and SHA256 together, taking the
+      # checksum from the release's checksums.txt.
+      - name: Install Snyk Agent Scan
+        env:
+          VERSION: 0.6.8
+          SHA256: 73f43deb9621fc92526a60d4c5197b350fb688c4bf7350ad4580cd3b05fc49ee
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/agent-scan" \
+            "https://github.com/snyk/agent-scan/releases/download/v${VERSION}/agent-scan-${VERSION}-linux-x86_64"
+          echo "${SHA256}  $RUNNER_TEMP/agent-scan" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/agent-scan"
+
+      # .claude/skills and .junie/skills are synced copies of .agents/skills, but agents load the
+      # copies, so a copy edited directly must be scanned too.
+      - name: Scan skills
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          "$RUNNER_TEMP/agent-scan" scan --ci \
+            .agents/skills .claude/skills .junie/skills frontend/.claude/skills
