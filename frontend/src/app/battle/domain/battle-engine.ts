@@ -257,7 +257,7 @@ function unitActions(state: BattleState, unit: Unit): UnitActionType[] {
   if (canMoveAnywhere(state, unit)) {
     actions.push('MOVE');
   }
-  if (attackTargets(state, unit).length > 0) {
+  if (hasAttackTarget(state, unit)) {
     actions.push('ATTACK');
   }
   return actions;
@@ -297,9 +297,22 @@ function validateAttack(
 }
 
 function attackTargets(state: BattleState, attacker: Unit): AttackTarget[] {
+  return everyTarget(state).filter(
+    (target) => validateAttack(state, attacker, target).ok,
+  );
+}
+
+/** Stops at the first legal target; `unitActions` needs no more. */
+function hasAttackTarget(state: BattleState, attacker: Unit): boolean {
+  return everyTarget(state).some(
+    (target) => validateAttack(state, attacker, target).ok,
+  );
+}
+
+function everyTarget(state: BattleState): AttackTarget[] {
   return ATTACK_TARGET_KINDS.flatMap((kind) =>
     targetsOfKind(state, kind).map(({ id }): AttackTarget => ({ kind, id })),
-  ).filter((target) => validateAttack(state, attacker, target).ok);
+  );
 }
 
 /**
