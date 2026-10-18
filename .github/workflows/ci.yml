@@ -31,7 +31,6 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
-      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,11 +41,9 @@ jobs:
         run: |
           frontend=false
           backend=false
-          docker=false
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
             frontend=true
             backend=true
-            if [ "$GITHUB_EVENT_NAME" != push ]; then docker=true; fi
           else
             while read -r file; do
               case "$file" in
@@ -54,23 +51,14 @@ jobs:
                 frontend/*) frontend=true ;;
                 nimuairy-api/*) backend=true ;;
               esac
-              # A separate case, because case stops at the first match and these files also
-              # belong to an area above.
-              case "$file" in
-                .github/workflows/* | */Dockerfile | */.dockerignore | frontend/nginx.conf \
-                  | frontend/package.json | frontend/package-lock.json \
-                  | nimuairy-api/docker/* | nimuairy-api/pom.xml | nimuairy-api/.mvn/* \
-                  | nimuairy-api/mvnw) docker=true ;;
-              esac
             # --no-renames lists both paths of a move, so moving a file out of an area still
             # runs that area's checks.
             done < <(git diff --no-renames --name-only HEAD^1 HEAD)
           fi
-          echo "frontend=$frontend backend=$backend docker=$docker"
+          echo "frontend=$frontend backend=$backend"
           {
             echo "frontend=$frontend"
             echo "backend=$backend"
-            echo "docker=$docker"
           } >> "$GITHUB_OUTPUT"
 
   frontend:
@@ -124,7 +112,8 @@ jobs:
       - run: ./mvnw test
 
   # Nightly-only: catches advisories published after the last PR. Only high/critical fail the
-  # run; lower ones are left to the weekly Dependabot updates.
+  # run; lower ones are left to the weekly Dependabot updates. Unlike the Trivy SCA scan, it also
+  # covers devDependencies, i.e. the build tooling that runs in CI.
   npm-audit:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -141,33 +130,10 @@ jobs:
           node-version: 26.8.2
       - run: npm audit --audit-level=high
 
-  # Runs nightly, because the images build from moving base tags (dhi.io/node:26-…, …) and can
-  # break without any change in this repo, and on PRs that touch Docker or dependency files.
-  # DHI_USERNAME and DHI_TOKEN must exist as Actions secrets; the Dependabot secrets of the
-  # same name are a separate store.
-  docker-images:
-    needs: changes
-    if: needs.changes.outputs.docker == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        context: [frontend, nimuairy-api]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - env:
-          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
-          DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
-        run: echo "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
-      - run: docker build ${{ matrix.context }}
-
   # The single check to mark as required in branch protection: skipped jobs count as passed,
   # failed or cancelled ones do not.
   ci-result:
-    needs: [changes, frontend, backend, npm-audit, docker-images]
+    needs: [changes, frontend, backend, npm-audit]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
