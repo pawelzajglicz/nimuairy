@@ -173,7 +173,9 @@ jobs:
         run: ssh vps "docker image prune -af --filter 'label=$SOURCE_LABEL' --filter 'until=168h'"
 
       # Runs for any failure after .env was changed (pull, rollout or smoke test), so .env never
-      # keeps pointing at a SHA that is not running.
+      # keeps pointing at a SHA that is not running. The previous images are normally still on the
+      # VPS (prune runs only after a successful deploy), so GHCR is contacted only if one is missing:
+      # an unreachable registry must not block the rollback.
       - name: Roll back to previous APP_SHA
         if: failure() && steps.set_sha.outcome == 'success'
         env:
@@ -187,8 +189,7 @@ jobs:
           fi
           ssh vps "cd '$PROJECT_PATH' && \
             sed -i.failed 's|^APP_SHA=.*|APP_SHA=$PREVIOUS_SHA|' .env && \
-            $COMPOSE pull backend frontend && \
-            $COMPOSE up -d --no-build --wait --wait-timeout '$COMPOSE_WAIT_TIMEOUT'"
+            $COMPOSE up -d --no-build --pull missing --wait --wait-timeout '$COMPOSE_WAIT_TIMEOUT'"
           curl -fsS -o /dev/null --max-time 30 --retry 5 --retry-delay 5 --retry-all-errors "$SMOKE_URL"
           echo "::error::Deploy of $IMAGE_TAG failed. Stack rolled back to $PREVIOUS_SHA."
           exit 1
