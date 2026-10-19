@@ -8,6 +8,7 @@ import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type {
   BattleStateResponse,
+  OrbDto,
   UnitDto,
 } from '../../../api/generated/model';
 import { BattleStore } from '../../battle.store';
@@ -28,6 +29,22 @@ function unitDto(overrides: UnitDto): UnitDto {
     movementCostFactor: 1,
     attackActionPointCost: 2,
     ...overrides,
+  };
+}
+
+/**
+ * A new battle needs one living orb per side. This one sits off the board, so
+ * it blocks no cell and is in reach of no unit in these tests.
+ */
+function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+  return {
+    id: `${owner.toLowerCase()}-orb`,
+    owner,
+    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    footprint: [{ x: 0, y: 0 }],
+    health: 50,
+    maxHealth: 50,
+    defense: 0,
   };
 }
 
@@ -54,7 +71,7 @@ describe('BattleDemoPage', () => {
 
     const response: BattleStateResponse = {
       board: { width: 21, height: 11, terrain: [] },
-      orbs: [],
+      orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
       walls: [],
       units,
       currentPlayer: 'LEFT',
@@ -226,6 +243,7 @@ describe('BattleDemoPage', () => {
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
+            offBoardOrb('RIGHT'),
           ],
         },
       );
@@ -802,8 +820,15 @@ describe('BattleDemoPage', () => {
         Array.from(root.querySelectorAll('.health-label-value')).map((label) =>
           label.textContent?.trim(),
         );
-      // The wall first, then the units; the maximum stays as the current HP drops.
-      expect(healthLabels()).toEqual(['10/10', '100/100', '100/100']);
+      // The wall, the orbs, then the units; the maximum stays as the current
+      // HP drops.
+      expect(healthLabels()).toEqual([
+        '10/10',
+        '50/50',
+        '50/50',
+        '100/100',
+        '100/100',
+      ]);
 
       act(() =>
         query(
@@ -815,7 +840,13 @@ describe('BattleDemoPage', () => {
         query('button.entity-cell.attack-target[data-kind="unit"]')!.click(),
       );
 
-      expect(healthLabels()).toEqual(['10/10', '100/100', '95/100']);
+      expect(healthLabels()).toEqual([
+        '10/10',
+        '50/50',
+        '50/50',
+        '100/100',
+        '95/100',
+      ]);
     });
   });
 });

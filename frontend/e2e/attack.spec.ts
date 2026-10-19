@@ -35,6 +35,8 @@ function unit(
 // - a RIGHT 2x1 wall covering (1,2) and (2,2): 5 HP, defense 0;
 // - a RIGHT orb at (0,1): 5 HP, defense 0;
 // - a friendly LEFT unit at (1,0).
+// The LEFT orb at (4,0), out of everyone's reach, is only there because a new
+// battle needs one living orb per side.
 const battleState: BattleStateResponse = {
   board: {
     width: WIDTH,
@@ -73,6 +75,15 @@ const battleState: BattleStateResponse = {
       footprint: [{ x: 0, y: 0 }],
       health: 5,
       maxHealth: 5,
+      defense: 0,
+    },
+    {
+      id: 'orb-left',
+      owner: 'LEFT',
+      position: { x: 4, y: 0 },
+      footprint: [{ x: 0, y: 0 }],
+      health: 75,
+      maxHealth: 75,
       defense: 0,
     },
   ],
@@ -191,7 +202,9 @@ test.describe('attacks with real pointer interaction', () => {
 
     await clickCell(page, 0, 1);
 
-    const orb = page.locator('.entity-cell[data-kind="orb"]');
+    const orb = page.locator(
+      '.entity-cell[data-kind="orb"][data-owner="RIGHT"]',
+    );
     await expect(orb).toHaveCount(1);
     await expect(orb).toHaveAttribute('data-destroyed', 'true');
     await expect(orb).toHaveCSS('filter', 'grayscale(1)');
@@ -224,7 +237,8 @@ test.describe('attacks with real pointer interaction', () => {
     await expect(page.locator('.attack-target')).toHaveCount(0);
   });
 
-  // Labels follow the cell order: the wall, the orb, then left-1, left-2, right-1.
+  // Labels follow the cell order: the wall, the RIGHT orb, the LEFT orb, then
+  // left-1, left-2, right-1.
   const healthValues = (page: Page) => page.locator('.health-label-value');
 
   test("every unit, wall and orb shows current/max HP, and the attacked unit's label follows the attack", async ({
@@ -234,6 +248,7 @@ test.describe('attacks with real pointer interaction', () => {
     await expect(healthValues(page)).toHaveText([
       '5/5',
       '5/5',
+      '75/75',
       '100/100',
       '100/100',
       '100/100',
@@ -245,6 +260,7 @@ test.describe('attacks with real pointer interaction', () => {
     await expect(healthValues(page)).toHaveText([
       '5/5',
       '5/5',
+      '75/75',
       '100/100',
       '100/100',
       '95/100',
@@ -262,6 +278,7 @@ test.describe('attacks with real pointer interaction', () => {
 
     await expect(healthValues(page)).toHaveText([
       '0/5',
+      '75/75',
       '100/100',
       '100/100',
       '100/100',
@@ -282,13 +299,13 @@ test.describe('attacks with real pointer interaction', () => {
     };
 
     // MOVE mode: the label of left-2 selects left-2.
-    await clickCentre(3);
+    await clickCentre(4);
     await expect(attackerInfo(page)).toContainText('left-2');
 
     // ATTACK mode: the label of the target right-1 attacks it, and so does
     // the label of the target wall.
     await selectAttacker(page);
-    await clickCentre(4);
+    await clickCentre(5);
     await expect(outcome(page)).toHaveText(
       'LEFT left-1 attacked UNIT right-1 · damage 5 · remaining HP 95 · cost 2 AP',
     );

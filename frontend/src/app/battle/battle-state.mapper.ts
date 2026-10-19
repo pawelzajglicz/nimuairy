@@ -14,6 +14,7 @@ import type {
   Unit,
   Wall,
 } from './domain/battle-state';
+import { validateNewBattle } from './domain/new-battle';
 
 /**
  * Converts the backend's initial battle state into the domain model.
@@ -22,7 +23,7 @@ import type {
 export function toBattleState(response: BattleStateResponse): BattleState {
   const board = required(response.board, 'board');
 
-  return {
+  const state: BattleState = {
     board: {
       width: required(board.width, 'board.width'),
       height: required(board.height, 'board.height'),
@@ -35,7 +36,18 @@ export function toBattleState(response: BattleStateResponse): BattleState {
     // The API carries no turn progress, so a loaded battle starts with the
     // current turn unclaimed.
     activeUnitId: undefined,
+    // Nor a result: what it sends is always a new battle.
+    result: { status: 'IN_PROGRESS' },
   };
+
+  const validated = validateNewBattle(state);
+  if (!validated.ok) {
+    const { side, reason } = validated.error;
+    throw new Error(
+      `Battle state response is not a valid new battle: ${side} orb ${reason}`,
+    );
+  }
+  return validated.value;
 }
 
 function toUnit(dto: UnitDto): Unit {

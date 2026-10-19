@@ -3,7 +3,7 @@
  * com.nimuairy.nimuairy.battle so the engine can later move to Java.
  * Unlike the generated API DTOs, fields are required and readonly, and the
  * model holds battle state that the API does not carry yet
- * (remainingActionPoints, activeUnitId).
+ * (remainingActionPoints, activeUnitId, result).
  */
 
 export interface Position {
@@ -78,6 +78,18 @@ export interface Orb {
   readonly defense: number;
 }
 
+/**
+ * DRAW is reserved for future mechanics that could destroy both orbs in one
+ * action; no current action produces it.
+ */
+export type BattleOutcome =
+  | { readonly type: 'VICTORY'; readonly winner: PlayerSide }
+  | { readonly type: 'DRAW' };
+
+export type BattleResult =
+  | { readonly status: 'IN_PROGRESS' }
+  | { readonly status: 'FINISHED'; readonly outcome: BattleOutcome };
+
 export interface BattleState {
   readonly board: Board;
   readonly orbs: readonly Orb[];
@@ -91,4 +103,6 @@ export interface BattleState {
    * Turn state, not the UI's selected unit.
    */
   readonly activeUnitId: string | undefined;
+  /** Once FINISHED, no gameplay action can change the state any more. */
+  readonly result: BattleResult;
 }

@@ -7,6 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   BattleStateResponse,
+  OrbDto,
   TerrainCellDto,
   UnitDto,
 } from '../api/generated/model';
@@ -16,6 +17,22 @@ import { BattleEngine } from './domain/battle-engine';
 import type { Position } from './domain/battle-state';
 import type { AttackTarget } from './domain/combat';
 import { InteractionMode } from './interaction-mode';
+
+/**
+ * A new battle needs one living orb per side. This one sits off the board, so
+ * it blocks no cell and is in reach of no unit in these tests.
+ */
+function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+  return {
+    id: `${owner.toLowerCase()}-orb`,
+    owner,
+    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    footprint: [{ x: 0, y: 0 }],
+    health: 50,
+    maxHealth: 50,
+    defense: 0,
+  };
+}
 
 function demoResponse(): BattleStateResponse {
   return {
@@ -31,7 +48,7 @@ function demoResponse(): BattleStateResponse {
         { position: { x: 2, y: 1 }, type: 'PLAIN' },
       ],
     },
-    orbs: [],
+    orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
     walls: [],
     units: [
       {
@@ -264,7 +281,7 @@ describe('BattleStore', () => {
       }
       return {
         board: { width: 6, height: 3, terrain },
-        orbs: [],
+        orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
         walls: [],
         units: [
           unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
@@ -582,7 +599,10 @@ describe('BattleStore', () => {
 
         store.endTurn();
 
-        expect(store.battleState()).toEqual(new BattleEngine().endTurn(before));
+        expect(new BattleEngine().endTurn(before)).toEqual({
+          ok: true,
+          value: store.battleState(),
+        });
       });
 
       it('clears the active unit, ends the turn at 0 AP and restores the AP of the player whose turn starts', async () => {
@@ -676,6 +696,7 @@ describe('BattleStore', () => {
       return {
         board: { width: 6, height: 3, terrain },
         orbs: [
+          offBoardOrb('LEFT'),
           {
             id: 'right-orb',
             owner: 'RIGHT',
@@ -804,9 +825,9 @@ describe('BattleStore', () => {
 
       store.attackTarget(ORB);
 
-      expect(store.battleState()?.orbs).toEqual([
+      expect(store.battleState()?.orbs).toContainEqual(
         expect.objectContaining({ id: 'right-orb', health: 0 }),
-      ]);
+      );
     });
 
     it('drops a destroyed unit from the state and the targets', async () => {

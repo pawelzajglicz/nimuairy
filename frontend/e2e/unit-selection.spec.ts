@@ -1,7 +1,8 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import type { BattleStateResponse } from '../src/app/api/generated/model';
 
-// 5x3 board: units at (0,0) and (1,2), a 3-cell wall column at x=2, orb at (4,1).
+// 5x3 board: units at (0,0) and (1,2), a 3-cell wall column at x=2, the RIGHT
+// orb at (4,1) and the LEFT orb, which a new battle needs too, at (4,2).
 // (3,1) is an empty cell behind the wall, outside unit-1's movement range, so
 // it offers no movement target. Terrain is listed x-major, so index = x * 3 + y.
 const battleState: BattleStateResponse = {
@@ -50,6 +51,15 @@ const battleState: BattleStateResponse = {
       id: 'orb-1',
       owner: 'RIGHT',
       position: { x: 4, y: 1 },
+      footprint: [{ x: 0, y: 0 }],
+      health: 75,
+      maxHealth: 75,
+      defense: 0,
+    },
+    {
+      id: 'orb-2',
+      owner: 'LEFT',
+      position: { x: 4, y: 2 },
       footprint: [{ x: 0, y: 0 }],
       health: 75,
       maxHealth: 75,
@@ -169,7 +179,10 @@ test.describe('unit selection with real pointer clicks', () => {
     await unit.click();
     await expect(unit).toHaveClass(/selected/);
 
-    await clickCenterOf(page, page.locator('.entity-cell[data-kind="orb"]'));
+    await clickCenterOf(
+      page,
+      page.locator('.entity-cell[data-kind="orb"][data-owner="RIGHT"]'),
+    );
 
     await expect(page.locator('.entity-cell.selected')).toHaveCount(0);
   });

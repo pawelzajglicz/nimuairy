@@ -7,3 +7,8 @@
 export type UnitActionType = 'MOVE' | 'ATTACK';
 
 export type ActionType = UnitActionType | 'END_TURN';
+
+/** How every gameplay action is rejected once the battle has finished. */
+export interface BattleFinishedError {
+  readonly type: 'BATTLE_FINISHED';
+}

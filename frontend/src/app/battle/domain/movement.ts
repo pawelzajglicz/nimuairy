@@ -1,3 +1,4 @@
+import type { BattleFinishedError } from './actions';
 import type { BattleState, Position } from './battle-state';
 
 /**
@@ -40,6 +41,7 @@ export type InvalidPathReason =
   'EMPTY' | 'DESTINATION_MISMATCH' | 'REVISITED' | StepViolation;
 
 export type MovementError =
+  | BattleFinishedError
   | { readonly type: 'UNIT_NOT_FOUND'; readonly unitId: string }
   | { readonly type: 'UNIT_CANNOT_MOVE'; readonly unitId: string }
   | { readonly type: 'INVALID_DESTINATION'; readonly destination: Position }

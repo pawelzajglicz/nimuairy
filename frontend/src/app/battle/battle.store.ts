@@ -259,11 +259,17 @@ export const BattleStore = signalStore(
       if (!state) {
         return;
       }
+      const result = store._engine.endTurn(state);
+      // Only a finished battle rejects END_TURN; reporting that is M8.2's
+      // store integration.
+      if (!result.ok) {
+        return;
+      }
       // Selection and hover belong to the turn that just ended, whichever
       // player owns the selected unit, so the new turn starts with nothing
       // selected.
       patchState(store, {
-        battleState: store._engine.endTurn(state),
+        battleState: result.value,
         selectedUnitId: undefined,
         hoveredDestination: undefined,
       });

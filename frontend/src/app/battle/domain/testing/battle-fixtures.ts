@@ -1,4 +1,5 @@
 import type {
+  BattleResult,
   BattleState,
   Orb,
   PlayerSide,
@@ -89,6 +90,7 @@ export interface TestStateOptions {
   readonly orbs?: readonly Orb[];
   readonly currentPlayer?: PlayerSide;
   readonly activeUnitId?: string;
+  readonly result?: BattleResult;
 }
 
 /**
@@ -105,6 +107,7 @@ export function testState({
   orbs = [],
   currentPlayer = 'LEFT',
   activeUnitId,
+  result = { status: 'IN_PROGRESS' },
 }: TestStateOptions = {}): BattleState {
   const rockKeys = new Set(rocks.map(positionKey));
   const missingKeys = new Set(withoutTerrain.map(positionKey));
@@ -127,5 +130,6 @@ export function testState({
     units,
     currentPlayer,
     activeUnitId,
+    result,
   };
 }

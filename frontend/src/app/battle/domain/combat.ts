@@ -1,3 +1,4 @@
+import type { BattleFinishedError } from './actions';
 import type { BattleState } from './battle-state';
 
 /**
@@ -43,10 +44,12 @@ export interface AttackResult {
 }
 
 /**
- * `UNIT_NOT_FOUND` and `INSUFFICIENT_ACTION_POINTS` match their MovementError
- * counterparts, so callers can handle them the same way for every action.
+ * `BATTLE_FINISHED`, `UNIT_NOT_FOUND` and `INSUFFICIENT_ACTION_POINTS` match
+ * their MovementError counterparts, so callers can handle them the same way
+ * for every action.
  */
 export type AttackError =
+  | BattleFinishedError
   | { readonly type: 'UNIT_NOT_FOUND'; readonly unitId: string }
   | { readonly type: 'UNIT_CANNOT_ATTACK'; readonly unitId: string }
   | { readonly type: 'TARGET_NOT_FOUND'; readonly target: AttackTarget }
