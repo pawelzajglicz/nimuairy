@@ -157,10 +157,21 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/AuthResponse"
+                  "$ref" : "#/components/schemas/CurrentUserResponse"
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/logout" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "logout",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
           }
         }
       }
@@ -185,7 +196,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/AuthResponse"
+                  "$ref" : "#/components/schemas/CurrentUserResponse"
                 }
               }
             }
@@ -204,6 +215,24 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/BattleStateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me" : {
+      "get" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CurrentUserResponse"
                 }
               }
             }
@@ -265,10 +294,10 @@
         },
         "required" : [ "password", "username" ]
       },
-      "AuthResponse" : {
+      "CurrentUserResponse" : {
         "type" : "object",
         "properties" : {
-          "token" : {
+          "username" : {
             "type" : "string"
           }
         }

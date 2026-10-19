@@ -1,49 +1,74 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap } from 'rxjs';
+import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
+import { OpenAPIDefinitionService } from '../api/generated/nimuairy-api';
 import { environment } from '../../environments/environment';
 import {
-  AuthResponse,
+  CurrentUserResponse,
   LoginRequest,
   RegisterRequest,
-} from '../models/auth.model';
+} from '../api/generated/model';
 
-const TOKEN_KEY = 'auth_token';
-
+/**
+ * The JWT lives in an HttpOnly cookie that this code can never read. The browser attaches it to
+ * /api requests on its own, so the frontend only tracks who is logged in, as the backend reports it.
+ */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly api = inject(OpenAPIDefinitionService);
   private readonly router = inject(Router);
 
-  readonly token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
+  readonly currentUser = signal<CurrentUserResponse | null>(null);
 
-  readonly isLoggedIn = computed(() => this.token() !== null);
+  readonly isLoggedIn = computed(() => this.currentUser() !== null);
 
-  register(request: RegisterRequest): Observable<AuthResponse> {
+  /**
+   * Runs once at startup, before the first route is activated. Asking the backend is the only way
+   * to know whether the cookie survived a reload. The response also carries the XSRF-TOKEN cookie
+   * that the first POST (login) needs.
+   *
+   * Uses HttpClient directly because the generated client exposes GET /me only as an httpResource,
+   * which cannot be awaited by an app initializer.
+   */
+  loadSession(): Observable<void> {
     return this.http
-      .post<AuthResponse>(`${environment.apiUrl}/auth/register`, request)
-      .pipe(tap((response) => this.saveToken(response.token)));
+      .get<CurrentUserResponse>(`${environment.apiUrl}/auth/me`)
+      .pipe(
+        tap((user) => this.currentUser.set(user)),
+        catchError(() => {
+          this.currentUser.set(null);
+          return of(null);
+        }),
+        map(() => undefined),
+      );
   }
 
-  login(request: LoginRequest): Observable<AuthResponse> {
-    return this.http
-      .post<AuthResponse>(`${environment.apiUrl}/auth/login`, request)
-      .pipe(tap((response) => this.saveToken(response.token)));
+  register(request: RegisterRequest): Observable<CurrentUserResponse> {
+    return this.api
+      .register(request)
+      .pipe(tap((user) => this.currentUser.set(user)));
   }
 
-  logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    this.token.set(null);
+  login(request: LoginRequest): Observable<CurrentUserResponse> {
+    return this.api
+      .login(request)
+      .pipe(tap((user) => this.currentUser.set(user)));
+  }
+
+  async logout(): Promise<void> {
+    try {
+      // Only the backend can expire an HttpOnly cookie.
+      await firstValueFrom(this.api.logout());
+    } finally {
+      this.endSession();
+    }
+  }
+
+  /** Forgets the user locally, e.g. after a 401 shows the cookie has expired. */
+  endSession(): void {
+    this.currentUser.set(null);
     this.router.navigate(['/login']);
-  }
-
-  getToken(): string | null {
-    return this.token();
-  }
-
-  private saveToken(token: string): void {
-    localStorage.setItem(TOKEN_KEY, token);
-    this.token.set(token);
   }
 }

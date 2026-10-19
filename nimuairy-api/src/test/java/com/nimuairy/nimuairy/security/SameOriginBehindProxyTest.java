@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.nimuairy.nimuairy.security.XsrfRequests.xsrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,7 +35,8 @@ class SameOriginBehindProxyTest {
                         .header("X-Forwarded-Host", "nimuairy.example")
                         .header("X-Forwarded-Proto", "https")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(LOGIN_BODY))
+                        .content(LOGIN_BODY)
+                        .with(xsrf()))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -45,7 +47,8 @@ class SameOriginBehindProxyTest {
                         .header("X-Forwarded-Host", "nimuairy.example")
                         .header("X-Forwarded-Proto", "https")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(LOGIN_BODY))
+                        .content(LOGIN_BODY)
+                        .with(xsrf()))
                 .andExpect(status().isForbidden());
     }
 }

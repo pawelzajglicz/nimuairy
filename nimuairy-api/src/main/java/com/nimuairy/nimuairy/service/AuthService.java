@@ -1,6 +1,5 @@
 package com.nimuairy.nimuairy.service;
 
-import com.nimuairy.nimuairy.dto.AuthResponse;
 import com.nimuairy.nimuairy.dto.LoginRequest;
 import com.nimuairy.nimuairy.dto.RegisterRequest;
 import com.nimuairy.nimuairy.exception.ConflictException;
@@ -28,7 +27,7 @@ public class AuthService {
     private final CustomUserDetailsService userDetailsService;
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResult register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new ConflictException("Username already exists");
         }
@@ -43,10 +42,10 @@ public class AuthService {
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
         String token = jwtService.generateToken(userDetails);
 
-        return new AuthResponse(token);
+        return new AuthResult(userDetails.getUsername(), token);
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResult login(LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.username(), request.password())
         );
@@ -54,6 +53,6 @@ public class AuthService {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         String token = jwtService.generateToken(userDetails);
 
-        return new AuthResponse(token);
+        return new AuthResult(userDetails.getUsername(), token);
     }
 }

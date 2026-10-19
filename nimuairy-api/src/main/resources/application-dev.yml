@@ -11,3 +11,8 @@ spring:
         format_sql: true
     database: postgresql
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+# ng serve runs on plain http. Chrome and Firefox accept Secure cookies on localhost anyway, but
+# other browsers may not, so dev drops the flag rather than depend on that.
+jwt:
+  cookie-secure: false

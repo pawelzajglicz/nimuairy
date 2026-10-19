@@ -18,10 +18,6 @@ import type {
   HttpResourceRequest
 } from '@angular/common/http';
 
-import type {
-  HttpResponse as AngularHttpResponse
-} from '@angular/common/http';
-
 import {
   Injectable,
   inject
@@ -36,19 +32,19 @@ import type {
 } from 'rxjs';
 
 import type {
-  AuthResponse,
   BattleStateResponse,
   CharacterRequest,
   CharacterResponse,
+  CurrentUserResponse,
   GetAllParams,
   LoginRequest,
   PageCharacterResponse,
   RegisterRequest
 } from './model';
 
-import {
-  map
-} from 'rxjs';
+import type {
+  HttpResponse as AngularHttpResponse
+} from '@angular/common/http';
 
 export interface OrvalHttpResourceRequestExtension {
   /** Extra headers merged over generated headers. Pass a function to read signals reactively. */
@@ -309,6 +305,15 @@ export function getDemoBattleResource(options?: OrvalHttpResourceOptions<BattleS
   return httpResource<BattleStateResponse>(() => applyOrvalRequestExtension(`/api/v1/battles/demo`, options), options);
 }
 
+/**
+ * @remarks httpResource is available in Angular 19.2 and later.
+ */
+export function meResource(options: OrvalHttpResourceOptions<CurrentUserResponse, unknown> & { defaultValue: NoInfer<CurrentUserResponse> }): HttpResourceRef<CurrentUserResponse>;
+export function meResource(options?: OrvalHttpResourceOptions<CurrentUserResponse, unknown>): HttpResourceRef<CurrentUserResponse | undefined>;
+export function meResource(options?: OrvalHttpResourceOptions<CurrentUserResponse, unknown>): HttpResourceRef<CurrentUserResponse | undefined> {
+  return httpResource<CurrentUserResponse>(() => applyOrvalRequestExtension(`/api/auth/me`, options), options);
+}
+
 
 interface HttpClientOptions {
   readonly headers?: HttpHeaders | Record<string, string | string[]>;
@@ -458,10 +463,10 @@ export class OpenAPIDefinitionService {
     );
   }
 
- register<TData = AuthResponse>(registerRequest: RegisterRequest, options?: HttpClientBodyOptions): Observable<TData>;
- register<TData = AuthResponse>(registerRequest: RegisterRequest, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
- register<TData = AuthResponse>(registerRequest: RegisterRequest, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
-  register<TData = AuthResponse>(
+ register<TData = CurrentUserResponse>(registerRequest: RegisterRequest, options?: HttpClientBodyOptions): Observable<TData>;
+ register<TData = CurrentUserResponse>(registerRequest: RegisterRequest, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
+ register<TData = CurrentUserResponse>(registerRequest: RegisterRequest, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
+  register<TData = CurrentUserResponse>(
     registerRequest: RegisterRequest, options?: HttpClientObserveOptions): Observable<TData | HttpEvent<TData> | AngularHttpResponse<TData>> {
     if (options?.observe === 'events') {
       return this.http.post<TData>(
@@ -492,10 +497,44 @@ export class OpenAPIDefinitionService {
     );
   }
 
- login<TData = AuthResponse>(loginRequest: LoginRequest, options?: HttpClientBodyOptions): Observable<TData>;
- login<TData = AuthResponse>(loginRequest: LoginRequest, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
- login<TData = AuthResponse>(loginRequest: LoginRequest, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
-  login<TData = AuthResponse>(
+ logout<TData = void>( options?: HttpClientBodyOptions): Observable<TData>;
+ logout<TData = void>( options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
+ logout<TData = void>( options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
+  logout<TData = void>(
+     options?: HttpClientObserveOptions): Observable<TData | HttpEvent<TData> | AngularHttpResponse<TData>> {
+    if (options?.observe === 'events') {
+      return this.http.post<TData>(
+      `/api/auth/logout`,
+      undefined,{
+        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
+        observe: 'events',
+      }
+    );
+    }
+
+    if (options?.observe === 'response') {
+      return this.http.post<TData>(
+      `/api/auth/logout`,
+      undefined,{
+        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
+        observe: 'response',
+      }
+    );
+    }
+
+    return this.http.post<TData>(
+      `/api/auth/logout`,
+      undefined,{
+        ...(options as Omit<NonNullable<typeof options>, 'observe'>),
+        observe: 'body',
+      }
+    );
+  }
+
+ login<TData = CurrentUserResponse>(loginRequest: LoginRequest, options?: HttpClientBodyOptions): Observable<TData>;
+ login<TData = CurrentUserResponse>(loginRequest: LoginRequest, options?: HttpClientEventOptions): Observable<HttpEvent<TData>>;
+ login<TData = CurrentUserResponse>(loginRequest: LoginRequest, options?: HttpClientResponseOptions): Observable<AngularHttpResponse<TData>>;
+  login<TData = CurrentUserResponse>(
     loginRequest: LoginRequest, options?: HttpClientObserveOptions): Observable<TData | HttpEvent<TData> | AngularHttpResponse<TData>> {
     if (options?.observe === 'events') {
       return this.http.post<TData>(
@@ -531,6 +570,11 @@ export class OpenAPIDefinitionService {
 export type GetByIdResourceResult = NonNullable<CharacterResponse>
 export type GetAllResourceResult = NonNullable<PageCharacterResponse>
 export type GetDemoBattleResourceResult = NonNullable<BattleStateResponse>
+export type MeResourceResult = NonNullable<CurrentUserResponse>
+
+
+
+
 
 
 
@@ -550,8 +594,9 @@ export type GetDemoBattleResourceResult = NonNullable<BattleStateResponse>
 export type UpdateClientResult = NonNullable<CharacterResponse>
 export type _DeleteClientResult = NonNullable<void>
 export type CreateClientResult = NonNullable<CharacterResponse>
-export type RegisterClientResult = NonNullable<AuthResponse>
-export type LoginClientResult = NonNullable<AuthResponse>
+export type RegisterClientResult = NonNullable<CurrentUserResponse>
+export type LogoutClientResult = NonNullable<void>
+export type LoginClientResult = NonNullable<CurrentUserResponse>
 
 /**
  * Utility type for httpResource results with status tracking.
