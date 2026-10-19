@@ -168,6 +168,41 @@ describe('toBattleState', () => {
     },
   );
 
+  it.each([
+    ['units', 'unit'],
+    ['walls', 'wall'],
+    ['orbs', 'orb'],
+  ] as const)(
+    'accepts %s from 0 HP up to their maximum',
+    (collection, label) => {
+      for (const health of [0, 12]) {
+        const atBound = response();
+        atBound[collection]![0].health = health;
+        atBound[collection]![0].maxHealth = 12;
+
+        expect(
+          toBattleState(atBound)[collection][0],
+          `${label} at ${health}`,
+        ).toMatchObject({ health, maxHealth: 12 });
+      }
+    },
+  );
+
+  it.each([
+    ['units', 'unit', 13],
+    ['walls', 'wall', -1],
+    ['orbs', 'orb', 1.5],
+  ] as const)(
+    'rejects %s with health outside 0..maxHealth (%s.health = %s)',
+    (collection, label, health) => {
+      const invalid = response();
+      invalid[collection]![0].health = health;
+      invalid[collection]![0].maxHealth = 12;
+
+      expect(() => toBattleState(invalid)).toThrow(`invalid ${label}.health`);
+    },
+  );
+
   it('maps the defense of walls and orbs', () => {
     const state = toBattleState(response());
 
