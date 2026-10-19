@@ -10,6 +10,9 @@ Generate files with `ng generate`, not by hand.
 - `models/` holds application models. Generated OpenAPI request/response models live under `api/generated/model/` and must not be duplicated manually. Battle domain models may live separately from API models when their responsibilities differ. No `any`.
 - Templates use `@if` / `@for` (with `track`), not `*ngIf` / `*ngFor`.
 - `pages/` = routed components.
+- No static `style="..."` attributes or inline scripts: the production CSP (`nginx.conf`) blocks
+  them, while `ng serve` sends no CSP, so it only breaks after deploy. Use classes or `[style.x]`
+  bindings, which Angular applies through the CSSOM.
 
 ## Recommendations
 
