@@ -4,6 +4,10 @@
     [entityTargetPositions]="entityTargetPositions()"
     (cellClick)="onCellClick($event)"
   />
+  <app-attack-range-overlay
+    [board]="battleState()?.board"
+    [cells]="attackRange()"
+  />
   <app-entity-layer
     [battleState]="battleState()"
     [selectedUnitId]="selectedUnitId()"

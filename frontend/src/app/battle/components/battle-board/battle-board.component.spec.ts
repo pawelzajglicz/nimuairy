@@ -425,4 +425,32 @@ describe('BattleBoardComponent', () => {
       expect(entityButton(fixture, 'wall')).toBeNull();
     });
   });
+
+  describe('attack range', () => {
+    it('draws the given reach in its own layer between the terrain and the entities', () => {
+      const fixture = TestBed.createComponent(BattleBoardComponent);
+      fixture.componentRef.setInput(
+        'battleState',
+        buildBattleState({ board: terrainAt([1, 0], [2, 0]) }),
+      );
+      fixture.componentRef.setInput('attackRange', [
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+      ]);
+      fixture.detectChanges();
+      const stack: HTMLElement = fixture.nativeElement.querySelector(
+        '.battle-board-stack',
+      );
+
+      expect(
+        Array.from(stack.children).map((layer) => layer.tagName.toLowerCase()),
+      ).toEqual([
+        'app-board-grid',
+        'app-attack-range-overlay',
+        'app-entity-layer',
+        'app-movement-overlay',
+      ]);
+      expect(stack.querySelectorAll('.attack-range-cell')).toHaveLength(2);
+    });
+  });
 });

@@ -1,5 +1,12 @@
 import type { ActionType, UnitActionType } from './actions';
-import type { BattleState, Orb, PlayerSide, Unit, Wall } from './battle-state';
+import type {
+  BattleState,
+  Orb,
+  PlayerSide,
+  Position,
+  Unit,
+  Wall,
+} from './battle-state';
 import {
   ATTACK_TARGET_KINDS,
   type AttackCommand,
@@ -8,7 +15,7 @@ import {
   type AttackTarget,
   type AttackTargetKind,
 } from './combat';
-import { attackDamage, inMeleeRange } from './combat-rules';
+import { attackDamage, inMeleeRange, meleeRangeCells } from './combat-rules';
 import { samePosition } from './geometry';
 import type {
   MoveUnitCommand,
@@ -204,6 +211,17 @@ export class BattleEngine {
         unit.remainingActionPoints,
       ),
     );
+  }
+
+  /**
+   * Cells within the unit's melee reach, for display. An inspection query for
+   * any unit, like reachability: it checks neither the turn nor AP, so it
+   * grants no permission to attack; legalAttackTargets and attack decide
+   * that. Empty for an unknown unit.
+   */
+  attackRange(state: BattleState, unitId: string): readonly Position[] {
+    const unit = state.units.find(({ id }) => id === unitId);
+    return unit ? meleeRangeCells(unit, state.board) : [];
   }
 
   /**

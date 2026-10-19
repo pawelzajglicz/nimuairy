@@ -12,6 +12,7 @@ import type {
   MovementError,
   MovementResult,
 } from './movement';
+import { occupiedCells, positionKey } from './geometry';
 import { pathTo } from './pathfinding';
 import {
   FOOTPRINTS,
@@ -2028,6 +2029,98 @@ describe('BattleEngine ATTACK', () => {
         expectAttacked(state, attackCommand(ENEMY, { unitId: 'left-cheap' }))
           .cost,
       ).toBe(2);
+    });
+  });
+
+  describe('attack range', () => {
+    function keys(cells: readonly Position[]): string[] {
+      return cells.map(positionKey).sort();
+    }
+
+    it("is the unit's melee reach on the board", () => {
+      const state = testState({ units: [testUnit()] });
+
+      expect(keys(engine.attackRange(state, 'left-1x1'))).toEqual([
+        '1,2',
+        '2,1',
+        '2,3',
+        '3,2',
+      ]);
+    });
+
+    it('is empty for an unknown unit', () => {
+      expect(engine.attackRange(testState(), 'ghost')).toEqual([]);
+    });
+
+    it('can be inspected for a unit of the other player and for a unit without AP', () => {
+      const state = testState({
+        units: [testUnit({ remainingActionPoints: 0 }), enemy()],
+      });
+
+      expect(keys(engine.attackRange(state, 'left-1x1'))).toEqual([
+        '1,2',
+        '2,1',
+        '2,3',
+        '3,2',
+      ]);
+      // (2,2) is occupied by the LEFT unit, and still within reach.
+      expect(keys(engine.attackRange(state, 'right-1x1'))).toEqual([
+        '2,2',
+        '3,1',
+        '3,3',
+        '4,2',
+      ]);
+    });
+
+    it('includes rock cells and cells occupied by other objects', () => {
+      const state = testState({
+        rocks: [{ x: 2, y: 1 }],
+        units: [testUnit(), enemy()],
+        orbs: [testOrb({ position: { x: 1, y: 2 } })],
+      });
+
+      expect(keys(engine.attackRange(state, 'left-1x1'))).toEqual([
+        '1,2',
+        '2,1',
+        '2,3',
+        '3,2',
+      ]);
+    });
+
+    it('covers a cell of every legal attack target', () => {
+      const state = testState({
+        units: [besideStructures, enemy()],
+        walls: [testWall()],
+        orbs: [testOrb({ position: { x: 4, y: 1 } })],
+      });
+      const reach = new Set(keys(engine.attackRange(state, 'left-1x1')));
+      const targets = engine.legalAttackTargets(state, 'left-1x1');
+      const footprintOf = ({ kind, id }: AttackTarget) => {
+        const placedEntity =
+          kind === 'UNIT'
+            ? state.units.find((unit) => unit.id === id)
+            : kind === 'WALL'
+              ? state.walls.find((wall) => wall.id === id)
+              : state.orbs.find((orb) => orb.id === id);
+        return occupiedCells(placedEntity!.position, placedEntity!.footprint);
+      };
+
+      expect(targets).toHaveLength(3);
+      for (const target of targets) {
+        expect(
+          footprintOf(target).some((cell) => reach.has(positionKey(cell))),
+          `${target.kind} ${target.id}`,
+        ).toBe(true);
+      }
+    });
+
+    it('leaves the battle state untouched', () => {
+      const state = testState({ units: [testUnit(), enemy()] });
+      const before = structuredClone(state);
+
+      engine.attackRange(state, 'left-1x1');
+
+      expect(state).toEqual(before);
     });
   });
 

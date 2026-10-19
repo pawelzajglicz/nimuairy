@@ -1,0 +1,22 @@
+/* Covers the whole board between the terrain and the units, so it must let every click through to the terrain and entity buttons. */
+:host {
+  display: block;
+  pointer-events: none;
+}
+
+.attack-range-overlay {
+  display: grid;
+  width: 100%;
+}
+
+/* Diagonal hatching marks reach as a pattern, so it reads apart from the dashed frame of an attack target and the green movement targets without relying on colour. Static: there is nothing to animate. */
+.attack-range-cell {
+  box-sizing: border-box;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  background-color: rgba(248, 113, 113, 0.12);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(185, 28, 28, 0.28) 0 2px,
+    transparent 2px 8px
+  );
+}

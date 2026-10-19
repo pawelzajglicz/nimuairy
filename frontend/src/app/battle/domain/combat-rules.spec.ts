@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Position } from './battle-state';
-import { attackDamage, inMeleeRange } from './combat-rules';
+import { attackDamage, inMeleeRange, meleeRangeCells } from './combat-rules';
+import { positionKey } from './geometry';
 import { FOOTPRINTS } from './testing/battle-fixtures';
 
 /** Cells (0,0), (1,0), (0,1): the notch at (1,1) is empty. */
@@ -97,4 +98,83 @@ describe('attackDamage', () => {
   it.each([200, 250])('is 0, never negative, against defense %i', (defense) => {
     expect(attackDamage({ attack: 200 }, { defense })).toBe(0);
   });
+});
+
+describe('meleeRangeCells', () => {
+  const board = { width: 6, height: 5 };
+
+  /** Order-insensitive view of the cells, which also exposes duplicates. */
+  function keys(cells: readonly Position[]): string[] {
+    return cells.map(positionKey).sort();
+  }
+
+  it('is the four orthogonal neighbours of a 1x1 unit', () => {
+    expect(keys(meleeRangeCells(placed({ x: 2, y: 2 }), board))).toEqual([
+      '1,2',
+      '2,1',
+      '2,3',
+      '3,2',
+    ]);
+  });
+
+  it('leaves out cells beyond the board edge', () => {
+    expect(keys(meleeRangeCells(placed({ x: 0, y: 0 }), board))).toEqual([
+      '0,1',
+      '1,0',
+    ]);
+    expect(keys(meleeRangeCells(placed({ x: 5, y: 4 }), board))).toEqual([
+      '4,4',
+      '5,3',
+    ]);
+  });
+
+  it('surrounds a multi-cell footprint without its own cells or the diagonals', () => {
+    const square = placed({ x: 2, y: 1 }, FOOTPRINTS['2x2']);
+
+    expect(keys(meleeRangeCells(square, board))).toEqual(
+      ['1,1', '1,2', '2,0', '2,3', '3,0', '3,3', '4,1', '4,2'].sort(),
+    );
+  });
+
+  it('lists the notch of a non-rectangular footprint once', () => {
+    const cells = meleeRangeCells(placed({ x: 2, y: 2 }, L_SHAPE), board);
+
+    expect(keys(cells)).toEqual(
+      ['1,2', '1,3', '2,1', '2,4', '3,1', '3,3', '4,2'].sort(),
+    );
+    expect(cells.filter((cell) => positionKey(cell) === '3,3')).toHaveLength(1);
+  });
+
+  it.each([
+    ['1x1', placed({ x: 0, y: 2 })],
+    ['2x2', placed({ x: 3, y: 0 }, FOOTPRINTS['2x2'])],
+    ['1x3', placed({ x: 5, y: 1 }, FOOTPRINTS['1x3'])],
+    ['L', placed({ x: 1, y: 1 }, L_SHAPE)],
+  ])(
+    'agrees with inMeleeRange on every board cell for a %s attacker',
+    (_, attacker) => {
+      const reach = new Set(keys(meleeRangeCells(attacker, board)));
+      const own = new Set(
+        attacker.footprint.map(({ x, y }) =>
+          positionKey({
+            x: attacker.position.x + x,
+            y: attacker.position.y + y,
+          }),
+        ),
+      );
+
+      for (let x = 0; x < board.width; x++) {
+        for (let y = 0; y < board.height; y++) {
+          const key = positionKey({ x, y });
+          if (own.has(key)) {
+            expect(reach.has(key), key).toBe(false);
+          } else {
+            expect(reach.has(key), key).toBe(
+              inMeleeRange(attacker, placed({ x, y })),
+            );
+          }
+        }
+      }
+    },
+  );
 });

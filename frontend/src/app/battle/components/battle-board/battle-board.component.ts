@@ -12,6 +12,7 @@ import { occupiedCells, positionKey } from '../../domain/geometry';
 import type { ReachableCell } from '../../domain/movement';
 import { InteractionMode } from '../../interaction-mode';
 import type { MovementPreview } from '../../movement-preview';
+import { AttackRangeOverlayComponent } from '../attack-range-overlay/attack-range-overlay.component';
 import { BoardGridComponent } from '../board-grid/board-grid.component';
 import { EntityLayerComponent } from '../entity-layer/entity-layer.component';
 import { MovementOverlayComponent } from '../movement-overlay/movement-overlay.component';
@@ -34,7 +35,12 @@ const TARGET_COLLECTION: Record<
  */
 @Component({
   selector: 'app-battle-board',
-  imports: [BoardGridComponent, EntityLayerComponent, MovementOverlayComponent],
+  imports: [
+    AttackRangeOverlayComponent,
+    BoardGridComponent,
+    EntityLayerComponent,
+    MovementOverlayComponent,
+  ],
   templateUrl: './battle-board.component.html',
   styleUrl: './battle-board.component.css',
 })
@@ -47,6 +53,8 @@ export class BattleBoardComponent {
   /** The selected unit's legal attack targets, as the domain reports them. */
   readonly attackTargets = input<readonly AttackTarget[]>([]);
   readonly attackedTarget = input<AttackTarget>();
+  /** The selected unit's melee reach, as the domain reports it. */
+  readonly attackRange = input<readonly Position[]>([]);
 
   readonly interaction = output<BoardInteraction>();
   /** The destination under the pointer or focus; undefined when it leaves. */

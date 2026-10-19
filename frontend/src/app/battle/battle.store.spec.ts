@@ -862,5 +862,57 @@ describe('BattleStore', () => {
       expect(store.lastOutcome()?.kind).toBe('MOVED');
       expect(store.attackedTarget()).toBeUndefined();
     });
+
+    describe('attack range', () => {
+      function keys(cells: readonly Position[]): string[] {
+        return cells.map(({ x, y }) => `${x},${y}`).sort();
+      }
+
+      it('shows no range without a selection or in MOVE mode', async () => {
+        const store = await loadedStore();
+        store.setInteractionMode(InteractionMode.ATTACK);
+        expect(store.attackRange()).toEqual([]);
+
+        store.selectUnit('left-unit-1');
+        store.setInteractionMode(InteractionMode.MOVE);
+
+        expect(store.attackRange()).toEqual([]);
+      });
+
+      it("shows the engine's reach for the selected unit in ATTACK mode", async () => {
+        const store = await attackingStore();
+
+        expect(store.attackRange()).toEqual(
+          new BattleEngine().attackRange(store.battleState()!, 'left-unit-1'),
+        );
+        expect(keys(store.attackRange())).toEqual(['0,1', '1,0', '1,2', '2,1']);
+      });
+
+      it('follows the selection, including a unit of the other player', async () => {
+        const store = await attackingStore();
+
+        store.selectUnit('right-far');
+
+        expect(keys(store.attackRange())).toEqual(['4,0', '5,1']);
+      });
+
+      it('moves with the unit instead of keeping the old reach', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 1, y: 0 });
+
+        store.setInteractionMode(InteractionMode.ATTACK);
+
+        expect(keys(store.attackRange())).toEqual(['0,0', '1,1', '2,0']);
+      });
+
+      it('clears when the turn ends and the selection goes', async () => {
+        const store = await attackingStore();
+
+        store.endTurn();
+
+        expect(store.attackRange()).toEqual([]);
+      });
+    });
   });
 });

@@ -191,4 +191,29 @@ test.describe('attacks with real pointer interaction', () => {
     await expect(outcome(page)).toContainText('attacked ORB orb-right');
     await expect(outcome(page)).toContainText('destroyed');
   });
+
+  test("ATTACK mode marks the selected unit's reach, and MOVE mode hides it", async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await selectAttacker(page);
+
+    await expect(page.locator('.attack-range-cell')).toHaveCount(4);
+
+    await page.locator('.mode-button[data-mode="MOVE"]').click();
+
+    await expect(page.locator('.attack-range-cell')).toHaveCount(0);
+  });
+
+  test('the reach of a unit that may not attack is shown, without targets', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    // Selected in MOVE mode, where a click on the enemy only selects it.
+    await clickCell(page, 2, 1);
+    await page.locator('.mode-button[data-mode="ATTACK"]').click();
+
+    await expect(page.locator('.attack-range-cell')).toHaveCount(4);
+    await expect(page.locator('.attack-target')).toHaveCount(0);
+  });
 });

@@ -38,6 +38,7 @@ const initialUiState: BattleUiState = {
 
 const NO_DESTINATIONS: readonly ReachableCell[] = [];
 const NO_TARGETS: readonly AttackTarget[] = [];
+const NO_CELLS: readonly Position[] = [];
 
 /**
  * Owns the demo battle's request lifecycle (loading/error), the current domain
@@ -123,6 +124,23 @@ export const BattleStore = signalStore(
             return NO_TARGETS;
           }
           return _engine.legalAttackTargets(state, unitId);
+        }),
+        /**
+         * The selected unit's melee reach, straight from the engine and only
+         * in ATTACK mode. Shown for any unit, like movement range; it does
+         * not say what may be attacked, attackTargets does.
+         */
+        attackRange: computed(() => {
+          const state = battleState();
+          const unitId = selectedUnitId();
+          if (
+            !state ||
+            unitId === undefined ||
+            interactionMode() !== InteractionMode.ATTACK
+          ) {
+            return NO_CELLS;
+          }
+          return _engine.attackRange(state, unitId);
         }),
         /** Highlighted while the last outcome is a successful attack on it. */
         attackedTarget: computed(() => {
