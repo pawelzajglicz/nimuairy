@@ -14,7 +14,9 @@ Spring Boot 4.1, Java 25. Runs on :8000 under `/api`. Needs the `dev` profile:
   turns them into responses. Controllers never build error bodies.
 - Schema changes = a new numbered Liquibase changelog registered in `changelog-master.xml`.
   `ddl-auto: validate`, so entity and schema must agree. Never edit an applied changeset.
-- Stateless JWT; `SecurityConfig` lists the public paths.
+- Stateless JWT in an HttpOnly `nimuairy_token` cookie (never a header or response body), with
+  CSRF on (`csrf.spa()` + `CsrfCookieFilter`). Tests send CSRF via `XsrfRequests.xsrf()`.
+  `SecurityConfig` lists the public paths.
 
 ## Recommendations
 

@@ -5,11 +5,11 @@
  * OpenAPI spec version: v0
  */
 
-export * from './authResponse';
 export * from './battleStateResponse';
 export * from './boardDto';
 export * from './characterRequest';
 export * from './characterResponse';
+export * from './currentUserResponse';
 export * from './getAllParams';
 export * from './loginRequest';
 export * from './orbDto';

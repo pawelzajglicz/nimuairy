@@ -5,6 +5,6 @@
  * OpenAPI spec version: v0
  */
 
-export interface AuthResponse {
-  token?: string;
+export interface CurrentUserResponse {
+  username?: string;
 }
