@@ -5,6 +5,7 @@
       class="mode-button"
       [attr.data-mode]="candidate"
       [attr.aria-pressed]="mode() === candidate"
+      [disabled]="disabled()"
       (click)="modeChange.emit(candidate)"
     >
       {{ candidate }}

@@ -1022,6 +1022,87 @@ describe('BattleStore', () => {
           error: { type: 'BATTLE_FINISHED' },
         });
       });
+
+      it('exposes the finished battle and the winner from the domain result', async () => {
+        const store = await attackingStore();
+        expect(store.battleFinished()).toBe(false);
+        expect(store.winner()).toBeUndefined();
+
+        store.attackTarget(ORB);
+
+        expect(store.battleFinished()).toBe(true);
+        expect(store.winner()).toBe('LEFT');
+      });
+
+      it('offers no attack range, destinations or path preview, though the attacker has AP left', async () => {
+        const store = await finishedStore();
+        expect(store.selectedUnit()?.remainingActionPoints).toBe(4);
+
+        expect(store.attackRange()).toEqual([]);
+        expect(store.attackTargets()).toEqual([]);
+
+        store.setInteractionMode(InteractionMode.MOVE);
+        store.hoverDestination({ x: 1, y: 0 });
+
+        expect(store.reachableDestinations()).toEqual([]);
+        expect(store.movementPreview()).toBeUndefined();
+      });
+
+      describe('restart', () => {
+        async function restartFinishedBattle() {
+          const store = await finishedStore();
+          store.hoverDestination({ x: 1, y: 0 });
+          const finished = store.battleState();
+
+          store.restart();
+          TestBed.tick();
+
+          return { store, finished };
+        }
+
+        it('presents no fresh battle before the new response arrives', async () => {
+          const { store, finished } = await restartFinishedBattle();
+
+          expect(store.loading()).toBe(true);
+          expect(store.battleState()).toBe(finished);
+
+          httpMock.expectOne('/api/v1/battles/demo').flush(attackResponse());
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+        });
+
+        it('starts the battle from the reloaded response and clears the UI state of the old one', async () => {
+          const { store } = await restartFinishedBattle();
+
+          httpMock.expectOne('/api/v1/battles/demo').flush(attackResponse());
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+
+          expect(store.battleState()).toEqual(toBattleState(attackResponse()));
+          expect(store.battleState()?.result).toEqual({
+            status: 'IN_PROGRESS',
+          });
+          expect(store.battleFinished()).toBe(false);
+          expect(store.winner()).toBeUndefined();
+          expect(store.error()).toBeUndefined();
+          expect(store.selectedUnitId()).toBeUndefined();
+          expect(store.interactionMode()).toBe(InteractionMode.MOVE);
+          expect(store.hoveredDestination()).toBeUndefined();
+          expect(store.lastOutcome()).toBeUndefined();
+          expect(store.attackedTarget()).toBeUndefined();
+        });
+
+        it('leaves no battle and exposes the error when the reload fails', async () => {
+          const { store } = await restartFinishedBattle();
+
+          httpMock
+            .expectOne('/api/v1/battles/demo')
+            .flush('failure', { status: 500, statusText: 'Server Error' });
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+
+          expect(store.error()).toBeDefined();
+          expect(store.battleState()).toBeUndefined();
+          expect(store.winner()).toBeUndefined();
+        });
+      });
     });
   });
 });

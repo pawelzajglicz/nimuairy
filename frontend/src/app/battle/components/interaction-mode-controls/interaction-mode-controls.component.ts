@@ -9,6 +9,7 @@ import { InteractionMode } from '../../interaction-mode';
 })
 export class InteractionModeControlsComponent {
   readonly mode = input.required<InteractionMode>();
+  readonly disabled = input(false);
 
   readonly modeChange = output<InteractionMode>();
 

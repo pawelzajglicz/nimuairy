@@ -63,4 +63,23 @@ describe('InteractionModeControlsComponent', () => {
       button(fixture, InteractionMode.MOVE).getAttribute('aria-pressed'),
     ).toBe('true');
   });
+
+  it('when disabled, disables both buttons, keeps the pressed mode and emits nothing', () => {
+    const fixture = render(InteractionMode.ATTACK);
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+    const emitted: InteractionMode[] = [];
+    fixture.componentInstance.modeChange.subscribe((mode) =>
+      emitted.push(mode),
+    );
+
+    button(fixture, InteractionMode.MOVE).click();
+
+    expect(button(fixture, InteractionMode.MOVE).disabled).toBe(true);
+    expect(button(fixture, InteractionMode.ATTACK).disabled).toBe(true);
+    expect(
+      button(fixture, InteractionMode.ATTACK).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(emitted).toEqual([]);
+  });
 });
