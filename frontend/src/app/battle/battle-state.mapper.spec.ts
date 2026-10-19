@@ -19,6 +19,7 @@ function response(): BattleStateResponse {
         position: { x: 0, y: 5 },
         footprint: [{ x: 0, y: 0 }],
         health: 50,
+        maxHealth: 80,
         defense: 0,
       },
     ],
@@ -32,6 +33,7 @@ function response(): BattleStateResponse {
           { x: 0, y: 1 },
         ],
         health: 30,
+        maxHealth: 60,
         defense: 100,
       },
     ],
@@ -48,6 +50,7 @@ function response(): BattleStateResponse {
           { x: 1, y: 1 },
         ],
         health: 10,
+        maxHealth: 12,
         attack: 4,
         defense: 2,
         actionPointBudget: 5,
@@ -126,6 +129,44 @@ describe('toBattleState', () => {
 
     expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
   });
+
+  it('maps the maximum HP of units, walls and orbs apart from their current HP', () => {
+    const state = toBattleState(response());
+
+    expect(state.units[0]).toMatchObject({ health: 10, maxHealth: 12 });
+    expect(state.walls[0]).toMatchObject({ health: 30, maxHealth: 60 });
+    expect(state.orbs[0]).toMatchObject({ health: 50, maxHealth: 80 });
+  });
+
+  it.each([
+    ['units', 'unit'],
+    ['walls', 'wall'],
+    ['orbs', 'orb'],
+  ] as const)(
+    'rejects %s without maxHealth instead of defaulting it',
+    (collection, label) => {
+      const incomplete = response();
+      delete incomplete[collection]![0].maxHealth;
+
+      expect(() => toBattleState(incomplete)).toThrow(`${label}.maxHealth`);
+    },
+  );
+
+  it.each([
+    ['units', 'unit', 0],
+    ['walls', 'wall', -1],
+    ['orbs', 'orb', 1.5],
+  ] as const)(
+    'rejects %s with an invalid maxHealth (%s = %s)',
+    (collection, label, value) => {
+      const invalid = response();
+      invalid[collection]![0].maxHealth = value;
+
+      expect(() => toBattleState(invalid)).toThrow(
+        `invalid ${label}.maxHealth`,
+      );
+    },
+  );
 
   it('maps the defense of walls and orbs', () => {
     const state = toBattleState(response());

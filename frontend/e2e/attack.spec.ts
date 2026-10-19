@@ -20,6 +20,7 @@ function unit(
     position,
     footprint: [{ x: 0, y: 0 }],
     health: 100,
+    maxHealth: 100,
     attack: 10,
     defense: 5,
     actionPointBudget: 6,
@@ -60,6 +61,7 @@ const battleState: BattleStateResponse = {
         { x: 1, y: 0 },
       ],
       health: 5,
+      maxHealth: 5,
       defense: 0,
     },
   ],
@@ -70,6 +72,7 @@ const battleState: BattleStateResponse = {
       position: { x: 0, y: 1 },
       footprint: [{ x: 0, y: 0 }],
       health: 5,
+      maxHealth: 5,
       defense: 0,
     },
   ],
@@ -113,13 +116,17 @@ test.describe('attacks with real pointer interaction', () => {
 
     await expect(page.locator('.attack-target')).toHaveCount(4);
     await expect(
-      page.getByRole('button', { name: 'Attack RIGHT unit right-1, 100 HP' }),
+      page.getByRole('button', {
+        name: 'Attack RIGHT unit right-1, 100/100 HP',
+      }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Attack RIGHT orb orb-right, 5 HP' }),
+      page.getByRole('button', { name: 'Attack RIGHT orb orb-right, 5/5 HP' }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Attack RIGHT wall wall-right, 5 HP' }),
+      page.getByRole('button', {
+        name: 'Attack RIGHT wall wall-right, 5/5 HP',
+      }),
     ).toHaveCount(2);
   });
 
@@ -136,7 +143,7 @@ test.describe('attacks with real pointer interaction', () => {
     );
     await expect(attackerInfo(page)).toContainText('remaining 4');
     const target = page.getByRole('button', {
-      name: 'Attack RIGHT unit right-1, 95 HP',
+      name: 'Attack RIGHT unit right-1, 95/100 HP',
     });
     await expect(target).toBeVisible();
     await expect(target).toHaveClass(/attacked/);
@@ -215,5 +222,77 @@ test.describe('attacks with real pointer interaction', () => {
 
     await expect(page.locator('.attack-range-cell')).toHaveCount(4);
     await expect(page.locator('.attack-target')).toHaveCount(0);
+  });
+
+  // Labels follow the cell order: the wall, the orb, then left-1, left-2, right-1.
+  const healthValues = (page: Page) => page.locator('.health-label-value');
+
+  test("every unit, wall and orb shows current/max HP, and the attacked unit's label follows the attack", async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await expect(healthValues(page)).toHaveText([
+      '5/5',
+      '5/5',
+      '100/100',
+      '100/100',
+      '100/100',
+    ]);
+
+    await selectAttacker(page);
+    await clickCell(page, 2, 1);
+
+    await expect(healthValues(page)).toHaveText([
+      '5/5',
+      '5/5',
+      '100/100',
+      '100/100',
+      '95/100',
+    ]);
+  });
+
+  test('a destroyed wall loses its label, while a destroyed orb keeps its label at 0 HP', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    await selectAttacker(page);
+
+    await clickCell(page, 2, 2);
+    await clickCell(page, 0, 1);
+
+    await expect(healthValues(page)).toHaveText([
+      '0/5',
+      '100/100',
+      '100/100',
+      '100/100',
+    ]);
+  });
+
+  test('a click on an HP label reaches the entity beneath it', async ({
+    page,
+  }) => {
+    await openBoard(page);
+    const labels = page.locator('.health-label');
+    const clickCentre = async (index: number) => {
+      // page.mouse works in viewport coordinates, so the label must be on screen.
+      await labels.nth(index).scrollIntoViewIfNeeded();
+      const box = await labels.nth(index).boundingBox();
+      if (!box) throw new Error(`HP label ${index} has no bounding box`);
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    };
+
+    // MOVE mode: the label of left-2 selects left-2.
+    await clickCentre(3);
+    await expect(attackerInfo(page)).toContainText('left-2');
+
+    // ATTACK mode: the label of the target right-1 attacks it, and so does
+    // the label of the target wall.
+    await selectAttacker(page);
+    await clickCentre(4);
+    await expect(outcome(page)).toHaveText(
+      'LEFT left-1 attacked UNIT right-1 · damage 5 · remaining HP 95 · cost 2 AP',
+    );
+    await clickCentre(0);
+    await expect(outcome(page)).toContainText('attacked WALL wall-right');
   });
 });

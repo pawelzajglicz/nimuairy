@@ -11,6 +11,7 @@ public record WallDto(
         PositionDto position,
         List<PositionDto> footprint,
         int health,
+        int maxHealth,
         int defense
 ) {
 
@@ -21,6 +22,7 @@ public record WallDto(
                 PositionDto.from(wall.position()),
                 wall.footprint().offsets().stream().map(PositionDto::from).toList(),
                 wall.health(),
+                wall.maxHealth(),
                 wall.defense()
         );
     }

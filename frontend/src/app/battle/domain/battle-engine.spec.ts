@@ -264,6 +264,7 @@ describe('BattleEngine MOVE_UNIT', () => {
           position: { x: 0, y: 7 },
           footprint: FOOTPRINTS['2x1'],
           health: 30,
+          maxHealth: 30,
           defense: 100,
         },
       ],
@@ -274,6 +275,7 @@ describe('BattleEngine MOVE_UNIT', () => {
           position: { x: 7, y: 0 },
           footprint: FOOTPRINTS['1x1'],
           health: 50,
+          maxHealth: 50,
           defense: 0,
         },
       ],
@@ -436,6 +438,7 @@ describe('BattleEngine MOVE_UNIT', () => {
               position: { x: 3, y: 2 },
               footprint: FOOTPRINTS['1x1'],
               health: 50,
+              maxHealth: 50,
               defense: 0,
             },
           ],
@@ -2121,6 +2124,50 @@ describe('BattleEngine ATTACK', () => {
       engine.attackRange(state, 'left-1x1');
 
       expect(state).toEqual(before);
+    });
+  });
+
+  describe('maximum HP', () => {
+    it('lowers only the current HP of each target kind, never its maximum', () => {
+      // Three attacks at 2 AP each.
+      const attacker = {
+        ...besideStructures,
+        actionPointBudget: 6,
+        remainingActionPoints: 6,
+      };
+      const state = testState({
+        units: [attacker, enemy({ position: { x: 3, y: 2 } })],
+        walls: [testWall()],
+        orbs: [testOrb({ position: { x: 4, y: 1 } })],
+      });
+
+      const afterUnit = expectAttacked(state, attackCommand(ENEMY)).state;
+      const afterWall = expectAttacked(
+        afterUnit,
+        attackCommand(ENEMY_WALL),
+      ).state;
+      const afterOrb = expectAttacked(
+        afterWall,
+        attackCommand(ENEMY_ORB),
+      ).state;
+
+      expect(unitIn(afterOrb, 'right-1x1')).toMatchObject({
+        health: 8,
+        maxHealth: 10,
+      });
+      expect(afterOrb.walls[0]).toMatchObject({ health: 27, maxHealth: 30 });
+      expect(afterOrb.orbs[0]).toMatchObject({ health: 16, maxHealth: 20 });
+    });
+
+    it('keeps the maximum of an orb destroyed to 0 HP', () => {
+      const state = testState({
+        units: [besideStructures],
+        orbs: [testOrb({ health: 1 })],
+      });
+
+      const { state: next } = expectAttacked(state, attackCommand(ENEMY_ORB));
+
+      expect(next.orbs[0]).toMatchObject({ health: 0, maxHealth: 20 });
     });
   });
 

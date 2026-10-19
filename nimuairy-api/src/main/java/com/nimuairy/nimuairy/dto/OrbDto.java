@@ -11,6 +11,7 @@ public record OrbDto(
         PositionDto position,
         List<PositionDto> footprint,
         int health,
+        int maxHealth,
         int defense
 ) {
 
@@ -21,6 +22,7 @@ public record OrbDto(
                 PositionDto.from(orb.position()),
                 orb.footprint().offsets().stream().map(PositionDto::from).toList(),
                 orb.health(),
+                orb.maxHealth(),
                 orb.defense()
         );
     }

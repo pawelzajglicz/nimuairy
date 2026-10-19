@@ -46,7 +46,7 @@ class UnitTest {
 
     private static Unit unit(int actionPointBudget, int movementCostFactor, int attackActionPointCost) {
         return new Unit("unit", PlayerSide.LEFT, UnitType.SWORDSMAN, new Position(0, 0),
-                new Footprint(List.of(new Position(0, 0))), 500, 200, 50,
+                new Footprint(List.of(new Position(0, 0))), 500, 500, 200, 50,
                 actionPointBudget, movementCostFactor, attackActionPointCost);
     }
 }

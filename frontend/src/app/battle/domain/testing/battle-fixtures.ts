@@ -39,6 +39,7 @@ export function testUnit(overrides: Partial<Unit> = {}): Unit {
     position: { x: 2, y: 2 },
     footprint: FOOTPRINTS['1x1'],
     health: 10,
+    maxHealth: 10,
     attack: 4,
     defense: 2,
     actionPointBudget: 5,
@@ -57,6 +58,7 @@ export function testWall(overrides: Partial<Wall> = {}): Wall {
     position: { x: 5, y: 2 },
     footprint: FOOTPRINTS['1x3'],
     health: 30,
+    maxHealth: 30,
     defense: 1,
     ...overrides,
   };
@@ -70,6 +72,7 @@ export function testOrb(overrides: Partial<Orb> = {}): Orb {
     position: { x: 5, y: 2 },
     footprint: FOOTPRINTS['1x1'],
     health: 20,
+    maxHealth: 20,
     defense: 0,
     ...overrides,
   };

@@ -26,11 +26,24 @@ interface RenderedEntityCell {
   /** See targetKey: identifies the entity among all collections. */
   targetKey: string;
   health: number;
+  maxHealth: number;
   /**
    * At 0 HP. Which kinds stay in the state when destroyed is the domain's
    * call; whatever it keeps is drawn as destroyed.
    */
   destroyed: boolean;
+  gridColumn: number;
+  gridRow: number;
+}
+
+interface RenderedHealthLabel {
+  key: string;
+  id: string;
+  kind: EntityKind;
+  owner: PlayerSide;
+  targetKey: string;
+  /** current/max, for example 350/500. */
+  text: string;
   gridColumn: number;
   gridRow: number;
 }
@@ -105,8 +118,42 @@ export class EntityLayerComponent {
   }
 
   protected attackLabel(cell: RenderedEntityCell): string {
-    return `Attack ${cell.owner} ${cell.kind} ${cell.id}, ${cell.health} HP`;
+    return `Attack ${cell.owner} ${cell.kind} ${cell.id}, ${healthText(cell)} HP`;
   }
+
+  protected unitLabel(cell: RenderedEntityCell): string {
+    return `${cell.owner} unit, ${healthText(cell)} HP`;
+  }
+
+  /**
+   * An interactive entity names its HP on its own buttons, so its board label
+   * stays visual only. A wall or orb that is not a target has no button, and
+   * its label is the only place the HP is available.
+   */
+  protected isNamedByItsButtons(label: RenderedHealthLabel): boolean {
+    return (
+      label.kind === 'unit' || this.attackTargetKeys().has(label.targetKey)
+    );
+  }
+
+  /**
+   * One current/max HP label per entity, however many cells it covers,
+   * placed on its bottom-left occupied cell. Same order as the cells.
+   */
+  protected readonly healthLabels = computed<RenderedHealthLabel[]>(() => {
+    const state = this.battleState();
+    const height = state?.board.height ?? 0;
+
+    return [
+      ...(state?.walls ?? []).flatMap((wall) =>
+        healthLabel('wall', wall, height),
+      ),
+      ...(state?.orbs ?? []).flatMap((orb) => healthLabel('orb', orb, height)),
+      ...(state?.units ?? []).flatMap((unit) =>
+        healthLabel('unit', unit, height),
+      ),
+    ];
+  });
 
   protected readonly entityCells = computed<RenderedEntityCell[]>(() => {
     const state = this.battleState();
@@ -148,11 +195,64 @@ interface PlacedEntity {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  readonly maxHealth: number;
+}
+
+function healthText({
+  health,
+  maxHealth,
+}: Pick<PlacedEntity, 'health' | 'maxHealth'>): string {
+  return `${health}/${maxHealth}`;
+}
+
+/**
+ * The entity's label, or none for an entity that covers no cell: like its
+ * cells, it then simply is not drawn, rather than breaking the whole layer.
+ */
+function healthLabel(
+  kind: EntityKind,
+  entity: PlacedEntity,
+  boardHeight: number,
+): RenderedHealthLabel[] {
+  const cell = bottomLeftCell(entity);
+  if (!cell) {
+    return [];
+  }
+  const { id, owner } = entity;
+  return [
+    {
+      key: `${kind}-${id}`,
+      id,
+      kind,
+      owner,
+      targetKey: targetKey({ kind: TARGET_KIND[kind], id }),
+      text: healthText(entity),
+      ...toGridPosition(cell, boardHeight),
+    },
+  ];
+}
+
+/**
+ * The occupied cell lowest on the board, leftmost among those. Taken from the
+ * occupied cells rather than the anchor, which a footprint does not have to
+ * cover.
+ */
+function bottomLeftCell({
+  position,
+  footprint,
+}: PlacedEntity): Position | undefined {
+  return occupiedCells(position, footprint).reduce<Position | undefined>(
+    (best, cell) =>
+      !best || cell.y < best.y || (cell.y === best.y && cell.x < best.x)
+        ? cell
+        : best,
+    undefined,
+  );
 }
 
 function footprintCells(
   kind: EntityKind,
-  { id, owner, position, footprint, health }: PlacedEntity,
+  { id, owner, position, footprint, health, maxHealth }: PlacedEntity,
   boardHeight: number,
 ): RenderedEntityCell[] {
   return occupiedCells(position, footprint).map((cell) => {
@@ -165,6 +265,7 @@ function footprintCells(
       owner,
       targetKey: targetKey({ kind: TARGET_KIND[kind], id }),
       health,
+      maxHealth,
       destroyed: health === 0,
       gridColumn,
       gridRow,

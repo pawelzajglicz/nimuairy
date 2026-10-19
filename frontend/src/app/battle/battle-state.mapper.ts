@@ -51,6 +51,10 @@ function toUnit(dto: UnitDto): Unit {
     position: toPosition(required(dto.position, 'unit.position')),
     footprint: required(dto.footprint, 'unit.footprint').map(toPosition),
     health: required(dto.health, 'unit.health'),
+    maxHealth: positiveInteger(
+      required(dto.maxHealth, 'unit.maxHealth'),
+      'unit.maxHealth',
+    ),
     attack: required(dto.attack, 'unit.attack'),
     defense: required(dto.defense, 'unit.defense'),
     actionPointBudget,
@@ -74,6 +78,10 @@ function toWall(dto: WallDto): Wall {
     position: toPosition(required(dto.position, 'wall.position')),
     footprint: required(dto.footprint, 'wall.footprint').map(toPosition),
     health: required(dto.health, 'wall.health'),
+    maxHealth: positiveInteger(
+      required(dto.maxHealth, 'wall.maxHealth'),
+      'wall.maxHealth',
+    ),
     defense: required(dto.defense, 'wall.defense'),
   };
 }
@@ -85,6 +93,10 @@ function toOrb(dto: OrbDto): Orb {
     position: toPosition(required(dto.position, 'orb.position')),
     footprint: required(dto.footprint, 'orb.footprint').map(toPosition),
     health: required(dto.health, 'orb.health'),
+    maxHealth: positiveInteger(
+      required(dto.maxHealth, 'orb.maxHealth'),
+      'orb.maxHealth',
+    ),
     defense: required(dto.defense, 'orb.defense'),
   };
 }
@@ -118,7 +130,8 @@ function required<T>(value: T | null | undefined, field: string): T {
 /**
  * The engine relies on these statistics being positive integers: AP are
  * integers, and a zero cost factor would make steps free, breaking
- * pathfinding's positive-cost assumption. The OpenAPI type is only `number`.
+ * pathfinding's positive-cost assumption; a maximum HP of 0 would mean an
+ * object that starts destroyed. The OpenAPI type is only `number`.
  */
 function positiveInteger(value: number, field: string): number {
   if (!Number.isInteger(value) || value <= 0) {

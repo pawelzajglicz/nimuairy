@@ -22,6 +22,7 @@ function unit(
     position,
     footprint,
     health: 100,
+    maxHealth: 100,
     attack: 10,
     defense: 5,
     actionPointBudget,

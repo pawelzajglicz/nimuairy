@@ -21,6 +21,7 @@ function unitDto(overrides: UnitDto): UnitDto {
     unitType: 'SWORDSMAN',
     footprint: [{ x: 0, y: 0 }],
     health: 100,
+    maxHealth: 100,
     attack: 10,
     defense: 5,
     actionPointBudget: 3,
@@ -209,6 +210,7 @@ describe('BattleDemoPage', () => {
               id: 'wall-left',
               owner: 'LEFT',
               health: 100,
+              maxHealth: 100,
               defense: 100,
               position: { x: 1, y: 0 },
               footprint: [{ x: 0, y: 0 }],
@@ -219,6 +221,7 @@ describe('BattleDemoPage', () => {
               id: 'orb-left',
               owner: 'LEFT',
               health: 100,
+              maxHealth: 100,
               defense: 0,
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
@@ -707,6 +710,7 @@ describe('BattleDemoPage', () => {
               position: { x: 1, y: 1 },
               footprint: [{ x: 0, y: 0 }],
               health: 10,
+              maxHealth: 10,
               defense: 0,
             },
           ],
@@ -738,7 +742,7 @@ describe('BattleDemoPage', () => {
         'button.entity-cell.attack-target[data-kind="unit"]',
       )!;
       expect(target.getAttribute('aria-label')).toBe(
-        'Attack RIGHT unit unit-right-1, 100 HP',
+        'Attack RIGHT unit unit-right-1, 100/100 HP',
       );
 
       act(() => target.click());
@@ -790,6 +794,28 @@ describe('BattleDemoPage', () => {
 
       expect(store.selectedUnitId()).toBe('unit-right-1');
       expect(store.lastOutcome()).toBeUndefined();
+    });
+
+    it("updates the attacked unit's current HP on its board label, keeping its maximum", async () => {
+      const { act, query, root } = await renderAttackBoard();
+      const healthLabels = () =>
+        Array.from(root.querySelectorAll('.health-label-value')).map((label) =>
+          label.textContent?.trim(),
+        );
+      // The wall first, then the units; the maximum stays as the current HP drops.
+      expect(healthLabels()).toEqual(['10/10', '100/100', '100/100']);
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="LEFT"]',
+        )!.click(),
+      );
+      act(() => query('.mode-button[data-mode="ATTACK"]')!.click());
+      act(() =>
+        query('button.entity-cell.attack-target[data-kind="unit"]')!.click(),
+      );
+
+      expect(healthLabels()).toEqual(['10/10', '100/100', '95/100']);
     });
   });
 });

@@ -15,6 +15,7 @@ const unit: Unit = {
   position: { x: 2, y: 3 },
   footprint: [{ x: 0, y: 0 }],
   health: 10,
+  maxHealth: 10,
   attack: 4,
   defense: 2,
   actionPointBudget: 5,

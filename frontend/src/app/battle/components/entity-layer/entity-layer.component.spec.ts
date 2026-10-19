@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { BattleState, Position } from '../../domain/battle-state';
 import type { AttackTarget } from '../../domain/combat';
 import {
+  FOOTPRINTS,
   testOrb,
   testUnit,
   testWall,
@@ -62,6 +63,7 @@ describe('EntityLayerComponent', () => {
           id: 'o1',
           owner: 'RIGHT',
           health: 100,
+          maxHealth: 100,
           defense: 0,
           position: { x: 20, y: 5 },
           footprint: [{ x: 0, y: 0 }],
@@ -72,6 +74,7 @@ describe('EntityLayerComponent', () => {
           id: 'w1',
           owner: 'LEFT',
           health: 100,
+          maxHealth: 100,
           defense: 100,
           position: { x: 1, y: 0 },
           footprint: [
@@ -155,6 +158,7 @@ describe('EntityLayerComponent', () => {
           id: 'w1',
           owner: 'RIGHT',
           health: 100,
+          maxHealth: 100,
           defense: 100,
           position: { x: 18, y: 0 },
           footprint: lShapeOffsets,
@@ -196,6 +200,7 @@ describe('EntityLayerComponent', () => {
           id: 'wall-left',
           owner: 'LEFT',
           health: 100,
+          maxHealth: 100,
           defense: 100,
           position: { x: 1, y: 0 },
           footprint: offsets,
@@ -265,6 +270,7 @@ describe('EntityLayerComponent', () => {
             id: 'o1',
             owner: 'RIGHT',
             health: 100,
+            maxHealth: 100,
             defense: 0,
             position: { x: 20, y: 5 },
             footprint: [{ x: 0, y: 0 }],
@@ -275,6 +281,7 @@ describe('EntityLayerComponent', () => {
             id: 'w1',
             owner: 'LEFT',
             health: 100,
+            maxHealth: 100,
             defense: 100,
             position: { x: 1, y: 0 },
             footprint: [{ x: 0, y: 0 }],
@@ -655,7 +662,7 @@ describe('EntityLayerComponent', () => {
       }
     });
 
-    it("labels a target with what a click does and the target's current HP", () => {
+    it("labels a target with what a click does and the target's current and maximum HP", () => {
       const fixture = renderTargets(state, {
         targets: [
           { kind: 'UNIT', id: 'right-1' },
@@ -664,13 +671,13 @@ describe('EntityLayerComponent', () => {
       });
 
       expect(cellsOf(fixture, 'unit')[2].getAttribute('aria-label')).toBe(
-        'Attack RIGHT unit right-1, 10 HP',
+        'Attack RIGHT unit right-1, 10/10 HP',
       );
       expect(cellsOf(fixture, 'wall')[0].getAttribute('aria-label')).toBe(
-        'Attack RIGHT wall shared, 30 HP',
+        'Attack RIGHT wall shared, 30/30 HP',
       );
       expect(cellsOf(fixture, 'unit')[1].getAttribute('aria-label')).toBe(
-        'LEFT unit',
+        'LEFT unit, 10/10 HP',
       );
     });
 
@@ -703,6 +710,183 @@ describe('EntityLayerComponent', () => {
 
       expect(destroyed.getAttribute('data-destroyed')).toBe('true');
       expect(intact.hasAttribute('data-destroyed')).toBe(false);
+    });
+  });
+
+  describe('health labels', () => {
+    function labels(fixture: ReturnType<typeof render>): HTMLElement[] {
+      return Array.from(
+        fixture.nativeElement.querySelectorAll('.health-label'),
+      );
+    }
+
+    /** The visible text; a label may also carry screen-reader-only context. */
+    function shown(fixture: ReturnType<typeof render>): (string | undefined)[] {
+      return labels(fixture).map((label) =>
+        label.querySelector('.health-label-value')?.textContent?.trim(),
+      );
+    }
+
+    function placedAt(label: HTMLElement): Position {
+      return {
+        x: Number(label.style.gridColumn) - 1,
+        y: BOARD_HEIGHT - Number(label.style.gridRow),
+      };
+    }
+
+    const left = testUnit({ id: 'left-1' });
+    const right = testUnit({
+      id: 'right-1',
+      owner: 'RIGHT',
+      position: { x: 3, y: 2 },
+      health: 25,
+      maxHealth: 40,
+    });
+    const wall = testWall({ position: { x: 8, y: 0 }, health: 12 });
+    const orb = testOrb({ position: { x: 12, y: 0 } });
+
+    it("shows each unit's, wall's and orb's own current and maximum HP", () => {
+      const fixture = render(
+        buildBattleState({ units: [left, right], walls: [wall], orbs: [orb] }),
+      );
+
+      // Walls, then orbs, then units, like the cells.
+      expect(shown(fixture)).toEqual(['12/30', '20/20', '10/10', '25/40']);
+    });
+
+    it('labels a multi-cell entity once, on its bottom-left occupied cell', () => {
+      const square = testUnit({
+        position: { x: 5, y: 4 },
+        footprint: FOOTPRINTS['2x2'],
+      });
+      // The anchor (0,0) is not part of this footprint.
+      const offAnchor = testUnit({
+        id: 'off-anchor',
+        position: { x: 10, y: 1 },
+        footprint: [
+          { x: 1, y: 2 },
+          { x: 0, y: 2 },
+          { x: 0, y: 3 },
+        ],
+      });
+
+      const placed = labels(
+        render(buildBattleState({ units: [square, offAnchor], walls: [wall] })),
+      ).map(placedAt);
+
+      // testWall is a 1×3 column standing on (8,0).
+      expect(placed).toEqual([
+        { x: 8, y: 0 },
+        { x: 5, y: 4 },
+        { x: 10, y: 3 },
+      ]);
+    });
+
+    it('follows the new state: current HP changes, the maximum stays, and removed units and walls lose their labels', () => {
+      const fixture = render(
+        buildBattleState({ units: [left, right], walls: [wall] }),
+      );
+
+      fixture.componentRef.setInput(
+        'battleState',
+        buildBattleState({ units: [{ ...left, health: 3 }] }),
+      );
+      fixture.detectChanges();
+
+      expect(shown(fixture)).toEqual(['3/10']);
+    });
+
+    it('skips an entity that covers no cell instead of breaking the other labels', () => {
+      const fixture = render(
+        buildBattleState({
+          units: [left],
+          walls: [testWall({ id: 'no-cells', footprint: [] })],
+        }),
+      );
+
+      expect(shown(fixture)).toEqual(['10/10']);
+    });
+
+    it('keeps the label of an orb at 0 HP, which stays on the board', () => {
+      const fixture = render(
+        buildBattleState({ orbs: [testOrb({ health: 0 })] }),
+      );
+
+      expect(shown(fixture)).toEqual(['0/20']);
+    });
+
+    it('stays with its entity while selected, targeted and highlighted as attacked', () => {
+      const fixture = TestBed.createComponent(EntityLayerComponent);
+      fixture.componentRef.setInput(
+        'battleState',
+        buildBattleState({ units: [left, right], walls: [wall] }),
+      );
+      fixture.componentRef.setInput('selectedUnitId', 'left-1');
+      fixture.componentRef.setInput('interactionMode', InteractionMode.ATTACK);
+      fixture.componentRef.setInput('attackTargets', [
+        { kind: 'UNIT', id: 'right-1' },
+        { kind: 'WALL', id: 'right-wall' },
+      ]);
+      fixture.componentRef.setInput('attackedTarget', {
+        kind: 'UNIT',
+        id: 'right-1',
+      });
+      fixture.detectChanges();
+
+      expect(labels(fixture).map(placedAt)).toEqual([
+        wall.position,
+        left.position,
+        right.position,
+      ]);
+    });
+
+    it("is display only, and leaves a unit's HP to its buttons' names", () => {
+      const fixture = render(buildBattleState({ units: [left] }));
+      const [label] = labels(fixture);
+      const unit: HTMLElement = fixture.nativeElement.querySelector(
+        'button.entity-cell[data-kind="unit"]',
+      );
+
+      expect(label.tagName).toBe('SPAN');
+      expect(label.hasAttribute('tabindex')).toBe(false);
+      expect(label.querySelector('button, [tabindex]')).toBeNull();
+      expect(label.getAttribute('aria-hidden')).toBe('true');
+      expect(unit.getAttribute('aria-label')).toBe('LEFT unit, 10/10 HP');
+    });
+
+    it('keeps the HP of a wall or orb that is not a target readable for assistive technology', () => {
+      const fixture = render(buildBattleState({ walls: [wall], orbs: [orb] }));
+      const [wallLabel, orbLabel] = labels(fixture);
+
+      expect(wallLabel.hasAttribute('aria-hidden')).toBe(false);
+      expect(wallLabel.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'RIGHT wall right-wall, HP 12/30',
+      );
+      expect(orbLabel.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+        'RIGHT orb right-orb, HP 20/20',
+      );
+    });
+
+    it("hides a target wall's label from assistive technology, as its buttons name the HP", () => {
+      const fixture = TestBed.createComponent(EntityLayerComponent);
+      fixture.componentRef.setInput(
+        'battleState',
+        buildBattleState({ walls: [wall] }),
+      );
+      fixture.componentRef.setInput('attackTargets', [
+        { kind: 'WALL', id: 'right-wall' },
+      ]);
+      fixture.detectChanges();
+      const [label] = labels(fixture);
+      const wallButton: HTMLElement = fixture.nativeElement.querySelector(
+        'button.entity-cell[data-kind="wall"]',
+      );
+
+      expect(label.getAttribute('aria-hidden')).toBe('true');
+      expect(label.querySelector('.health-label-context')).toBeNull();
+      expect(wallButton.getAttribute('aria-label')).toBe(
+        'Attack RIGHT wall right-wall, 12/30 HP',
+      );
     });
   });
 });

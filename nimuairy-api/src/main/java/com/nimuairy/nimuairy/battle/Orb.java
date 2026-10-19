@@ -1,4 +1,16 @@
 package com.nimuairy.nimuairy.battle;
 
-public record Orb(String id, PlayerSide owner, Position position, Footprint footprint, int health, int defense) {
+public record Orb(
+        String id,
+        PlayerSide owner,
+        Position position,
+        Footprint footprint,
+        int health,
+        int maxHealth,
+        int defense
+) {
+
+    public Orb {
+        Health.validate(health, maxHealth);
+    }
 }

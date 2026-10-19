@@ -86,15 +86,15 @@ public class BattleService {
 
     private List<Orb> buildOrbs() {
         return List.of(
-                new Orb("orb-left", PlayerSide.LEFT, new Position(0, 5), FOOTPRINT_1X1, 75, 0),
-                new Orb("orb-right", PlayerSide.RIGHT, new Position(20, 5), FOOTPRINT_1X1, 75, 0)
+                new Orb("orb-left", PlayerSide.LEFT, new Position(0, 5), FOOTPRINT_1X1, 75, 75, 0),
+                new Orb("orb-right", PlayerSide.RIGHT, new Position(20, 5), FOOTPRINT_1X1, 75, 75, 0)
         );
     }
 
     private List<Wall> buildWalls() {
         return List.of(
-                new Wall("wall-left", PlayerSide.LEFT, new Position(1, 0), WALL_FOOTPRINT, 1000, 100),
-                new Wall("wall-right", PlayerSide.RIGHT, new Position(18, 0), WALL_FOOTPRINT, 1000, 100)
+                new Wall("wall-left", PlayerSide.LEFT, new Position(1, 0), WALL_FOOTPRINT, 1000, 1000, 100),
+                new Wall("wall-right", PlayerSide.RIGHT, new Position(18, 0), WALL_FOOTPRINT, 1000, 1000, 100)
         );
     }
 
@@ -112,7 +112,7 @@ public class BattleService {
     }
 
     private Unit unit(String id, PlayerSide side, Position position, Footprint footprint) {
-        return new Unit(id, side, UnitType.SWORDSMAN, position, footprint, 500, 200, 50, 3, 1, 2);
+        return new Unit(id, side, UnitType.SWORDSMAN, position, footprint, 500, 500, 200, 50, 3, 1, 2);
     }
 
     private static Footprint wallFootprint() {

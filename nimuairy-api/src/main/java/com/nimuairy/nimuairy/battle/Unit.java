@@ -7,6 +7,7 @@ public record Unit(
         Position position,
         Footprint footprint,
         int health,
+        int maxHealth,
         int attack,
         int defense,
         int actionPointBudget,
@@ -20,6 +21,7 @@ public record Unit(
      * an attack cost of 0 would allow unlimited attacks in one turn.
      */
     public Unit {
+        Health.validate(health, maxHealth);
         if (actionPointBudget <= 0) {
             throw new IllegalArgumentException("actionPointBudget must be positive: " + actionPointBudget);
         }

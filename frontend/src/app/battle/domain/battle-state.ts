@@ -36,6 +36,8 @@ export interface Unit {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  /** Kept apart from health, which cannot give it back after damage. Integer > 0. */
+  readonly maxHealth: number;
   readonly attack: number;
   readonly defense: number;
   /** AP restored at the start of each of the owner's turns. Integer > 0. */
@@ -58,6 +60,7 @@ export interface Wall {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  readonly maxHealth: number;
   readonly defense: number;
 }
 
@@ -71,6 +74,7 @@ export interface Orb {
    * and walls, so that victory can be determined from it.
    */
   readonly health: number;
+  readonly maxHealth: number;
   readonly defense: number;
 }
 
