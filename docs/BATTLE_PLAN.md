@@ -478,8 +478,8 @@ M7 includes:
   highlighting;
 - visualizing the selected unit's melee-range cells in ATTACK mode, using
   positions computed by the domain;
-- displaying each unit's current/max HP (for example, `350/500`) beside its
-  board representation.
+- displaying the current/max HP (`health/maxHealth`, for example `350/500`)
+  of each unit, wall, and orb beside its board representation.
 
 The damage formula is:
 
@@ -487,20 +487,23 @@ The damage formula is:
 
 The attack AP cost is a unit statistic, `attackActionPointCost`. It is
 **2 AP for every unit in the initial MVP**, but the engine reads the value
-from the attacking unit rather than using a global constant. Unit maximum HP
-is represented separately from current HP by `maxHealth`.
+from the attacking unit rather than using a global constant. Units, walls,
+and orbs represent maximum HP separately from current HP by `maxHealth`, with
+the shared invariant `maxHealth > 0` and `0 <= health <= maxHealth`.
 
-The new unit statistics require an end-to-end model/API update: backend
-`Unit` and `UnitDto`, OpenAPI snapshot, regenerated Orval client, frontend
-domain `Unit`, mapper, fixtures, and relevant tests. The demo units initially
-use `attackActionPointCost = 2` and `maxHealth = health`.
+The new statistics require an end-to-end model/API update: backend `Unit`,
+`Wall`, `Orb` and their DTOs, OpenAPI snapshot, regenerated Orval client,
+frontend domain types, mapper, fixtures, and relevant tests. The demo units
+use `attackActionPointCost = 2`, and the demo state starts at full HP
+(`maxHealth = health`): units 500, walls 1000, orbs 75.
 
 Destroying the opponent's orb remains the primary victory condition, but M7
 does not resolve victory. A destroyed orb stays in the domain state at 0 HP;
 M8 implements battle completion, winner determination, and victory UI.
 
 M7.4 UI work is being extended with these agreed refinements before M7.5:
-per-unit attack cost, an attack-range overlay, and per-unit HP labels.
+per-unit attack cost, an attack-range overlay, and HP labels for units, walls,
+and orbs.
 ### M8 — Victory
 
 Implement:

@@ -106,7 +106,7 @@ The result should expose enough domain information for the UI/store to present t
 - In ATTACK mode, visualize the selected unit's melee-range cells similarly to movement-range visualization. The range positions must come from a domain query that uses the unit's full footprint and orthogonal adjacency; the UI must not calculate attack geometry.
 - Keep range-cell visualization distinct from legal-target highlighting: only targets supplied by the domain's legal-target query may be attacked.
 - Display the result using domain outcome data; the UI must not calculate damage or decide legality.
-- Display each unit's current and maximum HP near its board representation as text such as `350/500`. Use the domain's `health` and `maxHealth` values; render one label per unit, not one label per footprint cell.
+- Display the current and maximum HP of each unit, wall, and orb near its board representation as `health/maxHealth`, for example `350/500`. Use the domain's `health` and `maxHealth` values; render one label per object, not one label per footprint cell. Destroyed units and walls are removed from the state together with their labels; an orb at 0 HP stays on the board (§3.5) and its label shows `0/maxHealth`.
 - Support selecting a wall as an attack target and reflect its destruction in the board rendering.
 - Render an orb with 0 HP rotated 45 degrees and greyed out. Do not infer destruction solely from UI state.
 - Do not add victory/winner UI in M7; that belongs to M8.
@@ -116,7 +116,7 @@ The result should expose enough domain information for the UI/store to present t
 
 The current architecture and M6 contract keep battle actions and transient turn state in the frontend domain. M7 does not add backend action endpoints, persistence, database changes, or `remainingActionPoints`/`activeUnitId` to the API.
 
-Add `defense` to the wall and orb models and DTOs: the initial demo walls use 1000 HP / 100 defense, and the initial demo orbs use defense 0. Add `maxHealth` and `attackActionPointCost` to the unit model and API DTO: `maxHealth` preserves a unit's maximum HP independently of its current `health`, and `attackActionPointCost` records the AP cost of that unit's attack. Initially every unit uses `attackActionPointCost = 2` and `maxHealth = health` in the demo state. Keep Java records, DTOs, OpenAPI snapshot, and generated frontend client changes in the same implementation step; regenerate generated API code rather than editing it manually.
+Add `defense` to the wall and orb models and DTOs: the initial demo walls use 1000 HP / 100 defense, and the initial demo orbs use defense 0. Add `attackActionPointCost` to the unit model and API DTO; it records the AP cost of that unit's attack. Add `maxHealth` to the unit, wall, and orb models and DTOs; it preserves an object's maximum HP independently of its current `health`, which cannot give the maximum back after damage. Units, walls, and orbs share the invariant `maxHealth > 0` and `0 <= health <= maxHealth`. Initially every unit uses `attackActionPointCost = 2`, and the demo state starts at full HP (`maxHealth = health`): units 500, walls 1000, orbs 75. Keep Java records, DTOs, OpenAPI snapshot, and generated frontend client changes in the same implementation step; regenerate generated API code rather than editing it manually.
 
 ## 8. Out of scope
 
@@ -157,9 +157,9 @@ Integrate ATTACK into legal actions and expose valid attack targets using the sa
 **Exit criteria:** every target offered by the domain can be attacked successfully from the same state, and illegal targets are never offered.
 
 ### M7.4 — UI integration
-Add attack mode and target interaction, wire the store, display AP/HP/outcome, highlight the target, and render destroyed units/walls and the destroyed orb correctly. The agreed follow-up scope before M7.5 also includes moving attack cost into the unit model/API, visualizing footprint-aware melee-range cells in ATTACK mode through a domain query, adding `maxHealth` to the unit model/API, and displaying each unit's `health/maxHealth` beside it.
+Add attack mode and target interaction, wire the store, display AP/HP/outcome, highlight the target, and render destroyed units/walls and the destroyed orb correctly. The agreed follow-up scope before M7.5 also includes moving attack cost into the unit model/API, visualizing footprint-aware melee-range cells in ATTACK mode through a domain query, adding `maxHealth` to the unit, wall, and orb models/API, and displaying `health/maxHealth` beside each unit, wall, and orb.
 
-**Exit criteria:** UI consumes domain decisions and does not duplicate combat rules; attack-range geometry comes from the domain; per-unit attack cost and maximum HP are carried consistently through the model/API/client; unit HP labels use domain data.
+**Exit criteria:** UI consumes domain decisions and does not duplicate combat rules; attack-range geometry comes from the domain; per-unit attack cost and maximum HP are carried consistently through the model/API/client; HP labels use domain data.
 
 ### M7.5 — Verification and close-out
 Run relevant frontend unit/component tests, backend tests if DTOs change, build/lint and Playwright regression tests. Update `BATTLE_PLAN.md` with completed steps and final scope.
@@ -185,6 +185,6 @@ Run relevant frontend unit/component tests, backend tests if DTOs change, build/
 15. An orb with 0 HP is rendered as a greyed-out diamond (a rounded square rotated by 45 degrees), while remaining in domain state.
 16. M7 does not implement full victory resolution or victory UI.
 17. Existing movement and turn behavior continues to pass regression tests.
-18. Every unit exposes a positive integer `attackActionPointCost` and `maxHealth`; the demo uses `attackActionPointCost = 2` and `maxHealth = health`.
+18. Every unit exposes a positive integer `attackActionPointCost`; every unit, wall, and orb exposes a positive integer `maxHealth` with `0 <= health <= maxHealth`. The demo uses `attackActionPointCost = 2` and starts at full HP (`maxHealth = health`): units 500, walls 1000, orbs 75.
 19. ATTACK mode visualizes footprint-aware orthogonal melee-range cells using positions returned by the domain; legal-target interaction is still governed by `legalAttackTargets`.
-20. The UI displays each unit's current/max HP (for example, `350/500`) near the unit, using `health` and `maxHealth` from domain state.
+20. The UI displays the current/max HP (`health/maxHealth`, for example `350/500`) of each unit, wall, and orb near it, one label per object, using `health` and `maxHealth` from domain state; an orb at 0 HP keeps its label.

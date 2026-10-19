@@ -175,7 +175,7 @@ The orb:
 - belongs to a player,
 - has a position,
 - has a footprint,
-- has hit points and defense,
+- has current HP (`health`), maximum HP (`maxHealth`) and defense,
 - can be targeted by attacks,
 - is protected by that player's wall.
 
@@ -199,7 +199,7 @@ A wall:
 
 - occupies one or more cells,
 - has a footprint,
-- may have hit points and other properties in the future,
+- has current HP (`health`) and maximum HP (`maxHealth`), and may have other properties in the future,
 - can contain slots for units,
 - can be interacted with by movement and combat rules.
 
@@ -242,7 +242,7 @@ The initial domain model includes:
 - position
 - footprint
 
-The invariant is `0 <= health <= maxHealth`, with a positive maximum HP value.
+Units, walls, and orbs share the HP invariant `maxHealth > 0` and `0 <= health <= maxHealth`. `maxHealth` is a separate property because the maximum cannot be recovered from `health` once an object has taken damage.
 
 From M6, a unit also has:
 
@@ -372,7 +372,7 @@ Damage uses the same formula for units, walls, and orbs:
 
 The orb and the wall are valid combat targets, alongside enemy units. The domain remains the source of truth for target legality, attack range, AP cost, and damage.
 
-M7's UI presents the selected unit's attack range and legal attack targets. It also displays each unit's current and maximum HP (for example, `350/500`) near that unit on the board. These are presentation features; they do not introduce combat rules into UI components.
+M7's UI presents the selected unit's attack range and legal attack targets. It also displays the current and maximum HP of each unit, wall, and orb as `health/maxHealth` (for example, `350/500`) near that object on the board. These are presentation features; they do not introduce combat rules into UI components.
 
 ## 10. Domain Concepts
 
