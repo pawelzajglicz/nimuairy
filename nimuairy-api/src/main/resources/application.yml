@@ -16,3 +16,6 @@ jwt:
 
 server:
   port: 8000
+  # The backend sits behind nginx, so its own scheme/host/port differ from the browser's.
+  # Reading X-Forwarded-* lets the CORS filter recognise same-origin requests as such.
+  forward-headers-strategy: framework
