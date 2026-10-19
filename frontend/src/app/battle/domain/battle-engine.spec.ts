@@ -1675,6 +1675,35 @@ describe('BattleEngine ATTACK', () => {
       expect(state).toEqual(before);
     });
 
+    // Structural sharing is intended, so the input must survive every update
+    // path: map for a damaged target and an orb at 0 HP, filter for a removal.
+    it.each([
+      [ENEMY, 'damaged'],
+      [ENEMY, 'destroyed'],
+      [ENEMY_WALL, 'damaged'],
+      [ENEMY_WALL, 'destroyed'],
+      [ENEMY_ORB, 'damaged'],
+      [ENEMY_ORB, 'destroyed'],
+    ] as const)(
+      'leaves the input untouched when a %o target is %s',
+      (target, outcome) => {
+        // 1 HP is below the damage this attacker deals to each target kind.
+        const health = (kind: AttackTarget['kind']) =>
+          outcome === 'destroyed' && target.kind === kind ? { health: 1 } : {};
+        const state = testState({
+          units: [besideStructures, enemy(health('UNIT'))],
+          walls: [testWall(health('WALL'))],
+          orbs: [testOrb({ position: { x: 4, y: 1 }, ...health('ORB') })],
+        });
+        const before = structuredClone(state);
+
+        const result = expectAttacked(state, attackCommand(target));
+
+        expect(result.remainingHealth === 0).toBe(outcome === 'destroyed');
+        expect(state).toEqual(before);
+      },
+    );
+
     it('changes only the attacker among the units when attacking a structure', () => {
       const bystander = testUnit({
         id: 'left-other',
