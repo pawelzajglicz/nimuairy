@@ -238,7 +238,8 @@ export class BattleEngine {
   /**
    * Unit action types the unit may perform in this state; empty for an
    * unknown unit, another player's unit, or a unit other than the one that
-   * has claimed the turn. ATTACK needs at least one legal attack target.
+   * has claimed the turn. ATTACK is offered exactly when `legalAttackTargets`
+   * is non-empty, which already accounts for range and AP.
    */
   legalUnitActions(
     state: BattleState,
