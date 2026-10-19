@@ -23,8 +23,9 @@ interface BattleUiState {
   interactionMode: InteractionMode;
   hoveredDestination: Position | undefined;
   /**
-   * One global slot: replaced only by the next move or attack attempt, and
-   * kept across selection and mode changes and the end of a turn.
+   * One global slot: replaced only by the next move or attack attempt or a
+   * rejected end of turn, and kept across selection and mode changes and a
+   * successful end of turn.
    */
   lastOutcome: LastActionOutcome | undefined;
 }
@@ -260,9 +261,14 @@ export const BattleStore = signalStore(
         return;
       }
       const result = store._engine.endTurn(state);
-      // Only a finished battle rejects END_TURN; reporting that is M8.2's
-      // store integration.
       if (!result.ok) {
+        patchState(store, {
+          lastOutcome: {
+            kind: 'REJECTED',
+            action: 'END_TURN',
+            error: result.error,
+          },
+        });
         return;
       }
       // Selection and hover belong to the turn that just ended, whichever

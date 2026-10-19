@@ -940,5 +940,88 @@ describe('BattleStore', () => {
         expect(store.attackRange()).toEqual([]);
       });
     });
+
+    describe('finished battle', () => {
+      async function finishedStore() {
+        const store = await attackingStore();
+        store.attackTarget(ORB);
+        return store;
+      }
+
+      it("stores the engine's terminal state when the orb is destroyed", async () => {
+        const store = await attackingStore();
+        const expected = new BattleEngine().attack(store.battleState()!, {
+          type: 'ATTACK',
+          unitId: 'left-unit-1',
+          target: ORB,
+        });
+
+        store.attackTarget(ORB);
+
+        expect(expected.ok).toBe(true);
+        expect(store.battleState()).toEqual(
+          expected.ok && expected.value.state,
+        );
+        expect(store.battleState()?.result).toEqual({
+          status: 'FINISHED',
+          outcome: { type: 'VICTORY', winner: 'LEFT' },
+        });
+        expect(store.lastOutcome()).toMatchObject({
+          kind: 'ATTACKED',
+          target: ORB,
+          remainingHealth: 0,
+        });
+        expect(store.selectedUnitId()).toBe('left-unit-1');
+      });
+
+      it('records a rejected end of turn and keeps the state, selection, hover and mode', async () => {
+        const store = await finishedStore();
+        store.hoverDestination({ x: 1, y: 0 });
+        const before = store.battleState();
+
+        store.endTurn();
+
+        expect(store.battleState()).toBe(before);
+        expect(store.battleState()?.currentPlayer).toBe('LEFT');
+        expect(store.selectedUnitId()).toBe('left-unit-1');
+        expect(store.hoveredDestination()).toEqual({ x: 1, y: 0 });
+        expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'END_TURN',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+        expect(store.attackedTarget()).toBeUndefined();
+      });
+
+      it('records a rejected attack and leaves the state untouched', async () => {
+        const store = await finishedStore();
+        const before = store.battleState();
+
+        store.attackTarget(ENEMY);
+
+        expect(store.battleState()).toBe(before);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'ATTACK',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+      });
+
+      it('records a rejected move and leaves the state untouched', async () => {
+        const store = await finishedStore();
+        store.setInteractionMode(InteractionMode.MOVE);
+        const before = store.battleState();
+
+        store.moveSelectedUnit({ x: 1, y: 0 });
+
+        expect(store.battleState()).toBe(before);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'MOVE',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+      });
+    });
   });
 });
