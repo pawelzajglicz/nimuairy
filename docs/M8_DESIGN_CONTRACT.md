@@ -174,15 +174,28 @@ Implement M8 in small, reviewable steps:
 3. **M8.3 — Finished-state UI and restart:** show the winner, keep the final board visible, and add restart through the existing initialization path.
 4. **M8.4 — Verification and documentation:** add/update unit, store, component, and E2E tests; run relevant checks; update documentation if implementation reveals an agreed contract clarification is necessary.
 
+All four steps are completed. M8.4 found no discrepancy between this contract and the implementation, so no contract clarification was needed.
+
 ## 11. Acceptance checklist
 
-- [ ] `BattleState` explicitly records in-progress vs finished and the terminal outcome.
-- [ ] Destroying the opponent's orb atomically finishes the battle and records the correct winner.
-- [ ] The destroyed orb remains in the state at (0) HP.
-- [ ] An invalid initial battle cannot start with a missing or destroyed orb.
-- [ ] No gameplay action can change a finished battle; `END_TURN` fails explicitly.
-- [ ] Legal-action queries do not advertise gameplay actions after completion.
-- [ ] UI shows `Bitwa zakończona — zwycięzca: {LEFT|RIGHT}` without assuming local-player identity.
-- [ ] Restart loads a fresh demo battle without reloading the page and clears transient interaction state.
-- [ ] Draw remains a representable future outcome but is not implemented in M8.
-- [ ] Relevant tests and frontend checks pass, with results recorded.
+- [x] `BattleState` explicitly records in-progress vs finished and the terminal outcome.
+- [x] Destroying the opponent's orb atomically finishes the battle and records the correct winner.
+- [x] The destroyed orb remains in the state at (0) HP.
+- [x] An invalid initial battle cannot start with a missing or destroyed orb.
+- [x] No gameplay action can change a finished battle; `END_TURN` fails explicitly.
+- [x] Legal-action queries do not advertise gameplay actions after completion.
+- [x] UI shows `Bitwa zakończona — zwycięzca: {LEFT|RIGHT}` without assuming local-player identity.
+- [x] Restart loads a fresh demo battle without reloading the page and clears transient interaction state.
+- [x] Draw remains a representable future outcome but is not implemented in M8.
+- [x] Relevant tests and frontend checks pass, with results recorded.
+
+### Close-out verification (M8.4)
+
+The checks were run on `m8-victory` after M8.3:
+
+- Frontend unit and component tests, `npm test -- --watch=false`: 20 files, 559 tests passed.
+- `npm run lint`, `npm run format:check`, `npm run build`: passed.
+- Playwright, all specs: 33 passed, including the new `e2e/victory.spec.ts` (LEFT victory with the final board kept, gameplay controls unusable and NEW BATTLE restarting in place; RIGHT victory; a failed restart that can be retried).
+- Backend tests: not run, because M8 changes no backend code or API contract.
+
+Known limitation: an initial state that breaks the orb invariant is rejected by the mapper throwing, the same fail-fast convention as the mapper's other invalid-response checks. It is not shown through the page's load-error message.
