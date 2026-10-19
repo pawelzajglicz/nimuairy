@@ -1,4 +1,5 @@
 import { Component, computed, input } from '@angular/core';
+import type { ActionType } from '../../domain/actions';
 import type { Position, Unit } from '../../domain/battle-state';
 import type { AttackError } from '../../domain/combat';
 import type { MovementError } from '../../domain/movement';
@@ -49,10 +50,16 @@ export class MovementInfoComponent {
         return `${outcome.owner} ${outcome.unitId} attacked ${kind} ${id} · damage ${outcome.damage} · remaining HP ${outcome.remainingHealth} · cost ${cost(outcome.cost)}${destroyed}`;
       }
       case 'REJECTED':
-        return `${outcome.action === 'MOVE' ? 'Move' : 'Attack'} rejected: ${errorText(outcome.error)}`;
+        return `${ACTION_LABEL[outcome.action]} rejected: ${errorText(outcome.error)}`;
     }
   });
 }
+
+const ACTION_LABEL: Record<ActionType, string> = {
+  MOVE: 'Move',
+  ATTACK: 'Attack',
+  END_TURN: 'End turn',
+};
 
 function cell({ x, y }: Position): string {
   return `(${x},${y})`;

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, ElementRef, inject, viewChild } from '@angular/core';
 import type { BoardInteraction } from '../../board-interaction';
 import { BattleStore } from '../../battle.store';
 import { BattleBoardComponent } from '../../components/battle-board/battle-board.component';
@@ -18,6 +18,19 @@ import { MovementInfoComponent } from '../../components/movement-info/movement-i
 })
 export class BattleDemoPage {
   protected readonly store = inject(BattleStore);
+
+  private readonly loadStatus =
+    viewChild.required<ElementRef<HTMLElement>>('loadStatus');
+
+  /**
+   * The clicked button is removed while the battle reloads, which would drop
+   * keyboard focus to the page body; the load status stays and says what is
+   * happening.
+   */
+  protected startNewBattle(): void {
+    this.store.restart();
+    this.loadStatus().nativeElement.focus();
+  }
 
   protected onBoardInteraction(interaction: BoardInteraction): void {
     switch (interaction.kind) {

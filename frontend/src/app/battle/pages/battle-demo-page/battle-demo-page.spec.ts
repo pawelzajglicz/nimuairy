@@ -8,6 +8,7 @@ import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type {
   BattleStateResponse,
+  OrbDto,
   UnitDto,
 } from '../../../api/generated/model';
 import { BattleStore } from '../../battle.store';
@@ -28,6 +29,22 @@ function unitDto(overrides: UnitDto): UnitDto {
     movementCostFactor: 1,
     attackActionPointCost: 2,
     ...overrides,
+  };
+}
+
+/**
+ * A new battle needs one living orb per side. This one sits off the board, so
+ * it blocks no cell and is in reach of no unit in these tests.
+ */
+function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+  return {
+    id: `${owner.toLowerCase()}-orb`,
+    owner,
+    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    footprint: [{ x: 0, y: 0 }],
+    health: 50,
+    maxHealth: 50,
+    defense: 0,
   };
 }
 
@@ -54,7 +71,7 @@ describe('BattleDemoPage', () => {
 
     const response: BattleStateResponse = {
       board: { width: 21, height: 11, terrain: [] },
-      orbs: [],
+      orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
       walls: [],
       units,
       currentPlayer: 'LEFT',
@@ -226,6 +243,7 @@ describe('BattleDemoPage', () => {
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
+            offBoardOrb('RIGHT'),
           ],
         },
       );
@@ -802,8 +820,15 @@ describe('BattleDemoPage', () => {
         Array.from(root.querySelectorAll('.health-label-value')).map((label) =>
           label.textContent?.trim(),
         );
-      // The wall first, then the units; the maximum stays as the current HP drops.
-      expect(healthLabels()).toEqual(['10/10', '100/100', '100/100']);
+      // The wall, the orbs, then the units; the maximum stays as the current
+      // HP drops.
+      expect(healthLabels()).toEqual([
+        '10/10',
+        '50/50',
+        '50/50',
+        '100/100',
+        '100/100',
+      ]);
 
       act(() =>
         query(
@@ -815,7 +840,286 @@ describe('BattleDemoPage', () => {
         query('button.entity-cell.attack-target[data-kind="unit"]')!.click(),
       );
 
-      expect(healthLabels()).toEqual(['10/10', '100/100', '95/100']);
+      expect(healthLabels()).toEqual([
+        '10/10',
+        '50/50',
+        '50/50',
+        '100/100',
+        '95/100',
+      ]);
+    });
+  });
+
+  describe('finished battle', () => {
+    // A 4×1 PLAIN board: LEFT orb, RIGHT unit, LEFT unit, RIGHT orb. Each unit
+    // (attack 10) stands next to the enemy orb (5 HP, defense 0), so one
+    // attack destroys it.
+    function finishResponse(
+      currentPlayer: 'LEFT' | 'RIGHT',
+    ): BattleStateResponse {
+      const orb = (owner: 'LEFT' | 'RIGHT', x: number): OrbDto => ({
+        id: `${owner.toLowerCase()}-orb`,
+        owner,
+        position: { x, y: 0 },
+        footprint: [{ x: 0, y: 0 }],
+        health: 5,
+        maxHealth: 5,
+        defense: 0,
+      });
+      return {
+        board: {
+          width: 4,
+          height: 1,
+          terrain: Array.from({ length: 4 }, (_, x) => ({
+            position: { x, y: 0 },
+            type: 'PLAIN' as const,
+          })),
+        },
+        orbs: [orb('LEFT', 0), orb('RIGHT', 3)],
+        walls: [],
+        units: [
+          unitDto({
+            id: 'unit-right-1',
+            owner: 'RIGHT',
+            position: { x: 1, y: 0 },
+          }),
+          unitDto({
+            id: 'unit-left-1',
+            owner: 'LEFT',
+            position: { x: 2, y: 0 },
+          }),
+        ],
+        currentPlayer,
+      };
+    }
+
+    async function renderFinishBoard(currentPlayer: 'LEFT' | 'RIGHT') {
+      const rendered = await renderWithLoadedBattle(
+        [],
+        finishResponse(currentPlayer),
+      );
+      const root: HTMLElement = rendered.fixture.nativeElement;
+      const act = (action: () => void) => {
+        action();
+        rendered.fixture.detectChanges();
+      };
+      const query = <T extends HTMLElement = HTMLElement>(
+        selector: string,
+      ): T | null => root.querySelector<T>(selector);
+      const text = (selector: string) =>
+        query(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+      const unit = (owner: 'LEFT' | 'RIGHT') =>
+        query(`button.entity-cell[data-kind="unit"][data-owner="${owner}"]`)!;
+      const modeButton = (mode: InteractionMode) =>
+        query<HTMLButtonElement>(`.mode-button[data-mode="${mode}"]`)!;
+
+      /** Destroys the enemy orb with the current player's unit, through real clicks. */
+      const destroyEnemyOrb = () => {
+        act(() => unit(currentPlayer).click());
+        act(() => modeButton(InteractionMode.ATTACK).click());
+        act(() =>
+          query('button.entity-cell.attack-target[data-kind="orb"]')!.click(),
+        );
+      };
+
+      /** Clicks NEW BATTLE and returns the reload request it starts. */
+      const clickNewBattle = () => {
+        act(() => query('.new-battle-button')!.click());
+        TestBed.tick();
+        rendered.fixture.detectChanges();
+        return httpMock.expectOne('/api/v1/battles/demo');
+      };
+
+      const settle = async () => {
+        await rendered.fixture.whenStable();
+        rendered.fixture.detectChanges();
+      };
+
+      return {
+        ...rendered,
+        root,
+        act,
+        query,
+        text,
+        unit,
+        modeButton,
+        destroyEnemyOrb,
+        clickNewBattle,
+        settle,
+      };
+    }
+
+    it('announces LEFT as the winner when LEFT destroys the RIGHT orb', async () => {
+      const { query, text, destroyEnemyOrb } = await renderFinishBoard('LEFT');
+      expect(text('.current-player')).toBe('Turn: LEFT');
+      expect(query('.battle-result')).toBeNull();
+
+      destroyEnemyOrb();
+
+      expect(text('.current-player')).toBe(
+        'Bitwa zakończona — zwycięzca: LEFT',
+      );
+      expect(query('.current-player')?.getAttribute('aria-live')).toBe(
+        'polite',
+      );
+    });
+
+    it('announces RIGHT as the winner when RIGHT destroys the LEFT orb', async () => {
+      const { text, destroyEnemyOrb } = await renderFinishBoard('RIGHT');
+
+      destroyEnemyOrb();
+
+      expect(text('.current-player')).toBe(
+        'Bitwa zakończona — zwycięzca: RIGHT',
+      );
+    });
+
+    it('keeps the final board with the destroyed orb at 0 HP and the last outcome', async () => {
+      const { root, query, text, destroyEnemyOrb } =
+        await renderFinishBoard('LEFT');
+
+      destroyEnemyOrb();
+
+      expect(query('app-battle-board')).not.toBeNull();
+      expect(
+        query(
+          '.entity-cell[data-kind="orb"][data-owner="RIGHT"]',
+        )?.getAttribute('data-destroyed'),
+      ).toBe('true');
+      const orbLabels = Array.from(
+        root.querySelectorAll(
+          '.health-label[data-kind="orb"] .health-label-value',
+        ),
+      ).map((label) => label.textContent?.trim());
+      expect(orbLabels).toEqual(['5/5', '0/5']);
+      expect(
+        root.querySelectorAll('.entity-cell[data-kind="unit"]'),
+      ).toHaveLength(2);
+      expect(text('.last-outcome')).toContain('remaining HP 0');
+    });
+
+    it('offers no gameplay action once finished, but still lets a unit be inspected', async () => {
+      const {
+        root,
+        store,
+        act,
+        query,
+        text,
+        unit,
+        modeButton,
+        destroyEnemyOrb,
+      } = await renderFinishBoard('LEFT');
+
+      destroyEnemyOrb();
+
+      expect(query<HTMLButtonElement>('.end-turn-button')!.disabled).toBe(true);
+      expect(modeButton(InteractionMode.MOVE).disabled).toBe(true);
+      expect(modeButton(InteractionMode.ATTACK).disabled).toBe(true);
+      expect(query('.attack-target')).toBeNull();
+      expect(root.querySelectorAll('.attack-range-cell')).toHaveLength(0);
+
+      // MOVE mode cannot be chosen through the disabled controls any more.
+      store.setInteractionMode(InteractionMode.MOVE);
+      act(() => unit('LEFT').click());
+      expect(root.querySelectorAll('button.movement-target')).toHaveLength(0);
+      expect(root.querySelector('.movement-path')).toBeNull();
+
+      act(() => unit('RIGHT').click());
+      expect(text('.unit-movement')).toContain('unit-right-1 (RIGHT)');
+      expect(text('.current-player')).toBe(
+        'Bitwa zakończona — zwycięzca: LEFT',
+      );
+    });
+
+    it('offers NEW BATTLE during a battle in progress as well', async () => {
+      const { query } = await renderFinishBoard('LEFT');
+
+      expect(query('.new-battle-button')?.textContent?.trim()).toBe(
+        'NEW BATTLE',
+      );
+    });
+
+    it('NEW BATTLE shows loading until the fresh battle arrives, then starts it with no stale selection, mode or outcome', async () => {
+      const {
+        root,
+        query,
+        text,
+        modeButton,
+        destroyEnemyOrb,
+        clickNewBattle,
+        settle,
+      } = await renderFinishBoard('LEFT');
+      destroyEnemyOrb();
+
+      const request = clickNewBattle();
+
+      expect(query('app-battle-board')).toBeNull();
+      expect(root.textContent).toContain('Loading battle…');
+
+      request.flush(finishResponse('LEFT'));
+      await settle();
+
+      expect(text('.current-player')).toBe('Turn: LEFT');
+      expect(query('.battle-result')).toBeNull();
+      expect(query('.entity-cell[data-destroyed]')).toBeNull();
+      expect(query('.entity-cell.selected')).toBeNull();
+      expect(text('.no-selection')).toBe('No unit selected.');
+      expect(text('.last-outcome')).toBe('');
+      expect(query('.attacked')).toBeNull();
+      expect(
+        modeButton(InteractionMode.MOVE).getAttribute('aria-pressed'),
+      ).toBe('true');
+      expect(modeButton(InteractionMode.MOVE).disabled).toBe(false);
+      expect(query<HTMLButtonElement>('.end-turn-button')!.disabled).toBe(
+        false,
+      );
+    });
+
+    it('a failed NEW BATTLE shows the error instead of a battle, and can be retried', async () => {
+      const { query, text, destroyEnemyOrb, clickNewBattle, settle } =
+        await renderFinishBoard('LEFT');
+      destroyEnemyOrb();
+
+      clickNewBattle().flush('failure', {
+        status: 500,
+        statusText: 'Server Error',
+      });
+      await settle();
+
+      expect(text('.load-status')).toBe('Failed to load the demo battle.');
+      expect(document.activeElement).toBe(query('.load-status'));
+      expect(query('app-battle-board')).toBeNull();
+      expect(query('.battle-result')).toBeNull();
+      expect(query('.new-battle-button')).not.toBeNull();
+
+      clickNewBattle().flush(finishResponse('LEFT'));
+      await settle();
+
+      expect(query('app-battle-board')).not.toBeNull();
+      expect(text('.current-player')).toBe('Turn: LEFT');
+    });
+
+    it('NEW BATTLE moves keyboard focus to the announced load status instead of dropping it', async () => {
+      const { query, text, clickNewBattle, settle } =
+        await renderFinishBoard('LEFT');
+      const status = query('.load-status')!;
+      expect(status.getAttribute('aria-live')).toBe('polite');
+      expect(text('.load-status')).toBe('');
+      query<HTMLButtonElement>('.new-battle-button')!.focus();
+
+      const request = clickNewBattle();
+
+      // The same live region, so the change of its text is announced.
+      expect(query('.load-status')).toBe(status);
+      expect(text('.load-status')).toBe('Loading battle…');
+      expect(document.activeElement).toBe(status);
+
+      request.flush(finishResponse('LEFT'));
+      await settle();
+
+      expect(query('.load-status')).toBe(status);
+      expect(text('.load-status')).toBe('');
+      expect(document.activeElement).toBe(status);
     });
   });
 });

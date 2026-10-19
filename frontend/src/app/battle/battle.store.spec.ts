@@ -7,6 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   BattleStateResponse,
+  OrbDto,
   TerrainCellDto,
   UnitDto,
 } from '../api/generated/model';
@@ -16,6 +17,22 @@ import { BattleEngine } from './domain/battle-engine';
 import type { Position } from './domain/battle-state';
 import type { AttackTarget } from './domain/combat';
 import { InteractionMode } from './interaction-mode';
+
+/**
+ * A new battle needs one living orb per side. This one sits off the board, so
+ * it blocks no cell and is in reach of no unit in these tests.
+ */
+function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+  return {
+    id: `${owner.toLowerCase()}-orb`,
+    owner,
+    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    footprint: [{ x: 0, y: 0 }],
+    health: 50,
+    maxHealth: 50,
+    defense: 0,
+  };
+}
 
 function demoResponse(): BattleStateResponse {
   return {
@@ -31,7 +48,7 @@ function demoResponse(): BattleStateResponse {
         { position: { x: 2, y: 1 }, type: 'PLAIN' },
       ],
     },
-    orbs: [],
+    orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
     walls: [],
     units: [
       {
@@ -264,7 +281,7 @@ describe('BattleStore', () => {
       }
       return {
         board: { width: 6, height: 3, terrain },
-        orbs: [],
+        orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
         walls: [],
         units: [
           unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
@@ -582,7 +599,10 @@ describe('BattleStore', () => {
 
         store.endTurn();
 
-        expect(store.battleState()).toEqual(new BattleEngine().endTurn(before));
+        expect(new BattleEngine().endTurn(before)).toEqual({
+          ok: true,
+          value: store.battleState(),
+        });
       });
 
       it('clears the active unit, ends the turn at 0 AP and restores the AP of the player whose turn starts', async () => {
@@ -676,6 +696,7 @@ describe('BattleStore', () => {
       return {
         board: { width: 6, height: 3, terrain },
         orbs: [
+          offBoardOrb('LEFT'),
           {
             id: 'right-orb',
             owner: 'RIGHT',
@@ -804,9 +825,9 @@ describe('BattleStore', () => {
 
       store.attackTarget(ORB);
 
-      expect(store.battleState()?.orbs).toEqual([
+      expect(store.battleState()?.orbs).toContainEqual(
         expect.objectContaining({ id: 'right-orb', health: 0 }),
-      ]);
+      );
     });
 
     it('drops a destroyed unit from the state and the targets', async () => {
@@ -917,6 +938,170 @@ describe('BattleStore', () => {
         store.endTurn();
 
         expect(store.attackRange()).toEqual([]);
+      });
+    });
+
+    describe('finished battle', () => {
+      async function finishedStore() {
+        const store = await attackingStore();
+        store.attackTarget(ORB);
+        return store;
+      }
+
+      it("stores the engine's terminal state when the orb is destroyed", async () => {
+        const store = await attackingStore();
+        const expected = new BattleEngine().attack(store.battleState()!, {
+          type: 'ATTACK',
+          unitId: 'left-unit-1',
+          target: ORB,
+        });
+
+        store.attackTarget(ORB);
+
+        expect(expected.ok).toBe(true);
+        expect(store.battleState()).toEqual(
+          expected.ok && expected.value.state,
+        );
+        expect(store.battleState()?.result).toEqual({
+          status: 'FINISHED',
+          outcome: { type: 'VICTORY', winner: 'LEFT' },
+        });
+        expect(store.lastOutcome()).toMatchObject({
+          kind: 'ATTACKED',
+          target: ORB,
+          remainingHealth: 0,
+        });
+        expect(store.selectedUnitId()).toBe('left-unit-1');
+      });
+
+      it('records a rejected end of turn and keeps the state, selection, hover and mode', async () => {
+        const store = await finishedStore();
+        store.hoverDestination({ x: 1, y: 0 });
+        const before = store.battleState();
+
+        store.endTurn();
+
+        expect(store.battleState()).toBe(before);
+        expect(store.battleState()?.currentPlayer).toBe('LEFT');
+        expect(store.selectedUnitId()).toBe('left-unit-1');
+        expect(store.hoveredDestination()).toEqual({ x: 1, y: 0 });
+        expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'END_TURN',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+        expect(store.attackedTarget()).toBeUndefined();
+      });
+
+      it('records a rejected attack and leaves the state untouched', async () => {
+        const store = await finishedStore();
+        const before = store.battleState();
+
+        store.attackTarget(ENEMY);
+
+        expect(store.battleState()).toBe(before);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'ATTACK',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+      });
+
+      it('records a rejected move and leaves the state untouched', async () => {
+        const store = await finishedStore();
+        store.setInteractionMode(InteractionMode.MOVE);
+        const before = store.battleState();
+
+        store.moveSelectedUnit({ x: 1, y: 0 });
+
+        expect(store.battleState()).toBe(before);
+        expect(store.lastOutcome()).toEqual({
+          kind: 'REJECTED',
+          action: 'MOVE',
+          error: { type: 'BATTLE_FINISHED' },
+        });
+      });
+
+      it('exposes the finished battle and the winner from the domain result', async () => {
+        const store = await attackingStore();
+        expect(store.battleFinished()).toBe(false);
+        expect(store.winner()).toBeUndefined();
+
+        store.attackTarget(ORB);
+
+        expect(store.battleFinished()).toBe(true);
+        expect(store.winner()).toBe('LEFT');
+      });
+
+      it('offers no attack range, destinations or path preview, though the attacker has AP left', async () => {
+        const store = await finishedStore();
+        expect(store.selectedUnit()?.remainingActionPoints).toBe(4);
+
+        expect(store.attackRange()).toEqual([]);
+        expect(store.attackTargets()).toEqual([]);
+
+        store.setInteractionMode(InteractionMode.MOVE);
+        store.hoverDestination({ x: 1, y: 0 });
+
+        expect(store.reachableDestinations()).toEqual([]);
+        expect(store.movementPreview()).toBeUndefined();
+      });
+
+      describe('restart', () => {
+        async function restartFinishedBattle() {
+          const store = await finishedStore();
+          store.hoverDestination({ x: 1, y: 0 });
+          const finished = store.battleState();
+
+          store.restart();
+          TestBed.tick();
+
+          return { store, finished };
+        }
+
+        it('presents no fresh battle before the new response arrives', async () => {
+          const { store, finished } = await restartFinishedBattle();
+
+          expect(store.loading()).toBe(true);
+          expect(store.battleState()).toBe(finished);
+
+          httpMock.expectOne('/api/v1/battles/demo').flush(attackResponse());
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+        });
+
+        it('starts the battle from the reloaded response and clears the UI state of the old one', async () => {
+          const { store } = await restartFinishedBattle();
+
+          httpMock.expectOne('/api/v1/battles/demo').flush(attackResponse());
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+
+          expect(store.battleState()).toEqual(toBattleState(attackResponse()));
+          expect(store.battleState()?.result).toEqual({
+            status: 'IN_PROGRESS',
+          });
+          expect(store.battleFinished()).toBe(false);
+          expect(store.winner()).toBeUndefined();
+          expect(store.error()).toBeUndefined();
+          expect(store.selectedUnitId()).toBeUndefined();
+          expect(store.interactionMode()).toBe(InteractionMode.MOVE);
+          expect(store.hoveredDestination()).toBeUndefined();
+          expect(store.lastOutcome()).toBeUndefined();
+          expect(store.attackedTarget()).toBeUndefined();
+        });
+
+        it('leaves no battle and exposes the error when the reload fails', async () => {
+          const { store } = await restartFinishedBattle();
+
+          httpMock
+            .expectOne('/api/v1/battles/demo')
+            .flush('failure', { status: 500, statusText: 'Server Error' });
+          await vi.waitFor(() => expect(store.loading()).toBe(false));
+
+          expect(store.error()).toBeDefined();
+          expect(store.battleState()).toBeUndefined();
+          expect(store.winner()).toBeUndefined();
+        });
       });
     });
   });

@@ -1,5 +1,10 @@
-import type { ActionType, UnitActionType } from './actions';
 import type {
+  ActionType,
+  BattleFinishedError,
+  UnitActionType,
+} from './actions';
+import type {
+  BattleResult,
   BattleState,
   Orb,
   PlayerSide,
@@ -45,6 +50,8 @@ const REMOVED_WHEN_DESTROYED: Record<AttackTargetKind, boolean> = {
   ORB: false,
 };
 
+const BATTLE_FINISHED: BattleFinishedError = { type: 'BATTLE_FINISHED' };
+
 /**
  * Authoritative battle rules as pure functions of the battle state: commands
  * return a new state, queries only read it. Framework-independent so it can
@@ -60,6 +67,9 @@ export class BattleEngine {
     state: BattleState,
     command: MoveUnitCommand,
   ): Result<MovementResult, MovementError> {
+    if (isFinished(state)) {
+      return err(BATTLE_FINISHED);
+    }
     const acting = actingUnit(state, command.unitId);
     if (!acting.ok) {
       return acting;
@@ -119,13 +129,16 @@ export class BattleEngine {
 
   /**
    * Melee attack on an enemy unit, wall or orb. Damage, the AP charge, the
-   * turn claim and the target's destruction are applied together in one new
-   * state, or not at all.
+   * turn claim, the target's destruction and, for a destroyed orb, the end of
+   * the battle are applied together in one new state, or not at all.
    */
   attack(
     state: BattleState,
     command: AttackCommand,
   ): Result<AttackResult, AttackError> {
+    if (isFinished(state)) {
+      return err(BATTLE_FINISHED);
+    }
     const found = findUnit(state, command.unitId);
     if (!found.ok) {
       return found;
@@ -158,6 +171,7 @@ export class BattleEngine {
         // A successful attack claims an unclaimed turn; for the unit that
         // already holds it this is a no-op.
         activeUnitId: attacker.id,
+        result: resultAfterAttack(state, attacker, target, remainingHealth),
       },
       target,
       damage,
@@ -168,14 +182,17 @@ export class BattleEngine {
 
   /**
    * Hands the turn to the other player, leaves the new turn unclaimed, and
-   * restores the AP of every unit of the player whose turn starts. Always
-   * legal, whatever AP remain, including 0. AP are restored at turn start
-   * rather than turn end, so the units of the player whose turn ends keep
-   * what they have left until their owner's next turn.
+   * restores the AP of every unit of the player whose turn starts. Legal
+   * whatever AP remain, including 0, until the battle has finished. AP are
+   * restored at turn start rather than turn end, so the units of the player
+   * whose turn ends keep what they have left until their owner's next turn.
    */
-  endTurn(state: BattleState): BattleState {
+  endTurn(state: BattleState): Result<BattleState, BattleFinishedError> {
+    if (isFinished(state)) {
+      return err(BATTLE_FINISHED);
+    }
     const nextPlayer = OPPONENT[state.currentPlayer];
-    return {
+    return ok({
       ...state,
       currentPlayer: nextPlayer,
       activeUnitId: undefined,
@@ -185,7 +202,7 @@ export class BattleEngine {
           ? { ...unit, remainingActionPoints: unit.actionPointBudget }
           : unit,
       ),
-    };
+    });
   }
 
   /**
@@ -226,9 +243,13 @@ export class BattleEngine {
 
   /**
    * Action types the current player may perform in this state: END_TURN, plus
-   * every unit action at least one of their units may perform.
+   * every unit action at least one of their units may perform. None once the
+   * battle has finished.
    */
   legalActions(state: BattleState): ReadonlySet<ActionType> {
+    if (isFinished(state)) {
+      return new Set();
+    }
     return new Set<ActionType>([
       ...state.units.flatMap((unit) => unitActions(state, unit)),
       'END_TURN',
@@ -237,9 +258,10 @@ export class BattleEngine {
 
   /**
    * Unit action types the unit may perform in this state; empty for an
-   * unknown unit, another player's unit, or a unit other than the one that
-   * has claimed the turn. ATTACK is offered exactly when `legalAttackTargets`
-   * is non-empty, which already accounts for range and AP.
+   * unknown unit, another player's unit, a unit other than the one that has
+   * claimed the turn, and in a finished battle. ATTACK is offered exactly
+   * when `legalAttackTargets` is non-empty, which already accounts for range
+   * and AP.
    */
   legalUnitActions(
     state: BattleState,
@@ -331,12 +353,14 @@ function everyTarget(state: BattleState): AttackTarget[] {
 }
 
 /**
- * The turn is the current player's and is unclaimed or claimed by this unit.
- * Both the legal-action queries and execution go through this rule, so an
- * action reported as legal is never rejected for turn-ownership reasons.
+ * The battle is in progress, and the turn is the current player's and is
+ * unclaimed or claimed by this unit. Both the legal-action queries and
+ * execution go through this rule, so an action reported as legal is never
+ * rejected for turn-ownership reasons.
  */
 function mayAct(state: BattleState, unit: Unit): boolean {
   return (
+    !isFinished(state) &&
     unit.owner === state.currentPlayer &&
     (state.activeUnitId === undefined || state.activeUnitId === unit.id)
   );
@@ -385,6 +409,29 @@ function findTarget(
   target: AttackTarget,
 ): Unit | Wall | Orb | undefined {
   return targetsOfKind(state, target.kind).find(({ id }) => id === target.id);
+}
+
+function isFinished(state: BattleState): boolean {
+  return state.result.status === 'FINISHED';
+}
+
+/**
+ * Destroying an orb wins the battle for the attacker's side; `validateAttack`
+ * rejects the attacker's own orb, so the destroyed orb is always the
+ * opponent's. Destroying units or walls leaves the result as it was.
+ */
+function resultAfterAttack(
+  state: BattleState,
+  attacker: Unit,
+  target: AttackTarget,
+  remainingHealth: number,
+): BattleResult {
+  return target.kind === 'ORB' && remainingHealth === 0
+    ? {
+        status: 'FINISHED',
+        outcome: { type: 'VICTORY', winner: attacker.owner },
+      }
+    : state.result;
 }
 
 /** Only the target's own collection changes; the others keep their references. */

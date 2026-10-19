@@ -22,6 +22,15 @@ function response(): BattleStateResponse {
         maxHealth: 80,
         defense: 0,
       },
+      {
+        id: 'orb-right',
+        owner: 'RIGHT',
+        position: { x: 20, y: 5 },
+        footprint: [{ x: 0, y: 0 }],
+        health: 80,
+        maxHealth: 80,
+        defense: 0,
+      },
     ],
     walls: [
       {
@@ -105,6 +114,39 @@ describe('toBattleState', () => {
     expect(state.activeUnitId).toBeUndefined();
   });
 
+  it('starts the battle in progress', () => {
+    expect(toBattleState(response()).result).toEqual({
+      status: 'IN_PROGRESS',
+    });
+  });
+
+  it.each([
+    ['LEFT', 'orb-left'],
+    ['RIGHT', 'orb-right'],
+  ])('rejects a response without a %s orb', (side, id) => {
+    const incomplete = response();
+    incomplete.orbs = incomplete.orbs!.filter((orb) => orb.id !== id);
+
+    expect(() => toBattleState(incomplete)).toThrow(
+      `not a valid new battle: ${side} orb MISSING`,
+    );
+  });
+
+  it.each([
+    ['LEFT', 0],
+    ['RIGHT', 1],
+  ])(
+    'rejects a %s orb at 0 HP instead of starting a finished battle',
+    (side, index) => {
+      const destroyed = response();
+      destroyed.orbs![index].health = 0;
+
+      expect(() => toBattleState(destroyed)).toThrow(
+        `not a valid new battle: ${side} orb DESTROYED`,
+      );
+    },
+  );
+
   it('rejects a response without a current player instead of defaulting it', () => {
     const incomplete = response();
     delete incomplete.currentPlayer;
@@ -168,10 +210,10 @@ describe('toBattleState', () => {
     },
   );
 
+  // An orb at 0 HP is rejected as a destroyed orb, as tested above.
   it.each([
     ['units', 'unit'],
     ['walls', 'wall'],
-    ['orbs', 'orb'],
   ] as const)(
     'accepts %s from 0 HP up to their maximum',
     (collection, label) => {

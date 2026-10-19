@@ -20,7 +20,7 @@ Two players control units on the same board. Each player has an orb protected by
 
 The primary objective is to destroy the opponent's orb.
 
-Destroying the opponent's orb is the primary victory condition, regardless of how many units either player has remaining. M8 implements victory detection and winner resolution. Until then, an orb at 0 HP remains in the domain state so its destruction can be detected.
+Destroying the opponent's orb is the primary victory condition, regardless of how many units either player has remaining. Destroying it ends the battle immediately, and the attacker's side wins. An orb at 0 HP remains in the domain state, so the finished battle keeps its final board.
 
 ## 2. Turn Model
 
@@ -185,7 +185,7 @@ The initial orb can use a one-cell footprint, but the domain model should not re
 
 Destroying a player's orb is the primary victory condition. The opponent wins, regardless of the number, health, or status of the remaining units.
 
-M7 preserves an orb in the domain state at 0 HP. M8 adds the logic that detects the destroyed orb, ends the battle, and determines the winner.
+A destroyed orb stays in the domain state at 0 HP. The attack that destroys it also ends the battle and records the winner, and no gameplay action is possible afterwards. See [`M8_DESIGN_CONTRACT.md`](./M8_DESIGN_CONTRACT.md) for the concrete rules.
 
 ## 6. Walls
 

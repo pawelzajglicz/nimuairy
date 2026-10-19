@@ -34,7 +34,9 @@ function unit(
 // 6x4 PLAIN board, terrain listed x-major (index = x * HEIGHT + y):
 // - LEFT 1x1 at (0,0) with 2 AP;
 // - LEFT 2x1 at (2,2), covering (2,2) and (3,2), with 1 AP;
-// - RIGHT 1x1 at (5,0) with 3 AP.
+// - RIGHT 1x1 at (5,0) with 3 AP;
+// - the LEFT orb at (0,3) and the RIGHT orb at (1,3), out of every unit's
+//   reach, only because a new battle needs one living orb per side.
 const battleState: BattleStateResponse = {
   board: {
     width: WIDTH,
@@ -60,7 +62,15 @@ const battleState: BattleStateResponse = {
     ),
     unit('right-small', 'RIGHT', { x: 5, y: 0 }, [{ x: 0, y: 0 }], 3),
   ],
-  orbs: [],
+  orbs: (['LEFT', 'RIGHT'] as const).map((owner, x) => ({
+    id: `orb-${owner}`,
+    owner,
+    position: { x, y: 3 },
+    footprint: [{ x: 0, y: 0 }],
+    health: 75,
+    maxHealth: 75,
+    defense: 0,
+  })),
   walls: [],
   currentPlayer: 'LEFT',
 };

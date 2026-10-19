@@ -61,8 +61,7 @@ battle rules.
 
 Status:
 
-- M1–M7 — done
-- M8 — Victory — planned
+- M1–M8 — done
 - M9 — Refactoring — planned
 
 ### M1 — Demo Battle API
@@ -538,14 +537,53 @@ The concrete M7 rules and acceptance criteria are defined in
 
 ### M8 — Victory
 
-Implement:
+M8 ends the battle when a player's orb is destroyed. The frontend
+`BattleEngine` remains authoritative for the current prototype; the backend
+still provides only the initial battle state, and the API is unchanged.
 
-- victory detection,
-- defeat state,
-- victory screen,
-- attacked/dead unit handling.
+M8 includes:
 
-The primary victory condition is destruction of the opponent's orb.
+- an explicit, required `BattleState.result`: `IN_PROGRESS`, or `FINISHED`
+  with a `VICTORY` outcome and its winner; `DRAW` is representable but no
+  action produces it;
+- victory in the same immutable transition as the attack that brings the
+  opponent's orb to 0 HP; the destroyed orb stays in the state;
+- every gameplay action, `END_TURN` included, rejected with
+  `BATTLE_FINISHED` once the battle has finished, and no legal actions or
+  targets offered;
+- a new battle accepted only with exactly one living orb per side;
+- a finished-battle screen that names the winner from the domain result and
+  keeps the final board, and a NEW BATTLE restart without a page reload.
+
+The concrete M8 rules and acceptance criteria are defined in
+[`M8_DESIGN_CONTRACT.md`](./M8_DESIGN_CONTRACT.md).
+
+#### M8 steps
+
+- **M8.1 — Domain result and victory resolution** (done). `BattleResult` in
+  the domain state, victory resolved inside `BattleEngine.attack`, and
+  `BATTLE_FINISHED` checked first by `execute`, `attack` and `endTurn`.
+  `endTurn` now returns a `Result`, so a rejected end of turn is explicit
+  rather than a no-op. `validateNewBattle` checks the orb invariant and is
+  applied by the mapper, the initialization boundary.
+- **M8.2 — Store integration** (done). The store derives `battleFinished`
+  and `winner` from the domain result only, records a rejected end of turn
+  as the last outcome, and hides movement and attack-range hints in a
+  finished battle, where the inspection queries still answer.
+- **M8.3 — Finished-state UI and restart** (done). `Bitwa zakończona —
+  zwycięzca: {LEFT|RIGHT}`, without a local-player Victory/Defeat
+  perspective; END TURN and the mode controls disabled while units stay
+  inspectable. NEW BATTLE resets the UI state and reloads the existing demo
+  battle resource: no new endpoint or second fixture, loading until the
+  fresh state arrives, and a failed reload shows the error with NEW BATTLE
+  to retry.
+- **M8.4 — Verification and close-out** (done). Verified the
+  implementation against the contract; no discrepancies. Added
+  `e2e/victory.spec.ts`: LEFT victory with the final board kept, gameplay
+  controls unusable, and NEW BATTLE restarting in place; RIGHT victory; and
+  a failed restart that can be retried. Frontend unit tests, lint, format
+  check, production build and the full Playwright suite pass. Backend tests
+  were not run, as M8 changes no backend code or API.
 
 ### M9 — Refactoring
 

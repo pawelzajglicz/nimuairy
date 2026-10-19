@@ -30,6 +30,11 @@
   padding: calc(0.4rem - 1px) calc(1rem - 1px);
 }
 
+.mode-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .mode-button:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;

@@ -22,6 +22,7 @@ function buildBattleState(overrides: Partial<BattleState> = {}): BattleState {
     walls: [],
     currentPlayer: 'LEFT',
     activeUnitId: undefined,
+    result: { status: 'IN_PROGRESS' },
     ...overrides,
   };
 }

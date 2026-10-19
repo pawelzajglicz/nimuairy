@@ -1,38 +1,70 @@
-@if (store.loading()) {
-  <p>Loading battle…</p>
-} @else if (store.error()) {
-  <p>Failed to load the demo battle.</p>
-} @else if (store.battleState(); as battleState) {
-  <div class="battle-layout">
-    <div class="turn-bar">
-      <!-- A live region, so screen readers announce the new turn. -->
-      <p class="current-player" aria-live="polite">
-        Turn: <strong>{{ battleState.currentPlayer }}</strong>
-      </p>
-      <app-interaction-mode-controls
-        [mode]="store.interactionMode()"
-        (modeChange)="store.setInteractionMode($event)"
+<!-- Rendered in every state, so screen readers announce its changes and
+     NEW BATTLE can keep focus here while the battle below is replaced. -->
+<p #loadStatus class="load-status" aria-live="polite" tabindex="-1">
+  @if (store.loading()) {
+    Loading battle…
+  } @else if (store.error()) {
+    Failed to load the demo battle.
+  }
+</p>
+@if (!store.loading()) {
+  @if (store.error()) {
+    <button type="button" class="new-battle-button" (click)="startNewBattle()">
+      NEW BATTLE
+    </button>
+  } @else if (store.battleState(); as battleState) {
+    <div class="battle-layout">
+      <div class="turn-bar">
+        <!-- A live region, so screen readers announce the new turn and the result. -->
+        <p class="current-player" aria-live="polite">
+          @if (store.winner(); as winner) {
+            <strong class="battle-result"
+              >Bitwa zakończona — zwycięzca: {{ winner }}</strong
+            >
+          } @else {
+            Turn: <strong>{{ battleState.currentPlayer }}</strong>
+          }
+        </p>
+        <app-interaction-mode-controls
+          [mode]="store.interactionMode()"
+          [disabled]="store.battleFinished()"
+          (modeChange)="store.setInteractionMode($event)"
+        />
+        <div class="turn-actions">
+          <button
+            type="button"
+            class="end-turn-button"
+            [disabled]="store.battleFinished()"
+            (click)="store.endTurn()"
+          >
+            END TURN
+          </button>
+          <button
+            type="button"
+            class="new-battle-button"
+            (click)="startNewBattle()"
+          >
+            NEW BATTLE
+          </button>
+        </div>
+      </div>
+      <app-movement-info
+        [unit]="store.selectedUnit()"
+        [preview]="store.movementPreview()"
+        [lastOutcome]="store.lastOutcome()"
       />
-      <button type="button" class="end-turn-button" (click)="store.endTurn()">
-        END TURN
-      </button>
+      <app-battle-board
+        [battleState]="battleState"
+        [selectedUnitId]="store.selectedUnitId()"
+        [interactionMode]="store.interactionMode()"
+        [reachableDestinations]="store.reachableDestinations()"
+        [movementPreview]="store.movementPreview()"
+        [attackTargets]="store.attackTargets()"
+        [attackedTarget]="store.attackedTarget()"
+        [attackRange]="store.attackRange()"
+        (interaction)="onBoardInteraction($event)"
+        (destinationHover)="store.hoverDestination($event)"
+      />
     </div>
-    <app-movement-info
-      [unit]="store.selectedUnit()"
-      [preview]="store.movementPreview()"
-      [lastOutcome]="store.lastOutcome()"
-    />
-    <app-battle-board
-      [battleState]="battleState"
-      [selectedUnitId]="store.selectedUnitId()"
-      [interactionMode]="store.interactionMode()"
-      [reachableDestinations]="store.reachableDestinations()"
-      [movementPreview]="store.movementPreview()"
-      [attackTargets]="store.attackTargets()"
-      [attackedTarget]="store.attackedTarget()"
-      [attackRange]="store.attackRange()"
-      (interaction)="onBoardInteraction($event)"
-      (destinationHover)="store.hoverDestination($event)"
-    />
-  </div>
+  }
 }

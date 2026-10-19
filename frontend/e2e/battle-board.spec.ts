@@ -42,6 +42,15 @@ const battleState: BattleStateResponse = {
       maxHealth: 75,
       defense: 0,
     },
+    {
+      id: 'orb-2',
+      owner: 'LEFT',
+      position: { x: 0, y: 2 },
+      footprint: [{ x: 0, y: 0 }],
+      health: 75,
+      maxHealth: 75,
+      defense: 0,
+    },
   ],
   walls: [
     {
@@ -74,8 +83,8 @@ test('battle board renders terrain cells and entity footprints from the API stat
   await expect(grid).toBeVisible();
   await expect(grid.locator('.cell')).toHaveCount(5 * 3);
 
-  // 1 unit cell + 1 orb cell + 3 wall cells (footprint expansion)
-  await expect(page.locator('.entity-cell')).toHaveCount(5);
+  // 1 unit cell + 2 orb cells + 3 wall cells (footprint expansion)
+  await expect(page.locator('.entity-cell')).toHaveCount(6);
   await expect(page.locator('.entity-cell[data-kind="wall"]')).toHaveCount(3);
 });
 
@@ -101,7 +110,16 @@ test('entity cells stay aligned with terrain cells when an HP label is wider tha
       ).flat(),
     },
     units: [],
-    orbs: [],
+    // A new battle needs one living orb per side.
+    orbs: (['LEFT', 'RIGHT'] as const).map((owner, index) => ({
+      id: `orb-${owner}`,
+      owner,
+      position: { x: index * (width - 1), y: 5 },
+      footprint: [{ x: 0, y: 0 }],
+      health: 75,
+      maxHealth: 75,
+      defense: 0,
+    })),
     walls: [
       {
         id: 'wall-left',
@@ -119,7 +137,11 @@ test('entity cells stay aligned with terrain cells when an HP label is wider tha
     route.fulfill({ json: demoSized }),
   );
   await page.goto('/battle/demo');
-  await expect(page.locator('.health-label-value')).toHaveText(['1000/1000']);
+  await expect(page.locator('.health-label-value')).toHaveText([
+    '1000/1000',
+    '75/75',
+    '75/75',
+  ]);
 
   // Terrain is listed x-major (index = x * height + y); the wall's cells
   // render in footprint order, so its first cell is (1,0) and its last (2,10).

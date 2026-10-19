@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BattleState, Position, Unit } from './battle-state';
+import type { BattleResult, BattleState, Position, Unit } from './battle-state';
 import { BattleEngine } from './battle-engine';
 import type {
   AttackCommand,
@@ -65,6 +65,16 @@ function expectRejected(
 
   expect(engine.execute(state, command)).toEqual({ ok: false, error });
   expect(state).toEqual(before);
+}
+
+function expectTurnEnded(state: BattleState): BattleState {
+  const result = engine.endTurn(state);
+  if (!result.ok) {
+    throw new Error(
+      `expected the turn to end, got ${JSON.stringify(result.error)}`,
+    );
+  }
+  return result.value;
 }
 
 function unitIn(state: BattleState, id = 'left-1x1'): Unit | undefined {
@@ -1075,17 +1085,17 @@ describe('BattleEngine endTurn', () => {
   }
 
   it('passes the turn from LEFT to RIGHT', () => {
-    expect(engine.endTurn(turnState()).currentPlayer).toBe('RIGHT');
+    expect(expectTurnEnded(turnState()).currentPlayer).toBe('RIGHT');
   });
 
   it('passes the turn from RIGHT to LEFT', () => {
     const state = turnState({ currentPlayer: 'RIGHT' });
 
-    expect(engine.endTurn(state).currentPlayer).toBe('LEFT');
+    expect(expectTurnEnded(state).currentPlayer).toBe('LEFT');
   });
 
   it('ends a turn before any unit has acted', () => {
-    const next = engine.endTurn(turnState());
+    const next = expectTurnEnded(turnState());
 
     expect(next.currentPlayer).toBe('RIGHT');
     expect(next.activeUnitId).toBeUndefined();
@@ -1097,7 +1107,7 @@ describe('BattleEngine endTurn', () => {
       moveCommand([{ x: 3, y: 2 }]),
     );
 
-    const next = engine.endTurn(claimed);
+    const next = expectTurnEnded(claimed);
 
     expect(next.currentPlayer).toBe('RIGHT');
     expect(next.activeUnitId).toBeUndefined();
@@ -1109,7 +1119,7 @@ describe('BattleEngine endTurn', () => {
       moveCommand([{ x: 3, y: 2 }]),
     );
 
-    const next = engine.endTurn(claimed);
+    const next = expectTurnEnded(claimed);
 
     expect(unitIn(next)?.remainingActionPoints).toBe(4);
   });
@@ -1120,7 +1130,7 @@ describe('BattleEngine endTurn', () => {
       activeUnitId: 'left-1x1',
     });
 
-    const next = engine.endTurn(claimed);
+    const next = expectTurnEnded(claimed);
 
     expect(next.currentPlayer).toBe('RIGHT');
     expect(unitIn(next)?.remainingActionPoints).toBe(0);
@@ -1128,7 +1138,7 @@ describe('BattleEngine endTurn', () => {
 
   describe('turn-start AP restoration', () => {
     it('restores every RIGHT unit when the turn passes to RIGHT', () => {
-      expect(actionPointsOf(engine.endTurn(turnState()))).toEqual({
+      expect(actionPointsOf(expectTurnEnded(turnState()))).toEqual({
         'left-1x1': 5,
         'left-spent': 2,
         'right-1x1': 5,
@@ -1149,7 +1159,7 @@ describe('BattleEngine endTurn', () => {
         activeUnitId: 'right-1x1',
       });
 
-      expect(actionPointsOf(engine.endTurn(state))).toEqual({
+      expect(actionPointsOf(expectTurnEnded(state))).toEqual({
         'left-1x1': 5,
         'left-spent': 5,
         'right-1x1': 1,
@@ -1162,14 +1172,14 @@ describe('BattleEngine endTurn', () => {
         turnState(),
         moveCommand([{ x: 3, y: 2 }]),
       );
-      const rightTurn = engine.endTurn(leftClaimed);
+      const rightTurn = expectTurnEnded(leftClaimed);
       expect(unitIn(rightTurn)?.remainingActionPoints).toBe(4);
 
       const { state: rightClaimed } = expectMoved(
         rightTurn,
         moveCommand([{ x: 6, y: 5 }], { unitId: 'right-1x1' }),
       );
-      const leftTurn = engine.endTurn(rightClaimed);
+      const leftTurn = expectTurnEnded(rightClaimed);
 
       expect(leftTurn.currentPlayer).toBe('LEFT');
       expect(leftTurn.activeUnitId).toBeUndefined();
@@ -1183,7 +1193,7 @@ describe('BattleEngine endTurn', () => {
     });
 
     it('changes nothing but the restored AP', () => {
-      const next = engine.endTurn(turnState());
+      const next = expectTurnEnded(turnState());
 
       expect(unitIn(next, 'right-1x1')).toEqual({
         ...right,
@@ -1200,7 +1210,7 @@ describe('BattleEngine endTurn', () => {
     const state = turnState({ activeUnitId: 'left-1x1' });
     const before = structuredClone(state);
 
-    const next = engine.endTurn(state);
+    const next = expectTurnEnded(state);
 
     expect(next).not.toBe(state);
     expect(state).toEqual(before);
@@ -1214,7 +1224,7 @@ describe('BattleEngine endTurn', () => {
   it('creates new objects only for the units whose AP are restored', () => {
     const state = turnState();
 
-    const next = engine.endTurn(state);
+    const next = expectTurnEnded(state);
 
     expect(next.units).not.toBe(state.units);
     expect(unitIn(next, 'right-1x1')).not.toBe(right);
@@ -1232,7 +1242,7 @@ describe('BattleEngine endTurn', () => {
       moveCommand([{ x: 3, y: 2 }]),
     );
 
-    const next = engine.endTurn(claimed);
+    const next = expectTurnEnded(claimed);
 
     expect(engine.legalUnitActions(next, 'right-1x1')).toEqual(
       new Set(['MOVE']),
@@ -2308,5 +2318,257 @@ describe('BattleEngine ATTACK', () => {
         }
       },
     );
+  });
+});
+
+describe('BattleEngine battle result', () => {
+  const RIGHT_ORB: AttackTarget = { kind: 'ORB', id: 'right-orb' };
+  const LEFT_ORB: AttackTarget = { kind: 'ORB', id: 'left-orb' };
+  const ENEMY: AttackTarget = { kind: 'UNIT', id: 'right-1x1' };
+  const IN_PROGRESS: BattleResult = { status: 'IN_PROGRESS' };
+  const BATTLE_FINISHED = { ok: false, error: { type: 'BATTLE_FINISHED' } };
+
+  /** Attack 4, 5 AP, attack cost 2; next to the RIGHT orb at (5,2). */
+  const attacker = testUnit({ position: { x: 4, y: 2 } });
+  const enemy = testUnit({
+    id: 'right-1x1',
+    owner: 'RIGHT',
+    position: { x: 4, y: 3 },
+  });
+  const leftOrb = testOrb({
+    id: 'left-orb',
+    owner: 'LEFT',
+    position: { x: 0, y: 7 },
+  });
+  /** One attack by `attacker` destroys it. */
+  const rightOrb = testOrb({ health: 3, defense: 0 });
+
+  function battle(options: TestStateOptions = {}): BattleState {
+    return testState({
+      units: [attacker, enemy],
+      orbs: [leftOrb, rightOrb],
+      ...options,
+    });
+  }
+
+  function attackCommand(
+    target: AttackTarget,
+    unitId = 'left-1x1',
+  ): AttackCommand {
+    return { type: 'ATTACK', unitId, target };
+  }
+
+  function expectAttacked(
+    state: BattleState,
+    command: AttackCommand,
+  ): AttackResult {
+    const result = engine.attack(state, command);
+    if (!result.ok) {
+      throw new Error(
+        `expected a successful attack, got ${JSON.stringify(result.error)}`,
+      );
+    }
+    return result.value;
+  }
+
+  describe('victory', () => {
+    it.each([
+      ['exactly', 4],
+      ['with overkill damage', 3],
+    ])(
+      'finishes the battle for LEFT when a LEFT unit destroys the RIGHT orb %s, together with the damage, the AP charge and the turn claim',
+      (_, health) => {
+        const orb = { ...rightOrb, health };
+        const state = battle({ orbs: [leftOrb, orb] });
+        const before = structuredClone(state);
+
+        const result = expectAttacked(state, attackCommand(RIGHT_ORB));
+
+        expect(result).toMatchObject({
+          damage: 4,
+          remainingHealth: 0,
+          cost: 2,
+        });
+        expect(state).toEqual(before);
+        expect(result.state).toEqual({
+          ...state,
+          units: [{ ...attacker, remainingActionPoints: 3 }, enemy],
+          orbs: [leftOrb, { ...orb, health: 0 }],
+          activeUnitId: 'left-1x1',
+          result: {
+            status: 'FINISHED',
+            outcome: { type: 'VICTORY', winner: 'LEFT' },
+          },
+        });
+      },
+    );
+
+    it('finishes the battle for RIGHT when a RIGHT unit destroys the LEFT orb', () => {
+      const rightAttacker = testUnit({
+        id: 'right-attacker',
+        owner: 'RIGHT',
+        position: { x: 1, y: 7 },
+      });
+      const weakLeftOrb = { ...leftOrb, health: 2 };
+      const state = battle({
+        units: [attacker, rightAttacker],
+        orbs: [weakLeftOrb, rightOrb],
+        currentPlayer: 'RIGHT',
+      });
+
+      const { state: next } = expectAttacked(
+        state,
+        attackCommand(LEFT_ORB, 'right-attacker'),
+      );
+
+      expect(next.result).toEqual({
+        status: 'FINISHED',
+        outcome: { type: 'VICTORY', winner: 'RIGHT' },
+      });
+      expect(next.orbs).toEqual([{ ...weakLeftOrb, health: 0 }, rightOrb]);
+      expect(next.activeUnitId).toBe('right-attacker');
+      expect(unitIn(next, 'right-attacker')?.remainingActionPoints).toBe(3);
+    });
+
+    it('keeps the battle in progress when the orb survives the attack', () => {
+      const state = battle({ orbs: [leftOrb, { ...rightOrb, health: 5 }] });
+
+      const result = expectAttacked(state, attackCommand(RIGHT_ORB));
+
+      expect(result.remainingHealth).toBe(1);
+      expect(result.state.result).toEqual(IN_PROGRESS);
+    });
+
+    it('keeps the battle in progress when an enemy unit is destroyed', () => {
+      const state = battle({ units: [attacker, { ...enemy, health: 1 }] });
+
+      const result = expectAttacked(state, attackCommand(ENEMY));
+
+      expect(unitIn(result.state, 'right-1x1')).toBeUndefined();
+      expect(result.state.result).toEqual(IN_PROGRESS);
+    });
+
+    it('keeps the battle in progress when an enemy wall is destroyed', () => {
+      const state = battle({
+        walls: [
+          testWall({
+            position: { x: 3, y: 2 },
+            footprint: FOOTPRINTS['1x1'],
+            health: 1,
+          }),
+        ],
+      });
+
+      const result = expectAttacked(
+        state,
+        attackCommand({ kind: 'WALL', id: 'right-wall' }),
+      );
+
+      expect(result.state.walls).toEqual([]);
+      expect(result.state.result).toEqual(IN_PROGRESS);
+    });
+
+    it('leaves the input, including its result, untouched when an attack on the orb is rejected', () => {
+      const state = battle({
+        units: [{ ...attacker, remainingActionPoints: 1 }, enemy],
+      });
+      const before = structuredClone(state);
+
+      expect(engine.attack(state, attackCommand(RIGHT_ORB))).toEqual({
+        ok: false,
+        error: {
+          type: 'INSUFFICIENT_ACTION_POINTS',
+          required: 2,
+          available: 1,
+        },
+      });
+      expect(state).toEqual(before);
+      expect(state.result).toEqual(IN_PROGRESS);
+    });
+  });
+
+  describe('after the battle has finished', () => {
+    /**
+     * The state the victory transition actually produces: LEFT has destroyed
+     * the RIGHT orb, and its attacker still has 3 AP, next to an enemy unit.
+     */
+    function finishedBattle(): BattleState {
+      return expectAttacked(battle(), attackCommand(RIGHT_ORB)).state;
+    }
+
+    const move = moveCommand([{ x: 4, y: 1 }]);
+
+    it('would otherwise still allow the actions rejected below', () => {
+      const unfinished = { ...finishedBattle(), result: IN_PROGRESS };
+
+      expect(engine.execute(unfinished, move).ok).toBe(true);
+      expect(engine.attack(unfinished, attackCommand(ENEMY)).ok).toBe(true);
+      expect(engine.endTurn(unfinished).ok).toBe(true);
+    });
+
+    it('rejects a move without changing the state', () => {
+      const state = finishedBattle();
+      const before = structuredClone(state);
+
+      expect(engine.execute(state, move)).toEqual(BATTLE_FINISHED);
+      expect(state).toEqual(before);
+    });
+
+    it('rejects an attack without changing the state', () => {
+      const state = finishedBattle();
+      const before = structuredClone(state);
+
+      expect(engine.attack(state, attackCommand(ENEMY))).toEqual(
+        BATTLE_FINISHED,
+      );
+      expect(state).toEqual(before);
+    });
+
+    it('rejects END_TURN explicitly, without changing the state', () => {
+      const state = finishedBattle();
+      const before = structuredClone(state);
+
+      expect(engine.endTurn(state)).toEqual(BATTLE_FINISHED);
+      expect(state).toEqual(before);
+    });
+
+    it('reports BATTLE_FINISHED before any other rejection', () => {
+      const state = finishedBattle();
+
+      expect(
+        engine.execute(state, moveCommand([{ x: 4, y: 1 }], { unitId: 'x' })),
+      ).toEqual(BATTLE_FINISHED);
+      expect(engine.attack(state, attackCommand(ENEMY, 'right-1x1'))).toEqual(
+        BATTLE_FINISHED,
+      );
+    });
+
+    it('offers no actions, unit actions or attack targets', () => {
+      const state = finishedBattle();
+
+      expect(engine.legalActions(state)).toEqual(new Set());
+      for (const { id } of state.units) {
+        expect(engine.legalUnitActions(state, id), id).toEqual(new Set());
+        expect(engine.legalAttackTargets(state, id), id).toEqual([]);
+      }
+    });
+
+    it('still answers the inspection queries', () => {
+      const state = finishedBattle();
+
+      expect(engine.reachability(state, 'left-1x1').ok).toBe(true);
+      expect(engine.attackRange(state, 'left-1x1')).not.toEqual([]);
+    });
+
+    it('treats a draw, which no action produces yet, like any finished battle', () => {
+      const draw: BattleResult = {
+        status: 'FINISHED',
+        outcome: { type: 'DRAW' },
+      };
+      const state = battle({ result: draw });
+
+      expect(engine.endTurn(state)).toEqual(BATTLE_FINISHED);
+      expect(engine.legalActions(state)).toEqual(new Set());
+    });
   });
 });

@@ -12,7 +12,7 @@ import { getDemoBattleResource } from '../api/generated/nimuairy-api';
 import type { LastActionOutcome } from './action-outcome';
 import { toBattleState } from './battle-state.mapper';
 import { BattleEngine } from './domain/battle-engine';
-import type { BattleState, Position } from './domain/battle-state';
+import type { BattleState, PlayerSide, Position } from './domain/battle-state';
 import type { AttackTarget } from './domain/combat';
 import type { ReachableCell } from './domain/movement';
 import { InteractionMode } from './interaction-mode';
@@ -23,8 +23,9 @@ interface BattleUiState {
   interactionMode: InteractionMode;
   hoveredDestination: Position | undefined;
   /**
-   * One global slot: replaced only by the next move or attack attempt, and
-   * kept across selection and mode changes and the end of a turn.
+   * One global slot: replaced only by the next move or attack attempt or a
+   * rejected end of turn, and kept across selection and mode changes and a
+   * successful end of turn.
    */
   lastOutcome: LastActionOutcome | undefined;
 }
@@ -87,22 +88,40 @@ export const BattleStore = signalStore(
         return _engine.reachability(state, unitId);
       });
 
+      const battleFinished = computed(
+        () => battleState()?.result.status === 'FINISHED',
+      );
+      // Inspection queries keep answering in a finished battle, so the hints
+      // built on them are hidden here: they would offer moves the engine
+      // rejects. The engine still decides any action that reaches it.
+      const _movementHint = computed(() =>
+        battleFinished() ? undefined : _movementRange(),
+      );
+
       return {
         loading: computed(() => _demoBattleResource.isLoading()),
         error: computed(() => _demoBattleResource.error()),
+        battleFinished,
+        winner: computed((): PlayerSide | undefined => {
+          const result = battleState()?.result;
+          return result?.status === 'FINISHED' &&
+            result.outcome.type === 'VICTORY'
+            ? result.outcome.winner
+            : undefined;
+        }),
         selectedUnit: computed(() =>
           battleState()?.units.find(({ id }) => id === selectedUnitId()),
         ),
         _movementRange,
         /** Where the selected unit can move; its own anchor is not a destination. */
         reachableDestinations: computed(() => {
-          const range = _movementRange();
+          const range = _movementHint();
           return range?.ok
             ? [...range.value.cells.values()].filter(({ via }) => via !== null)
             : NO_DESTINATIONS;
         }),
         movementPreview: computed(() => {
-          const range = _movementRange();
+          const range = _movementHint();
           const hovered = hoveredDestination();
           return range?.ok && hovered
             ? toMovementPreview(range.value, hovered)
@@ -127,8 +146,9 @@ export const BattleStore = signalStore(
         }),
         /**
          * The selected unit's melee reach, straight from the engine and only
-         * in ATTACK mode. Shown for any unit, like movement range; it does
-         * not say what may be attacked, attackTargets does.
+         * in ATTACK mode of a battle in progress. Shown for any unit, like
+         * movement range; it does not say what may be attacked, attackTargets
+         * does.
          */
         attackRange: computed(() => {
           const state = battleState();
@@ -136,7 +156,8 @@ export const BattleStore = signalStore(
           if (
             !state ||
             unitId === undefined ||
-            interactionMode() !== InteractionMode.ATTACK
+            interactionMode() !== InteractionMode.ATTACK ||
+            battleFinished()
           ) {
             return NO_CELLS;
           }
@@ -259,14 +280,35 @@ export const BattleStore = signalStore(
       if (!state) {
         return;
       }
+      const result = store._engine.endTurn(state);
+      if (!result.ok) {
+        patchState(store, {
+          lastOutcome: {
+            kind: 'REJECTED',
+            action: 'END_TURN',
+            error: result.error,
+          },
+        });
+        return;
+      }
       // Selection and hover belong to the turn that just ended, whichever
       // player owns the selected unit, so the new turn starts with nothing
       // selected.
       patchState(store, {
-        battleState: store._engine.endTurn(state),
+        battleState: result.value,
         selectedUnitId: undefined,
         hoveredDestination: undefined,
       });
+    },
+    /**
+     * Starts a fresh demo battle by reloading the same request. Until the new
+     * response arrives the resource keeps its old value, so battleState is
+     * re-seeded only on success; a failed reload leaves no battle and sets
+     * error. The UI state belongs to the old battle either way.
+     */
+    restart(): void {
+      patchState(store, initialUiState);
+      store._demoBattleResource.reload();
     },
   })),
 );

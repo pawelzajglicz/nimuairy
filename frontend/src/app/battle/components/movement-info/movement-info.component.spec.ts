@@ -192,6 +192,14 @@ describe('MovementInfoComponent', () => {
         expected:
           'Attack rejected: INSUFFICIENT_ACTION_POINTS (needs 2 AP, has 1 AP)',
       },
+      {
+        outcome: {
+          kind: 'REJECTED',
+          action: 'END_TURN',
+          error: { type: 'BATTLE_FINISHED' },
+        },
+        expected: 'End turn rejected: BATTLE_FINISHED',
+      },
     ])('describes a rejection: $expected', ({ outcome, expected }) => {
       expect(text(render({ lastOutcome: outcome }), '.last-outcome')).toBe(
         expected,

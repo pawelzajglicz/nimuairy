@@ -31,6 +31,7 @@ const state: BattleState = {
   units: [unit],
   currentPlayer: 'LEFT',
   activeUnitId: undefined,
+  result: { status: 'IN_PROGRESS' },
 };
 
 describe('MoveUnitCommand', () => {
