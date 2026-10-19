@@ -199,7 +199,7 @@ A wall:
 
 - occupies one or more cells,
 - has a footprint,
-- has current HP (`health`) and maximum HP (`maxHealth`), and may have other properties in the future,
+- has current HP (`health`), maximum HP (`maxHealth`) and defense, and may have other properties in the future,
 - can contain slots for units,
 - can be interacted with by movement and combat rules.
 

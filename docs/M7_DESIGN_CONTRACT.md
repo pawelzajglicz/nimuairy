@@ -134,8 +134,8 @@ Add `defense` to the wall and orb models and DTOs: the initial demo walls use 10
 The current model was inspected before implementation. The required changes are now explicit:
 
 - Add `defense` to the backend `Wall` and `Orb` records, their `WallDto`/`OrbDto`, the frontend domain models, and mapper.
-- Initialize demo walls with **1000 HP / 100 defense** (the current demo has 1500 HP and no defense field).
-- Initialize demo orbs with **0 defense** (the current model has no orb defense field).
+- Initialize demo walls with **1000 HP / 100 defense** (the pre-M7 demo had 1500 HP and no defense field).
+- Initialize demo orbs with **0 defense** (the pre-M7 model had no orb defense field).
 - Update the committed OpenAPI snapshot and regenerate the Orval client; do not edit generated files by hand.
 - Extend backend service/controller tests, mapper/fixtures and domain tests to assert the new statistics and destruction rules.
 - Keep units, walls, orbs as separate domain types; do not introduce a generic target hierarchy unless implementation demonstrates a concrete need.
@@ -146,25 +146,25 @@ No database or persistence change is needed. Damage calculation remains one form
 
 **Exit criteria met:** target statistics, target destruction behavior, state model implications and API/code-generation touchpoints are unambiguous.
 
-### M7.2 — Combat domain and engine
+### M7.2 — Combat domain and engine (completed)
 Add attack command/action, validation, range/footprint checks, damage calculation, AP consumption, destruction behavior, domain errors and result. Add focused unit tests.
 
-**Exit criteria:** deterministic tests cover successful attacks, 0 damage, insufficient AP, invalid targets, out-of-range targets, footprint adjacency, destruction, atomicity and immutability.
+**Exit criteria met:** deterministic tests cover successful attacks, 0 damage, insufficient AP, invalid targets, out-of-range targets, footprint adjacency, destruction, atomicity and immutability.
 
-### M7.3 — Legal actions and target query
+### M7.3 — Legal actions and target query (completed)
 Integrate ATTACK into legal actions and expose valid attack targets using the same rules as execution.
 
-**Exit criteria:** every target offered by the domain can be attacked successfully from the same state, and illegal targets are never offered.
+**Exit criteria met:** every target offered by the domain can be attacked successfully from the same state, and illegal targets are never offered.
 
-### M7.4 — UI integration
+### M7.4 — UI integration (completed)
 Add attack mode and target interaction, wire the store, display AP/HP/outcome, highlight the target, and render destroyed units/walls and the destroyed orb correctly. The agreed follow-up scope before M7.5 also includes moving attack cost into the unit model/API, visualizing footprint-aware melee-range cells in ATTACK mode through a domain query, adding `maxHealth` to the unit, wall, and orb models/API, and displaying `health/maxHealth` beside each unit, wall, and orb.
 
-**Exit criteria:** UI consumes domain decisions and does not duplicate combat rules; attack-range geometry comes from the domain; per-unit attack cost and maximum HP are carried consistently through the model/API/client; HP labels use domain data.
+**Exit criteria met:** UI consumes domain decisions and does not duplicate combat rules; attack-range geometry comes from the domain; per-unit attack cost and maximum HP are carried consistently through the model/API/client; HP labels use domain data.
 
-### M7.5 — Verification and close-out
+### M7.5 — Verification and close-out (completed)
 Run relevant frontend unit/component tests, backend tests if DTOs change, build/lint and Playwright regression tests. Update `BATTLE_PLAN.md` with completed steps and final scope.
 
-**Exit criteria:** all acceptance criteria pass, movement/turn regressions are absent, and documentation matches the implementation.
+**Exit criteria met:** all acceptance criteria pass, movement/turn regressions are absent, and documentation matches the implementation. The frontend mapper now also enforces `0 <= health <= maxHealth` for units, walls, and orbs, matching the backend records.
 
 ## 10. Acceptance criteria
 
