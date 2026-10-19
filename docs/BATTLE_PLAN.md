@@ -61,8 +61,7 @@ battle rules.
 
 Status:
 
-- M1–M6 — done
-- **M7 — Combat / Attacks — next**
+- M1–M7 — done
 - M8 — Victory — planned
 - M9 — Refactoring — planned
 
@@ -464,26 +463,78 @@ in [`M6_DESIGN_CONTRACT.md`](./M6_DESIGN_CONTRACT.md).
 
 ### M7 — Combat / Attacks
 
-Combat uses the AP system from M6: an attack spends the attacking unit's
-`remainingActionPoints`. The AP cost of attacks is defined in M7.
+M7 adds melee attacks using the Action Point system from M6. The frontend
+`BattleEngine` remains authoritative for the current prototype; the backend
+continues to provide the initial battle state.
 
-Implement:
+M7 includes:
 
-- selecting an enemy target,
-- attack validation,
-- damage calculation,
-- HP changes,
-- attacked-unit highlighting,
-- unit death.
+- attack validation and execution against enemy units, walls, and orbs;
+- footprint-aware orthogonal melee range (diagonal-only contact is not enough);
+- damage, HP updates, AP charging, and target destruction;
+- legal-action and legal-target queries shared with execution;
+- ATTACK-mode target interaction, result feedback, and attacked-target
+  highlighting;
+- visualizing the selected unit's melee-range cells in ATTACK mode, using
+  positions computed by the domain;
+- displaying the current/max HP (`health/maxHealth`, for example `350/500`)
+  of each unit, wall, and orb beside its board representation.
 
-Combat targets are not limited to units. An orb is a valid combat target.
+The damage formula is:
 
-Destroying the opponent's orb immediately ends the battle and determines the
-winner, regardless of the number or state of the remaining units.
+    damage = max(0, attacker.attack - target.defense)
 
-Initial damage formula:
+The attack AP cost is a unit statistic, `attackActionPointCost`. It is
+**2 AP for every unit in the initial MVP**, but the engine reads the value
+from the attacking unit rather than using a global constant. Units, walls,
+and orbs represent maximum HP separately from current HP by `maxHealth`, with
+the shared invariant `maxHealth > 0` and `0 <= health <= maxHealth`.
 
-    damage = max(0, attacker.attack - defender.defense)
+The new statistics require an end-to-end model/API update: backend `Unit`,
+`Wall`, `Orb` and their DTOs, OpenAPI snapshot, regenerated Orval client,
+frontend domain types, mapper, fixtures, and relevant tests. The demo units
+use `attackActionPointCost = 2`, and the demo state starts at full HP
+(`maxHealth = health`): units 500, walls 1000, orbs 75.
+
+Destroying the opponent's orb remains the primary victory condition, but M7
+does not resolve victory. A destroyed orb stays in the domain state at 0 HP;
+M8 implements battle completion, winner determination, and victory UI.
+
+The concrete M7 rules and acceptance criteria are defined in
+[`M7_DESIGN_CONTRACT.md`](./M7_DESIGN_CONTRACT.md).
+
+#### M7 steps
+
+- **M7.1 — Rules and model analysis** (done). Finalized the contract: wall and
+  orb `defense`, demo walls at 1000 HP / 100 defense, demo orbs at 0 defense,
+  units and walls removed at 0 HP, orbs kept at 0 HP for M8.
+- **M7.2 — Combat domain and engine** (done). `BattleEngine.attack` validates
+  the turn, target, ownership, footprint-aware range and AP through one
+  `validateAttack` rule, and applies the AP charge, damage, turn claim and
+  destruction in one immutable transition. Attack errors are explicit
+  (`UNIT_CANNOT_ATTACK`, `TARGET_NOT_FOUND`, `INVALID_TARGET`,
+  `TARGET_OUT_OF_RANGE`, `INSUFFICIENT_ACTION_POINTS`). Unchanged objects
+  are structurally shared, never mutated.
+- **M7.3 — Legal actions and target query** (done). `legalAttackTargets` and
+  `ATTACK` in the legal actions run the same `validateAttack` as execution, so
+  every offered target is accepted from the same state; a unit that may not
+  act is offered no targets.
+- **M7.4 — UI integration** (done). ATTACK mode with target interaction,
+  attack outcome and attacked-target highlight, destroyed walls removed and
+  a destroyed orb drawn greyed out and rotated. Follow-ups agreed before M7.5
+  and delivered in M7.4:
+  - `attackActionPointCost` as a unit statistic through model, API and
+    client;
+  - footprint-aware melee-range cells in ATTACK mode from
+    `BattleEngine.attackRange`, an inspection query kept separate from
+    `legalAttackTargets`;
+  - `maxHealth` for units, walls and orbs through model, API and client, and
+    one `health/maxHealth` label per unit, wall and orb.
+- **M7.5 — Verification and close-out** (done). Verified the acceptance
+  criteria against code and tests, triaged the automated PR review (no
+  domain-rule changes), and closed two gaps: the frontend mapper now enforces
+  `0 <= health <= maxHealth`, and an immutability test covers every target
+  kind, damaged and destroyed.
 
 ### M8 — Victory
 

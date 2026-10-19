@@ -356,6 +356,14 @@
           "health" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "maxHealth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "defense" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -416,6 +424,10 @@
             "type" : "integer",
             "format" : "int32"
           },
+          "maxHealth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
           "attack" : {
             "type" : "integer",
             "format" : "int32"
@@ -429,6 +441,10 @@
             "format" : "int32"
           },
           "movementCostFactor" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "attackActionPointCost" : {
             "type" : "integer",
             "format" : "int32"
           }
@@ -457,6 +473,14 @@
             }
           },
           "health" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "maxHealth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "defense" : {
             "type" : "integer",
             "format" : "int32"
           }

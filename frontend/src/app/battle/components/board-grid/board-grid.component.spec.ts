@@ -27,10 +27,13 @@ describe('BoardGridComponent', () => {
     expect(cells.length).toBe(231);
   });
 
-  it('renders every cell not covered by a unit as a button', async () => {
+  it('renders every cell not covered by an interactive entity as a button', async () => {
     const fixture = TestBed.createComponent(BoardGridComponent);
     fixture.componentRef.setInput('board', buildDemoBoard());
-    fixture.componentRef.setInput('unitPositions', new Set(['3,2', '17,2']));
+    fixture.componentRef.setInput(
+      'entityTargetPositions',
+      new Set(['3,2', '17,2']),
+    );
     await fixture.whenStable();
 
     const buttons = fixture.nativeElement.querySelectorAll('button.cell');

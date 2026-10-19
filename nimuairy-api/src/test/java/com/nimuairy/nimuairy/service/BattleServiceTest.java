@@ -130,12 +130,16 @@ class BattleServiceTest {
             assertThat(orb.owner()).isEqualTo(PlayerSide.LEFT);
             assertThat(orb.position()).isEqualTo(new Position(0, 5));
             assertThat(orb.health()).isEqualTo(75);
+            assertThat(orb.maxHealth()).isEqualTo(75);
+            assertThat(orb.defense()).isEqualTo(0);
         });
         assertThat(orbs).anySatisfy(orb -> {
             assertThat(orb.id()).isEqualTo("orb-right");
             assertThat(orb.owner()).isEqualTo(PlayerSide.RIGHT);
             assertThat(orb.position()).isEqualTo(new Position(20, 5));
             assertThat(orb.health()).isEqualTo(75);
+            assertThat(orb.maxHealth()).isEqualTo(75);
+            assertThat(orb.defense()).isEqualTo(0);
         });
     }
 
@@ -148,7 +152,9 @@ class BattleServiceTest {
             assertThat(wall.id()).isEqualTo("wall-left");
             assertThat(wall.owner()).isEqualTo(PlayerSide.LEFT);
             assertThat(wall.position()).isEqualTo(new Position(1, 0));
-            assertThat(wall.health()).isEqualTo(1500);
+            assertThat(wall.health()).isEqualTo(1000);
+            assertThat(wall.maxHealth()).isEqualTo(1000);
+            assertThat(wall.defense()).isEqualTo(100);
             assertThat(wall.footprint().occupiedCells(wall.position())).hasSize(22);
             for (int y = 0; y <= 10; y++) {
                 assertThat(wall.footprint().occupiedCells(wall.position()))
@@ -159,7 +165,9 @@ class BattleServiceTest {
             assertThat(wall.id()).isEqualTo("wall-right");
             assertThat(wall.owner()).isEqualTo(PlayerSide.RIGHT);
             assertThat(wall.position()).isEqualTo(new Position(18, 0));
-            assertThat(wall.health()).isEqualTo(1500);
+            assertThat(wall.health()).isEqualTo(1000);
+            assertThat(wall.maxHealth()).isEqualTo(1000);
+            assertThat(wall.defense()).isEqualTo(100);
             for (int y = 0; y <= 10; y++) {
                 assertThat(wall.footprint().occupiedCells(wall.position()))
                         .contains(new Position(18, y), new Position(19, y));
@@ -176,10 +184,12 @@ class BattleServiceTest {
         assertThat(units).allSatisfy(unit -> {
             assertThat(unit.unitType()).isEqualTo(UnitType.SWORDSMAN);
             assertThat(unit.health()).isEqualTo(500);
+            assertThat(unit.maxHealth()).isEqualTo(500);
             assertThat(unit.attack()).isEqualTo(200);
             assertThat(unit.defense()).isEqualTo(50);
             assertThat(unit.actionPointBudget()).isEqualTo(3);
             assertThat(unit.movementCostFactor()).isEqualTo(1);
+            assertThat(unit.attackActionPointCost()).isEqualTo(2);
         });
 
         assertThat(units.stream().map(Unit::id)).containsExactlyInAnyOrder(

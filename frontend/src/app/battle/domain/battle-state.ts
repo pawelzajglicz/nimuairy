@@ -36,12 +36,16 @@ export interface Unit {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  /** Kept apart from health, which cannot give it back after damage. Integer > 0. */
+  readonly maxHealth: number;
   readonly attack: number;
   readonly defense: number;
   /** AP restored at the start of each of the owner's turns. Integer > 0. */
   readonly actionPointBudget: number;
   /** Multiplies the cost of every movement step. Integer > 0. */
   readonly movementCostFactor: number;
+  /** AP an ATTACK by this unit costs. Integer > 0. */
+  readonly attackActionPointCost: number;
   /**
    * AP left in the current turn, shared by all unit actions. Stored rather
    * than derived from action history so a turn can contain several actions
@@ -56,6 +60,8 @@ export interface Wall {
   readonly position: Position;
   readonly footprint: readonly Position[];
   readonly health: number;
+  readonly maxHealth: number;
+  readonly defense: number;
 }
 
 export interface Orb {
@@ -63,7 +69,13 @@ export interface Orb {
   readonly owner: PlayerSide;
   readonly position: Position;
   readonly footprint: readonly Position[];
+  /**
+   * An orb at 0 HP is destroyed but stays in the battle state, unlike units
+   * and walls, so that victory can be determined from it.
+   */
   readonly health: number;
+  readonly maxHealth: number;
+  readonly defense: number;
 }
 
 export interface BattleState {

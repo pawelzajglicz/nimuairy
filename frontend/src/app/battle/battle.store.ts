@@ -9,12 +9,13 @@ import {
   withState,
 } from '@ngrx/signals';
 import { getDemoBattleResource } from '../api/generated/nimuairy-api';
+import type { LastActionOutcome } from './action-outcome';
 import { toBattleState } from './battle-state.mapper';
 import { BattleEngine } from './domain/battle-engine';
 import type { BattleState, Position } from './domain/battle-state';
+import type { AttackTarget } from './domain/combat';
 import type { ReachableCell } from './domain/movement';
 import { InteractionMode } from './interaction-mode';
-import type { LastMovementOutcome } from './movement-outcome';
 import { toMovementPreview } from './movement-preview';
 
 interface BattleUiState {
@@ -22,10 +23,10 @@ interface BattleUiState {
   interactionMode: InteractionMode;
   hoveredDestination: Position | undefined;
   /**
-   * One global slot: replaced only by the next move attempt, and kept across
-   * selection and mode changes and the end of a turn.
+   * One global slot: replaced only by the next move or attack attempt, and
+   * kept across selection and mode changes and the end of a turn.
    */
-  lastOutcome: LastMovementOutcome | undefined;
+  lastOutcome: LastActionOutcome | undefined;
 }
 
 const initialUiState: BattleUiState = {
@@ -36,6 +37,8 @@ const initialUiState: BattleUiState = {
 };
 
 const NO_DESTINATIONS: readonly ReachableCell[] = [];
+const NO_TARGETS: readonly AttackTarget[] = [];
+const NO_CELLS: readonly Position[] = [];
 
 /**
  * Owns the demo battle's request lifecycle (loading/error), the current domain
@@ -67,6 +70,7 @@ export const BattleStore = signalStore(
       selectedUnitId,
       interactionMode,
       hoveredDestination,
+      lastOutcome,
     }) => {
       // Derived, never stored, so it always reflects the current state. Any
       // unit can be inspected; only execution checks whether it may move.
@@ -103,6 +107,45 @@ export const BattleStore = signalStore(
           return range?.ok && hovered
             ? toMovementPreview(range.value, hovered)
             : undefined;
+        }),
+        /**
+         * What the selected unit may attack, straight from the engine and
+         * only in ATTACK mode. Derived, so a target that stops being legal or
+         * is destroyed drops out with the state change.
+         */
+        attackTargets: computed(() => {
+          const state = battleState();
+          const unitId = selectedUnitId();
+          if (
+            !state ||
+            unitId === undefined ||
+            interactionMode() !== InteractionMode.ATTACK
+          ) {
+            return NO_TARGETS;
+          }
+          return _engine.legalAttackTargets(state, unitId);
+        }),
+        /**
+         * The selected unit's melee reach, straight from the engine and only
+         * in ATTACK mode. Shown for any unit, like movement range; it does
+         * not say what may be attacked, attackTargets does.
+         */
+        attackRange: computed(() => {
+          const state = battleState();
+          const unitId = selectedUnitId();
+          if (
+            !state ||
+            unitId === undefined ||
+            interactionMode() !== InteractionMode.ATTACK
+          ) {
+            return NO_CELLS;
+          }
+          return _engine.attackRange(state, unitId);
+        }),
+        /** Highlighted while the last outcome is a successful attack on it. */
+        attackedTarget: computed(() => {
+          const outcome = lastOutcome();
+          return outcome?.kind === 'ATTACKED' ? outcome.target : undefined;
         }),
       };
     },
@@ -168,6 +211,45 @@ export const BattleStore = signalStore(
           unitId: unit.id,
           owner: unit.owner,
           steps: result.value.steps,
+          cost: result.value.cost,
+        },
+      });
+    },
+    /**
+     * Attacks with the selected unit. The engine decides legality, damage and
+     * destruction; the outcome only copies its result.
+     */
+    attackTarget(target: AttackTarget): void {
+      const state = store.battleState();
+      const unit = store.selectedUnit();
+      if (!state || !unit) {
+        return;
+      }
+
+      const result = store._engine.attack(state, {
+        type: 'ATTACK',
+        unitId: unit.id,
+        target,
+      });
+      if (!result.ok) {
+        patchState(store, {
+          lastOutcome: {
+            kind: 'REJECTED',
+            action: 'ATTACK',
+            error: result.error,
+          },
+        });
+        return;
+      }
+      patchState(store, {
+        battleState: result.value.state,
+        lastOutcome: {
+          kind: 'ATTACKED',
+          unitId: unit.id,
+          owner: unit.owner,
+          target: result.value.target,
+          damage: result.value.damage,
+          remainingHealth: result.value.remainingHealth,
           cost: result.value.cost,
         },
       });

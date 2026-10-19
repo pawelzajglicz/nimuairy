@@ -21,10 +21,12 @@ function unitDto(overrides: UnitDto): UnitDto {
     unitType: 'SWORDSMAN',
     footprint: [{ x: 0, y: 0 }],
     health: 100,
+    maxHealth: 100,
     attack: 10,
     defense: 5,
     actionPointBudget: 3,
     movementCostFactor: 1,
+    attackActionPointCost: 2,
     ...overrides,
   };
 }
@@ -208,6 +210,8 @@ describe('BattleDemoPage', () => {
               id: 'wall-left',
               owner: 'LEFT',
               health: 100,
+              maxHealth: 100,
+              defense: 100,
               position: { x: 1, y: 0 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -217,6 +221,8 @@ describe('BattleDemoPage', () => {
               id: 'orb-left',
               owner: 'LEFT',
               health: 100,
+              maxHealth: 100,
+              defense: 0,
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
@@ -536,13 +542,13 @@ describe('BattleDemoPage', () => {
       const { unit, target, act, text } = await renderMovementBoard();
       act(() => unit('LEFT').click());
       expect(text('.unit-movement')).toBe(
-        'unit-left-1 (LEFT) · AP spent 0 / 1 · remaining 1',
+        'unit-left-1 (LEFT) · HP 100 · AP spent 0 / 1 · remaining 1',
       );
 
       act(() => target(2, 1).click());
 
       expect(text('.unit-movement')).toBe(
-        'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
+        'unit-left-1 (LEFT) · HP 100 · AP spent 1 / 1 · remaining 0',
       );
       expect(text('.spent-label')).toBe('1');
       expect(text('.last-outcome')).toBe(
@@ -582,7 +588,7 @@ describe('BattleDemoPage', () => {
         act(() => unit('LEFT').click());
         act(() => target(2, 1).click());
         expect(text('.unit-movement')).toBe(
-          'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
+          'unit-left-1 (LEFT) · HP 100 · AP spent 1 / 1 · remaining 0',
         );
 
         const button = endTurnButton(root);
@@ -604,7 +610,7 @@ describe('BattleDemoPage', () => {
         expect(store.battleState()?.activeUnitId).toBeUndefined();
         act(() => unit('LEFT').click());
         expect(text('.unit-movement')).toBe(
-          'unit-left-1 (LEFT) · AP spent 1 / 1 · remaining 0',
+          'unit-left-1 (LEFT) · HP 100 · AP spent 1 / 1 · remaining 0',
         );
         act(() => unit('RIGHT').click());
         act(() => target(6, 3).click());
@@ -616,7 +622,7 @@ describe('BattleDemoPage', () => {
         act(() => unit('LEFT').click());
 
         expect(text('.unit-movement')).toBe(
-          'unit-left-1 (LEFT) · AP spent 0 / 1 · remaining 1',
+          'unit-left-1 (LEFT) · HP 100 · AP spent 0 / 1 · remaining 1',
         );
         expect(targets()).toHaveLength(4);
       });
@@ -663,9 +669,153 @@ describe('BattleDemoPage', () => {
       expect(unit('RIGHT').style.gridColumn).toBe('6');
       expect(unit('RIGHT').style.gridRow).toBe(String(HEIGHT - 3));
       expect(text('.unit-movement')).toBe(
-        'unit-right-1 (RIGHT) · AP spent 0 / 3 · remaining 3',
+        'unit-right-1 (RIGHT) · HP 100 · AP spent 0 / 3 · remaining 3',
       );
       expect(text('.last-outcome')).toBe('Move rejected: UNIT_CANNOT_MOVE');
+    });
+  });
+
+  describe('attack', () => {
+    // A 4×2 PLAIN board: LEFT (attack 10, 3 AP) at (1,0), a RIGHT unit
+    // (100 HP, defense 5) east of it and a RIGHT wall (10 HP, defense 0) north.
+    async function renderAttackBoard() {
+      const rendered = await renderWithLoadedBattle(
+        [
+          unitDto({
+            id: 'unit-left-1',
+            owner: 'LEFT',
+            position: { x: 1, y: 0 },
+          }),
+          unitDto({
+            id: 'unit-right-1',
+            owner: 'RIGHT',
+            position: { x: 2, y: 0 },
+          }),
+        ],
+        {
+          board: {
+            width: 4,
+            height: 2,
+            terrain: Array.from({ length: 4 }, (_, x) =>
+              Array.from({ length: 2 }, (_, y) => ({
+                position: { x, y },
+                type: 'PLAIN' as const,
+              })),
+            ).flat(),
+          },
+          walls: [
+            {
+              id: 'wall-right',
+              owner: 'RIGHT',
+              position: { x: 1, y: 1 },
+              footprint: [{ x: 0, y: 0 }],
+              health: 10,
+              maxHealth: 10,
+              defense: 0,
+            },
+          ],
+        },
+      );
+      const root: HTMLElement = rendered.fixture.nativeElement;
+      const act = (action: () => void) => {
+        action();
+        rendered.fixture.detectChanges();
+      };
+      const query = (selector: string): HTMLElement | null =>
+        root.querySelector(selector);
+      const text = (selector: string) =>
+        query(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+
+      return { ...rendered, root, act, query, text };
+    }
+
+    it('attacks a target clicked in ATTACK mode and shows the outcome, HP and AP', async () => {
+      const { act, query, text } = await renderAttackBoard();
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="LEFT"]',
+        )!.click(),
+      );
+      act(() => query('.mode-button[data-mode="ATTACK"]')!.click());
+      const target = query(
+        'button.entity-cell.attack-target[data-kind="unit"]',
+      )!;
+      expect(target.getAttribute('aria-label')).toBe(
+        'Attack RIGHT unit unit-right-1, 100/100 HP',
+      );
+
+      act(() => target.click());
+
+      expect(text('.last-outcome')).toBe(
+        'LEFT unit-left-1 attacked UNIT unit-right-1 · damage 5 · remaining HP 95 · cost 2 AP',
+      );
+      expect(text('.unit-movement')).toBe(
+        'unit-left-1 (LEFT) · HP 100 · AP spent 2 / 3 · remaining 1',
+      );
+      expect(
+        query('.entity-cell.attacked[data-kind="unit"]')?.getAttribute(
+          'data-owner',
+        ),
+      ).toBe('RIGHT');
+    });
+
+    it('removes a destroyed wall from the board', async () => {
+      const { act, query, text } = await renderAttackBoard();
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="LEFT"]',
+        )!.click(),
+      );
+      act(() => query('.mode-button[data-mode="ATTACK"]')!.click());
+      act(() => query('button.entity-cell[data-kind="wall"]')!.click());
+
+      expect(query('.entity-cell[data-kind="wall"]')).toBeNull();
+      expect(text('.last-outcome')).toContain('remaining HP 0');
+      expect(text('.last-outcome')).toContain('destroyed');
+    });
+
+    it('offers no targets in MOVE mode, where a click on the enemy only selects it', async () => {
+      const { act, query, store } = await renderAttackBoard();
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="LEFT"]',
+        )!.click(),
+      );
+      expect(query('.attack-target')).toBeNull();
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="RIGHT"]',
+        )!.click(),
+      );
+
+      expect(store.selectedUnitId()).toBe('unit-right-1');
+      expect(store.lastOutcome()).toBeUndefined();
+    });
+
+    it("updates the attacked unit's current HP on its board label, keeping its maximum", async () => {
+      const { act, query, root } = await renderAttackBoard();
+      const healthLabels = () =>
+        Array.from(root.querySelectorAll('.health-label-value')).map((label) =>
+          label.textContent?.trim(),
+        );
+      // The wall first, then the units; the maximum stays as the current HP drops.
+      expect(healthLabels()).toEqual(['10/10', '100/100', '100/100']);
+
+      act(() =>
+        query(
+          'button.entity-cell[data-kind="unit"][data-owner="LEFT"]',
+        )!.click(),
+      );
+      act(() => query('.mode-button[data-mode="ATTACK"]')!.click());
+      act(() =>
+        query('button.entity-cell.attack-target[data-kind="unit"]')!.click(),
+      );
+
+      expect(healthLabels()).toEqual(['10/10', '100/100', '95/100']);
     });
   });
 });

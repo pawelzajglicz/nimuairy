@@ -60,6 +60,8 @@ describe('movementRules canOccupy', () => {
         { x: 1, y: 2 },
       ],
       health: 30,
+      maxHealth: 30,
+      defense: 100,
     };
     const rules = rulesFor(testUnit(), { walls: [wall] });
 
@@ -77,6 +79,8 @@ describe('movementRules canOccupy', () => {
           position: { x: 5, y: 5 },
           footprint: FOOTPRINTS['1x1'],
           health: 50,
+          maxHealth: 50,
+          defense: 0,
         },
       ],
     });

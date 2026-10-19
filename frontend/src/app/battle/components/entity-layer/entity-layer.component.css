@@ -1,4 +1,4 @@
-/* The host covers the whole board on top of the grid; it must let pointer events fall through to the terrain buttons, otherwise it swallows every click on an empty cell. pointer-events inherits, so only unit buttons opt back in. */
+/* The host covers the whole board on top of the grid; it must let pointer events fall through to the terrain buttons, otherwise it swallows every click on an empty cell. pointer-events inherits, so only unit buttons and attack targets opt back in. */
 :host {
   display: block;
   pointer-events: none;
@@ -10,6 +10,7 @@
 }
 
 .entity-cell {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -132,4 +133,71 @@
   background: #f87171;
   border: 2px solid #b91c1c;
   border-radius: 4px;
+}
+
+/* Attack frames are pseudo-elements, so they combine with the selection halo (box-shadow) and the focus outline instead of overriding them. Dashed = can be attacked, solid and heavier = was just attacked, so the states differ in shape, not just colour. Both are static. */
+.entity-cell.attack-target {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.entity-cell.attack-target::after,
+.entity-cell.attacked::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.entity-cell.attack-target::after {
+  inset: 3px;
+  border: 2px dashed #111827;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+}
+
+.entity-cell.attacked::before {
+  inset: 0;
+  border: 4px solid #111827;
+  box-shadow: inset 0 0 0 4px #fbbf24;
+}
+
+/* A target that was just attacked shows both frames: the dashed one moves inside the solid one. */
+.entity-cell.attacked.attack-target::after {
+  inset: 10px;
+}
+
+/* One current/max HP label per unit, wall and orb, centred on the bottom edge of its bottom-left cell: away from the spent-AP badge in the top-right corner, and from the selection halo of a unit beside it, which reaches into this cell's side edges. Light text on a dark pill reads over both owner colours and every highlight; z-index lifts it over the selected unit's halo (z-index 1). It does not wrap, so a long value like 1000/1000 may spill past a narrow cell rather than break. Display only: it never takes the pointer from the entity beneath. */
+.health-label {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  justify-self: center;
+  margin: 2px;
+  padding: 0 0.25em;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: #ffffff;
+  background: rgba(17, 24, 39, 0.85);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Read by screen readers, not shown: a bare 1000/1000 would not say whose HP it is. */
+.health-label-context {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* An orb at 0 HP stays on the board for the victory check, drawn as a grey diamond: a rotated circle would look unchanged, so it becomes a rounded square first. */
+.entity-cell[data-kind='orb'][data-destroyed] {
+  border-radius: 15%;
+  transform: rotate(45deg) scale(0.7);
+  filter: grayscale(1);
+  opacity: 0.6;
 }

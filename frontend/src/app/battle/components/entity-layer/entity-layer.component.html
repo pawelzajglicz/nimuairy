@@ -1,21 +1,31 @@
 @if (board(); as board) {
+  <!-- minmax(0, 1fr): an HP label wider than its cell (1000/1000) must spill
+       over, not widen its track and pull this layer out of line with the
+       terrain grid. -->
   <div
     class="entity-layer"
-    [style.grid-template-columns]="'repeat(' + board.width + ', 1fr)'"
-    [style.grid-template-rows]="'repeat(' + board.height + ', 1fr)'"
+    [style.grid-template-columns]="
+      'repeat(' + board.width + ', minmax(0, 1fr))'
+    "
+    [style.grid-template-rows]="'repeat(' + board.height + ', minmax(0, 1fr))'"
     [style.aspect-ratio]="board.width + ' / ' + board.height"
   >
     @for (cell of entityCells(); track cell.key) {
-      @if (cell.kind === 'unit') {
+      @if (cell.kind === 'unit' || isAttackTarget(cell)) {
         <button
           type="button"
           class="entity-cell"
           [class.selected]="isSelected(cell)"
           [class.dimmed]="isDimmed(cell)"
+          [class.attack-target]="isAttackTarget(cell)"
+          [class.attacked]="isAttacked(cell)"
           [attr.data-selection-mode]="selectionMode(cell)"
           [attr.data-kind]="cell.kind"
           [attr.data-owner]="cell.owner"
-          [attr.aria-label]="cell.owner + ' unit'"
+          [attr.data-destroyed]="cell.destroyed || null"
+          [attr.aria-label]="
+            isAttackTarget(cell) ? attackLabel(cell) : unitLabel(cell)
+          "
           [style.grid-column]="cell.gridColumn"
           [style.grid-row]="cell.gridRow"
           (click)="onEntityCellClick(cell)"
@@ -23,12 +33,31 @@
       } @else {
         <div
           class="entity-cell"
+          [class.attacked]="isAttacked(cell)"
           [attr.data-kind]="cell.kind"
           [attr.data-owner]="cell.owner"
+          [attr.data-destroyed]="cell.destroyed || null"
           [style.grid-column]="cell.gridColumn"
           [style.grid-row]="cell.gridRow"
         ></div>
       }
+    }
+    <!-- After the cells, so each label paints over its entity. -->
+    @for (label of healthLabels(); track label.key) {
+      <span
+        class="health-label"
+        [attr.aria-hidden]="isNamedByItsButtons(label) || null"
+        [attr.data-kind]="label.kind"
+        [style.grid-column]="label.gridColumn"
+        [style.grid-row]="label.gridRow"
+      >
+        @if (!isNamedByItsButtons(label)) {
+          <span class="health-label-context"
+            >{{ label.owner }} {{ label.kind }} {{ label.id }}, HP
+          </span>
+        }
+        <span class="health-label-value">{{ label.text }}</span>
+      </span>
     }
   </div>
 }

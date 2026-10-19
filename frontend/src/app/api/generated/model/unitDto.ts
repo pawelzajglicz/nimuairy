@@ -15,8 +15,10 @@ export interface UnitDto {
   position?: PositionDto;
   footprint?: PositionDto[];
   health?: number;
+  maxHealth?: number;
   attack?: number;
   defense?: number;
   actionPointBudget?: number;
   movementCostFactor?: number;
+  attackActionPointCost?: number;
 }

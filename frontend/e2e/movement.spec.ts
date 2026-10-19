@@ -22,10 +22,12 @@ function unit(
     position,
     footprint,
     health: 100,
+    maxHealth: 100,
     attack: 10,
     defense: 5,
     actionPointBudget,
     movementCostFactor: 1,
+    attackActionPointCost: 2,
   };
 }
 
@@ -225,7 +227,7 @@ test.describe('movement with real pointer interaction', () => {
       'Move rejected: UNIT_CANNOT_MOVE',
     );
     await expect(page.locator('.unit-movement')).toHaveText(
-      'right-small (RIGHT) · AP spent 0 / 3 · remaining 3',
+      'right-small (RIGHT) · HP 100 · AP spent 0 / 3 · remaining 3',
     );
     expect(await unitCells(page)).toContain('RIGHT@5,0');
   });
@@ -251,7 +253,7 @@ test.describe('movement information', () => {
     await openBoard(page);
     await clickCell(page, 0, 0);
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 0 / 2 · remaining 2',
+      'left-small (LEFT) · HP 100 · AP spent 0 / 2 · remaining 2',
     );
 
     await hoverCell(page, 2, 0);
@@ -262,7 +264,7 @@ test.describe('movement information', () => {
     await clickCell(page, 2, 0);
 
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
+      'left-small (LEFT) · HP 100 · AP spent 2 / 2 · remaining 0',
     );
     await expect(page.locator('.spent-label')).toHaveText('2');
     await expect(page.locator('.last-outcome')).toHaveText(
@@ -285,13 +287,13 @@ test.describe('turns', () => {
     await clickCell(page, 1, 0);
     await expect.poll(() => unitCells(page)).toContain('LEFT@1,0');
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 1 / 2 · remaining 1',
+      'left-small (LEFT) · HP 100 · AP spent 1 / 2 · remaining 1',
     );
 
     await clickCell(page, 2, 0);
     await expect.poll(() => unitCells(page)).toContain('LEFT@2,0');
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
+      'left-small (LEFT) · HP 100 · AP spent 2 / 2 · remaining 0',
     );
     await expect(page.locator('.last-outcome')).toHaveText(
       'LEFT moved left-small (1,0) → (2,0) · cost 1 AP',
@@ -309,7 +311,7 @@ test.describe('turns', () => {
     await clickCell(page, 2, 0);
     await expect(targets(page)).toHaveCount(0);
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 2 / 2 · remaining 0',
+      'left-small (LEFT) · HP 100 · AP spent 2 / 2 · remaining 0',
     );
     await expect(page.getByRole('button', { name: 'END TURN' })).toBeEnabled();
 
@@ -331,7 +333,7 @@ test.describe('turns', () => {
     await expect(currentPlayer(page)).toHaveText('Turn: LEFT');
     await clickCell(page, 2, 0);
     await expect(page.locator('.unit-movement')).toHaveText(
-      'left-small (LEFT) · AP spent 0 / 2 · remaining 2',
+      'left-small (LEFT) · HP 100 · AP spent 0 / 2 · remaining 2',
     );
   });
 

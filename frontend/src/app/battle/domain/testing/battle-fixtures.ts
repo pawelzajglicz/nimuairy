@@ -30,7 +30,7 @@ export const FOOTPRINTS = {
   ],
 } as const satisfies Record<string, readonly Position[]>;
 
-/** A LEFT 1×1 unit at (2,2) with 5 AP and movement cost factor 1, unless overridden. */
+/** A LEFT 1×1 unit at (2,2) with 5 AP, movement cost factor 1 and attack cost 2, unless overridden. */
 export function testUnit(overrides: Partial<Unit> = {}): Unit {
   return {
     id: 'left-1x1',
@@ -39,11 +39,41 @@ export function testUnit(overrides: Partial<Unit> = {}): Unit {
     position: { x: 2, y: 2 },
     footprint: FOOTPRINTS['1x1'],
     health: 10,
+    maxHealth: 10,
     attack: 4,
     defense: 2,
     actionPointBudget: 5,
     movementCostFactor: 1,
+    attackActionPointCost: 2,
     remainingActionPoints: 5,
+    ...overrides,
+  };
+}
+
+/** A RIGHT 1×3 wall at (5,2) with 30 HP and 1 defense, unless overridden. */
+export function testWall(overrides: Partial<Wall> = {}): Wall {
+  return {
+    id: 'right-wall',
+    owner: 'RIGHT',
+    position: { x: 5, y: 2 },
+    footprint: FOOTPRINTS['1x3'],
+    health: 30,
+    maxHealth: 30,
+    defense: 1,
+    ...overrides,
+  };
+}
+
+/** A RIGHT 1×1 orb at (5,2) with 20 HP and 0 defense, unless overridden. */
+export function testOrb(overrides: Partial<Orb> = {}): Orb {
+  return {
+    id: 'right-orb',
+    owner: 'RIGHT',
+    position: { x: 5, y: 2 },
+    footprint: FOOTPRINTS['1x1'],
+    health: 20,
+    maxHealth: 20,
+    defense: 0,
     ...overrides,
   };
 }

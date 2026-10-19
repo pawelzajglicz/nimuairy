@@ -14,6 +14,7 @@ import { toBattleState } from './battle-state.mapper';
 import { BattleStore } from './battle.store';
 import { BattleEngine } from './domain/battle-engine';
 import type { Position } from './domain/battle-state';
+import type { AttackTarget } from './domain/combat';
 import { InteractionMode } from './interaction-mode';
 
 function demoResponse(): BattleStateResponse {
@@ -40,10 +41,12 @@ function demoResponse(): BattleStateResponse {
         position: { x: 0, y: 0 },
         footprint: [{ x: 0, y: 0 }],
         health: 10,
+        maxHealth: 10,
         attack: 4,
         defense: 2,
         actionPointBudget: 3,
         movementCostFactor: 1,
+        attackActionPointCost: 2,
       },
     ],
     currentPlayer: 'LEFT',
@@ -242,10 +245,12 @@ describe('BattleStore', () => {
         position,
         footprint: [{ x: 0, y: 0 }],
         health: 10,
+        maxHealth: 10,
         attack: 4,
         defense: 2,
         actionPointBudget: 2,
         movementCostFactor: 1,
+        attackActionPointCost: 2,
       };
     }
 
@@ -625,6 +630,293 @@ describe('BattleStore', () => {
         store.endTurn();
 
         expect(store.interactionMode()).toBe(InteractionMode.ATTACK);
+      });
+    });
+  });
+
+  describe('attack', () => {
+    const ENEMY: AttackTarget = { kind: 'UNIT', id: 'right-unit-1' };
+    const WALL: AttackTarget = { kind: 'WALL', id: 'right-wall' };
+    const ORB: AttackTarget = { kind: 'ORB', id: 'right-orb' };
+
+    function unitDto(
+      id: string,
+      owner: 'LEFT' | 'RIGHT',
+      position: Position,
+      health: number,
+    ): UnitDto {
+      return {
+        id,
+        owner,
+        unitType: 'SWORDSMAN',
+        position,
+        footprint: [{ x: 0, y: 0 }],
+        health,
+        maxHealth: health,
+        attack: 10,
+        defense: 5,
+        actionPointBudget: 6,
+        movementCostFactor: 1,
+        attackActionPointCost: 2,
+      };
+    }
+
+    /**
+     * A 6×3 PLAIN board. LEFT at (1,1) with attack 10 and 6 AP has a RIGHT
+     * unit (10 HP, defense 5) east, a RIGHT wall (5 HP, defense 0) north and
+     * a RIGHT orb (5 HP, defense 0) west; another RIGHT unit is out of reach.
+     */
+    function attackResponse(): BattleStateResponse {
+      const terrain: TerrainCellDto[] = [];
+      for (let x = 0; x < 6; x++) {
+        for (let y = 0; y < 3; y++) {
+          terrain.push({ position: { x, y }, type: 'PLAIN' });
+        }
+      }
+      return {
+        board: { width: 6, height: 3, terrain },
+        orbs: [
+          {
+            id: 'right-orb',
+            owner: 'RIGHT',
+            position: { x: 0, y: 1 },
+            footprint: [{ x: 0, y: 0 }],
+            health: 5,
+            maxHealth: 5,
+            defense: 0,
+          },
+        ],
+        walls: [
+          {
+            id: 'right-wall',
+            owner: 'RIGHT',
+            position: { x: 1, y: 2 },
+            footprint: [{ x: 0, y: 0 }],
+            health: 5,
+            maxHealth: 5,
+            defense: 0,
+          },
+        ],
+        units: [
+          unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }, 100),
+          unitDto('right-unit-1', 'RIGHT', { x: 2, y: 1 }, 10),
+          unitDto('right-far', 'RIGHT', { x: 5, y: 0 }, 100),
+        ],
+        currentPlayer: 'LEFT',
+      };
+    }
+
+    async function loadedStore() {
+      const store = TestBed.inject(BattleStore);
+      TestBed.tick();
+      httpMock.expectOne('/api/v1/battles/demo').flush(attackResponse());
+      await vi.waitFor(() => expect(store.loading()).toBe(false));
+      return store;
+    }
+
+    async function attackingStore() {
+      const store = await loadedStore();
+      store.selectUnit('left-unit-1');
+      store.setInteractionMode(InteractionMode.ATTACK);
+      return store;
+    }
+
+    function unitIn(store: LoadedStore, id: string) {
+      return store.battleState()?.units.find((unit) => unit.id === id);
+    }
+
+    type LoadedStore = Awaited<ReturnType<typeof loadedStore>>;
+
+    it('offers no attack targets without a selection or in MOVE mode', async () => {
+      const store = await loadedStore();
+      store.setInteractionMode(InteractionMode.ATTACK);
+      expect(store.attackTargets()).toEqual([]);
+
+      store.selectUnit('left-unit-1');
+      store.setInteractionMode(InteractionMode.MOVE);
+
+      expect(store.attackTargets()).toEqual([]);
+    });
+
+    it("offers the engine's legal targets for the selected unit in ATTACK mode", async () => {
+      const store = await attackingStore();
+      const state = store.battleState()!;
+
+      expect(store.attackTargets()).toEqual(
+        new BattleEngine().legalAttackTargets(state, 'left-unit-1'),
+      );
+      expect(store.attackTargets()).toEqual([ENEMY, WALL, ORB]);
+    });
+
+    it('follows the selection: a unit with nothing in reach or of the other player has no targets', async () => {
+      const store = await attackingStore();
+
+      store.selectUnit('right-unit-1');
+      expect(store.attackTargets()).toEqual([]);
+
+      store.selectUnit('left-unit-1');
+      expect(store.attackTargets()).toEqual([ENEMY, WALL, ORB]);
+    });
+
+    it('stores the state the engine returns for the attack, keeping the attacker selected', async () => {
+      const store = await attackingStore();
+      const expected = new BattleEngine().attack(store.battleState()!, {
+        type: 'ATTACK',
+        unitId: 'left-unit-1',
+        target: ENEMY,
+      });
+
+      store.attackTarget(ENEMY);
+
+      expect(expected.ok).toBe(true);
+      expect(store.battleState()).toEqual(expected.ok && expected.value.state);
+      expect(unitIn(store, 'left-unit-1')?.remainingActionPoints).toBe(4);
+      expect(unitIn(store, 'right-unit-1')?.health).toBe(5);
+      expect(store.selectedUnitId()).toBe('left-unit-1');
+      expect(store.selectedUnit()?.remainingActionPoints).toBe(4);
+    });
+
+    it("records the attack outcome from the engine's result and highlights its target", async () => {
+      const store = await attackingStore();
+
+      store.attackTarget(ENEMY);
+
+      expect(store.lastOutcome()).toEqual({
+        kind: 'ATTACKED',
+        unitId: 'left-unit-1',
+        owner: 'LEFT',
+        target: ENEMY,
+        damage: 5,
+        remainingHealth: 5,
+        cost: 2,
+      });
+      expect(store.attackedTarget()).toEqual(ENEMY);
+    });
+
+    it('drops a destroyed wall from the state and the targets, and keeps a destroyed orb at 0 HP', async () => {
+      const store = await attackingStore();
+
+      store.attackTarget(WALL);
+
+      expect(store.battleState()?.walls).toEqual([]);
+      expect(store.attackTargets()).toEqual([ENEMY, ORB]);
+      expect(store.lastOutcome()).toMatchObject({ remainingHealth: 0 });
+
+      store.attackTarget(ORB);
+
+      expect(store.battleState()?.orbs).toEqual([
+        expect.objectContaining({ id: 'right-orb', health: 0 }),
+      ]);
+    });
+
+    it('drops a destroyed unit from the state and the targets', async () => {
+      const store = await attackingStore();
+
+      store.attackTarget(ENEMY);
+      store.attackTarget(ENEMY);
+
+      expect(unitIn(store, 'right-unit-1')).toBeUndefined();
+      expect(store.attackTargets()).toEqual([WALL, ORB]);
+    });
+
+    it('keeps the turn at 0 AP and then offers no targets', async () => {
+      const store = await attackingStore();
+
+      store.attackTarget(ENEMY);
+      store.attackTarget(ENEMY);
+      store.attackTarget(WALL);
+
+      expect(store.selectedUnit()?.remainingActionPoints).toBe(0);
+      expect(store.battleState()?.currentPlayer).toBe('LEFT');
+      expect(store.attackTargets()).toEqual([]);
+    });
+
+    it('records a rejected attack and leaves the battle state untouched', async () => {
+      const store = await attackingStore();
+      store.selectUnit('right-unit-1');
+      const before = store.battleState();
+
+      store.attackTarget({ kind: 'UNIT', id: 'left-unit-1' });
+
+      expect(store.battleState()).toBe(before);
+      expect(store.lastOutcome()).toEqual({
+        kind: 'REJECTED',
+        action: 'ATTACK',
+        error: { type: 'UNIT_CANNOT_ATTACK', unitId: 'right-unit-1' },
+      });
+      expect(store.attackedTarget()).toBeUndefined();
+    });
+
+    it('does nothing without a selected unit', async () => {
+      const store = await loadedStore();
+      const before = store.battleState();
+
+      store.attackTarget(ENEMY);
+
+      expect(store.battleState()).toBe(before);
+      expect(store.lastOutcome()).toBeUndefined();
+    });
+
+    it('clears the attack highlight when the next action replaces the outcome', async () => {
+      const store = await attackingStore();
+      store.attackTarget(ENEMY);
+
+      store.setInteractionMode(InteractionMode.MOVE);
+      store.moveSelectedUnit({ x: 1, y: 0 });
+
+      expect(store.lastOutcome()?.kind).toBe('MOVED');
+      expect(store.attackedTarget()).toBeUndefined();
+    });
+
+    describe('attack range', () => {
+      function keys(cells: readonly Position[]): string[] {
+        return cells.map(({ x, y }) => `${x},${y}`).sort();
+      }
+
+      it('shows no range without a selection or in MOVE mode', async () => {
+        const store = await loadedStore();
+        store.setInteractionMode(InteractionMode.ATTACK);
+        expect(store.attackRange()).toEqual([]);
+
+        store.selectUnit('left-unit-1');
+        store.setInteractionMode(InteractionMode.MOVE);
+
+        expect(store.attackRange()).toEqual([]);
+      });
+
+      it("shows the engine's reach for the selected unit in ATTACK mode", async () => {
+        const store = await attackingStore();
+
+        expect(store.attackRange()).toEqual(
+          new BattleEngine().attackRange(store.battleState()!, 'left-unit-1'),
+        );
+        expect(keys(store.attackRange())).toEqual(['0,1', '1,0', '1,2', '2,1']);
+      });
+
+      it('follows the selection, including a unit of the other player', async () => {
+        const store = await attackingStore();
+
+        store.selectUnit('right-far');
+
+        expect(keys(store.attackRange())).toEqual(['4,0', '5,1']);
+      });
+
+      it('moves with the unit instead of keeping the old reach', async () => {
+        const store = await loadedStore();
+        store.selectUnit('left-unit-1');
+        store.moveSelectedUnit({ x: 1, y: 0 });
+
+        store.setInteractionMode(InteractionMode.ATTACK);
+
+        expect(keys(store.attackRange())).toEqual(['0,0', '1,1', '2,0']);
+      });
+
+      it('clears when the turn ends and the selection goes', async () => {
+        const store = await attackingStore();
+
+        store.endTurn();
+
+        expect(store.attackRange()).toEqual([]);
       });
     });
   });

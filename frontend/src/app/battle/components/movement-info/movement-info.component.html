@@ -1,8 +1,8 @@
 <section class="movement-info" aria-label="Movement information">
   @if (unit(); as unit) {
     <p class="unit-movement">
-      <strong>{{ unit.id }}</strong> ({{ unit.owner }}) · AP spent
-      {{ spent() }} / {{ unit.actionPointBudget }} · remaining
+      <strong>{{ unit.id }}</strong> ({{ unit.owner }}) · HP {{ unit.health }} ·
+      AP spent {{ spent() }} / {{ unit.actionPointBudget }} · remaining
       {{ unit.remainingActionPoints }}
     </p>
     @if (preview(); as preview) {

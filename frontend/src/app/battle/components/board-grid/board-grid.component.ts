@@ -8,12 +8,12 @@ interface RenderedCell {
   key: string;
   position: Position;
   terrainType: TerrainType;
-  occupiedByUnit: boolean;
+  coveredByEntity: boolean;
   gridColumn: number;
   gridRow: number;
 }
 
-const NO_UNIT_POSITIONS: ReadonlySet<string> = new Set();
+const NO_ENTITY_TARGET_POSITIONS: ReadonlySet<string> = new Set();
 
 @Component({
   selector: 'app-board-grid',
@@ -23,15 +23,17 @@ const NO_UNIT_POSITIONS: ReadonlySet<string> = new Set();
 })
 export class BoardGridComponent {
   readonly board = input<Board>();
-  /** Keys (see positionKey) of domain positions covered by a unit footprint. */
-  readonly unitPositions = input<ReadonlySet<string>>(NO_UNIT_POSITIONS);
+  /** Keys (see positionKey) of domain positions covered by an interactive entity: a unit, or an attack target. */
+  readonly entityTargetPositions = input<ReadonlySet<string>>(
+    NO_ENTITY_TARGET_POSITIONS,
+  );
 
   readonly cellClick = output<Position>();
 
   protected readonly cells = computed<RenderedCell[]>(() => {
     const board = this.board();
     const height = board?.height ?? 0;
-    const unitPositions = this.unitPositions();
+    const entityTargetPositions = this.entityTargetPositions();
 
     return (board?.terrain ?? []).map(({ position, type }) => {
       const key = positionKey(position);
@@ -41,7 +43,7 @@ export class BoardGridComponent {
         key,
         position,
         terrainType: type,
-        occupiedByUnit: unitPositions.has(key),
+        coveredByEntity: entityTargetPositions.has(key),
         gridColumn,
         gridRow,
       };

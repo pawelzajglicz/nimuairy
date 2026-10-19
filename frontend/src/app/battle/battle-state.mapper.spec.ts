@@ -19,6 +19,8 @@ function response(): BattleStateResponse {
         position: { x: 0, y: 5 },
         footprint: [{ x: 0, y: 0 }],
         health: 50,
+        maxHealth: 80,
+        defense: 0,
       },
     ],
     walls: [
@@ -31,6 +33,8 @@ function response(): BattleStateResponse {
           { x: 0, y: 1 },
         ],
         health: 30,
+        maxHealth: 60,
+        defense: 100,
       },
     ],
     units: [
@@ -46,10 +50,12 @@ function response(): BattleStateResponse {
           { x: 1, y: 1 },
         ],
         health: 10,
+        maxHealth: 12,
         attack: 4,
         defense: 2,
         actionPointBudget: 5,
         movementCostFactor: 2,
+        attackActionPointCost: 3,
       },
     ],
     currentPlayer: 'LEFT',
@@ -78,6 +84,7 @@ describe('toBattleState', () => {
 
     expect(unit.actionPointBudget).toBe(5);
     expect(unit.movementCostFactor).toBe(2);
+    expect(unit.attackActionPointCost).toBe(3);
     expect(unit.remainingActionPoints).toBe(5);
   });
 
@@ -112,13 +119,106 @@ describe('toBattleState', () => {
     expect(() => toBattleState(incomplete)).toThrow('unit.position');
   });
 
-  it.each(['actionPointBudget', 'movementCostFactor'] as const)(
-    'rejects a unit without %s',
-    (field) => {
-      const incomplete = response();
-      delete incomplete.units![0][field];
+  it.each([
+    'actionPointBudget',
+    'movementCostFactor',
+    'attackActionPointCost',
+  ] as const)('rejects a unit without %s', (field) => {
+    const incomplete = response();
+    delete incomplete.units![0][field];
 
-      expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
+    expect(() => toBattleState(incomplete)).toThrow(`unit.${field}`);
+  });
+
+  it('maps the maximum HP of units, walls and orbs apart from their current HP', () => {
+    const state = toBattleState(response());
+
+    expect(state.units[0]).toMatchObject({ health: 10, maxHealth: 12 });
+    expect(state.walls[0]).toMatchObject({ health: 30, maxHealth: 60 });
+    expect(state.orbs[0]).toMatchObject({ health: 50, maxHealth: 80 });
+  });
+
+  it.each([
+    ['units', 'unit'],
+    ['walls', 'wall'],
+    ['orbs', 'orb'],
+  ] as const)(
+    'rejects %s without maxHealth instead of defaulting it',
+    (collection, label) => {
+      const incomplete = response();
+      delete incomplete[collection]![0].maxHealth;
+
+      expect(() => toBattleState(incomplete)).toThrow(`${label}.maxHealth`);
+    },
+  );
+
+  it.each([
+    ['units', 'unit', 0],
+    ['walls', 'wall', -1],
+    ['orbs', 'orb', 1.5],
+  ] as const)(
+    'rejects %s with an invalid maxHealth (%s = %s)',
+    (collection, label, value) => {
+      const invalid = response();
+      invalid[collection]![0].maxHealth = value;
+
+      expect(() => toBattleState(invalid)).toThrow(
+        `invalid ${label}.maxHealth`,
+      );
+    },
+  );
+
+  it.each([
+    ['units', 'unit'],
+    ['walls', 'wall'],
+    ['orbs', 'orb'],
+  ] as const)(
+    'accepts %s from 0 HP up to their maximum',
+    (collection, label) => {
+      for (const health of [0, 12]) {
+        const atBound = response();
+        atBound[collection]![0].health = health;
+        atBound[collection]![0].maxHealth = 12;
+
+        expect(
+          toBattleState(atBound)[collection][0],
+          `${label} at ${health}`,
+        ).toMatchObject({ health, maxHealth: 12 });
+      }
+    },
+  );
+
+  it.each([
+    ['units', 'unit', 13],
+    ['walls', 'wall', -1],
+    ['orbs', 'orb', 1.5],
+  ] as const)(
+    'rejects %s with health outside 0..maxHealth (%s.health = %s)',
+    (collection, label, health) => {
+      const invalid = response();
+      invalid[collection]![0].health = health;
+      invalid[collection]![0].maxHealth = 12;
+
+      expect(() => toBattleState(invalid)).toThrow(`invalid ${label}.health`);
+    },
+  );
+
+  it('maps the defense of walls and orbs', () => {
+    const state = toBattleState(response());
+
+    expect(state.walls[0].defense).toBe(100);
+    expect(state.orbs[0].defense).toBe(0);
+  });
+
+  it.each(['walls', 'orbs'] as const)(
+    'rejects %s without defense instead of defaulting it',
+    (collection) => {
+      const incomplete = response();
+      delete incomplete[collection]![0].defense;
+
+      expect(() => toBattleState(incomplete)).toThrow(
+        `${collection.slice(0, -1)}.defense`,
+      );
     },
   );
 
@@ -129,6 +229,9 @@ describe('toBattleState', () => {
     ['movementCostFactor', 0],
     ['movementCostFactor', -1],
     ['movementCostFactor', 1.5],
+    ['attackActionPointCost', 0],
+    ['attackActionPointCost', -1],
+    ['attackActionPointCost', 1.5],
   ] as const)('rejects a unit with %s = %s', (field, value) => {
     const invalid = response();
     invalid.units![0][field] = value;

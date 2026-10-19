@@ -1,14 +1,21 @@
 <div class="battle-board-stack">
   <app-board-grid
     [board]="battleState()?.board"
-    [unitPositions]="unitPositions()"
+    [entityTargetPositions]="entityTargetPositions()"
     (cellClick)="onCellClick($event)"
+  />
+  <app-attack-range-overlay
+    [board]="battleState()?.board"
+    [cells]="attackRange()"
   />
   <app-entity-layer
     [battleState]="battleState()"
     [selectedUnitId]="selectedUnitId()"
     [interactionMode]="interactionMode()"
+    [attackTargets]="attackTargets()"
+    [attackedTarget]="attackedTarget()"
     (unitClick)="onUnitClick($event)"
+    (attackTargetClick)="onAttackTargetClick($event)"
   />
   <app-movement-overlay
     [board]="battleState()?.board"
