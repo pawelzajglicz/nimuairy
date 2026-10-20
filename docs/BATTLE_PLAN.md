@@ -584,6 +584,17 @@ The concrete M8 rules and acceptance criteria are defined in
   a failed restart that can be retried. Frontend unit tests, lint, format
   check, production build and the full Playwright suite pass. Backend tests
   were not run, as M8 changes no backend code or API.
+- **Board geometry validation** (done, after M8.4). A new battle is also
+  accepted only if its geometry fits the board, per `GAME_DESIGN.md` §3.3
+  (Board geometry). The mapper rejects a board `width` or `height` that is
+  not a positive integer and any coordinate or footprint offset that is not
+  an integer. `validateNewBattle` rejects with `OUT_OF_BOARD` an anchor,
+  occupied cell or terrain cell outside the board. It reports the first
+  violation: the orb invariant before geometry; then orbs, walls, units and
+  terrain; for each object its anchor before its footprint cells. As with
+  the orb invariant, the mapper throws on a rejected state. Overlapping
+  objects, duplicate or missing terrain cells and unique IDs are not
+  checked. Frontend only: the backend does not validate geometry yet.
 
 ### M9 — Refactoring
 
