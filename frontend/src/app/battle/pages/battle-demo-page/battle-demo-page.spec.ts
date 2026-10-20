@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type {
   BattleStateResponse,
   OrbDto,
+  PositionDto,
   UnitDto,
 } from '../../../api/generated/model';
 import { BattleStore } from '../../battle.store';
@@ -32,15 +33,12 @@ function unitDto(overrides: UnitDto): UnitDto {
   };
 }
 
-/**
- * A new battle needs one living orb per side. This one sits off the board, so
- * it blocks no cell and is in reach of no unit in these tests.
- */
-function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+/** A new battle needs one living orb per side, on the board. */
+function orbDto(owner: 'LEFT' | 'RIGHT', position: PositionDto): OrbDto {
   return {
     id: `${owner.toLowerCase()}-orb`,
     owner,
-    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    position,
     footprint: [{ x: 0, y: 0 }],
     health: 50,
     maxHealth: 50,
@@ -69,9 +67,15 @@ describe('BattleDemoPage', () => {
     const fixture = TestBed.createComponent(BattleDemoPage);
     fixture.detectChanges();
 
+    const boardDto = overrides.board ?? { width: 21, height: 11, terrain: [] };
     const response: BattleStateResponse = {
-      board: { width: 21, height: 11, terrain: [] },
-      orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
+      board: boardDto,
+      // The bottom corners (y = 0, as the domain origin is bottom-left) stay
+      // out of the moves and attacks these tests check.
+      orbs: [
+        orbDto('LEFT', { x: 0, y: 0 }),
+        orbDto('RIGHT', { x: boardDto.width! - 1, y: 0 }),
+      ],
       walls: [],
       units,
       currentPlayer: 'LEFT',
@@ -243,7 +247,7 @@ describe('BattleDemoPage', () => {
               position: { x: 0, y: 5 },
               footprint: [{ x: 0, y: 0 }],
             },
-            offBoardOrb('RIGHT'),
+            orbDto('RIGHT', { x: 20, y: 10 }),
           ],
         },
       );

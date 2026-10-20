@@ -130,6 +130,18 @@ The board uses zero-based coordinates:
 
 Every object that occupies board space uses this coordinate system.
 
+### 3.3 Board geometry
+
+A battle state is only valid if its geometry fits the board:
+
+- `width` and `height` are positive integers.
+- Every coordinate and footprint offset is an integer.
+- The anchor position of every unit, wall, and orb lies on the board, even when the object's footprint does not cover its anchor.
+- Every cell an object occupies, `anchor position + footprint offset` (see 7.3), lies on the board.
+- The position of every terrain cell lies on the board.
+
+A cell lies on the board when `0 <= x < width` and `0 <= y < height`. Footprint offsets are relative to the anchor, so they may be negative, as long as the resulting cells lie on the board.
+
 ## 4. Board Layers
 
 The board is conceptually composed of several independent layers.

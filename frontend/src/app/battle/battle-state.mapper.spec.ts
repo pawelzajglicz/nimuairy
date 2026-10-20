@@ -280,4 +280,75 @@ describe('toBattleState', () => {
 
     expect(() => toBattleState(invalid)).toThrow(`invalid unit.${field}`);
   });
+
+  it.each(['width', 'height'] as const)(
+    'rejects a board without %s',
+    (field) => {
+      const incomplete = response();
+      delete incomplete.board![field];
+
+      expect(() => toBattleState(incomplete)).toThrow(`board.${field}`);
+    },
+  );
+
+  it.each([
+    ['width', 0],
+    ['width', -1],
+    ['width', 1.5],
+    ['height', 0],
+    ['height', -1],
+    ['height', 1.5],
+  ] as const)('rejects a board with %s = %s', (field, value) => {
+    const invalid = response();
+    invalid.board![field] = value;
+
+    expect(() => toBattleState(invalid)).toThrow(`invalid board.${field}`);
+  });
+
+  it.each([
+    [
+      'a unit anchor',
+      (r: BattleStateResponse) => {
+        r.units![0].position!.x = 1.5;
+      },
+      'x',
+    ],
+    [
+      'a footprint offset',
+      (r: BattleStateResponse) => {
+        r.walls![0].footprint![1].y = 0.5;
+      },
+      'y',
+    ],
+    [
+      'a terrain cell',
+      (r: BattleStateResponse) => {
+        r.board!.terrain![1].position!.x = 2.5;
+      },
+      'x',
+    ],
+  ])('rejects a fractional coordinate in %s', (_, makeFractional, axis) => {
+    const invalid = response();
+    makeFractional(invalid);
+
+    expect(() => toBattleState(invalid)).toThrow(`invalid position.${axis}`);
+  });
+
+  it('rejects a unit whose footprint leaves the board', () => {
+    const invalid = response();
+    invalid.units![0].position = { x: 20, y: 2 };
+
+    expect(() => toBattleState(invalid)).toThrow(
+      'not a valid new battle: UNIT left-2x2 at (21,2) is outside the 21x11 board',
+    );
+  });
+
+  it('rejects a terrain cell off the board', () => {
+    const invalid = response();
+    invalid.board!.terrain![0].position = { x: 0, y: 11 };
+
+    expect(() => toBattleState(invalid)).toThrow(
+      'not a valid new battle: TERRAIN at (0,11) is outside the 21x11 board',
+    );
+  });
 });

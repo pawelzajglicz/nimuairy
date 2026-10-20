@@ -19,14 +19,14 @@ import type { AttackTarget } from './domain/combat';
 import { InteractionMode } from './interaction-mode';
 
 /**
- * A new battle needs one living orb per side. This one sits off the board, so
- * it blocks no cell and is in reach of no unit in these tests.
+ * A new battle needs one living orb per side, on the board. Each test places
+ * it where it blocks no cell its assertions use and is in reach of no unit.
  */
-function offBoardOrb(owner: 'LEFT' | 'RIGHT'): OrbDto {
+function orbDto(owner: 'LEFT' | 'RIGHT', position: Position): OrbDto {
   return {
     id: `${owner.toLowerCase()}-orb`,
     owner,
-    position: { x: -10, y: owner === 'LEFT' ? -10 : -12 },
+    position,
     footprint: [{ x: 0, y: 0 }],
     health: 50,
     maxHealth: 50,
@@ -48,7 +48,7 @@ function demoResponse(): BattleStateResponse {
         { position: { x: 2, y: 1 }, type: 'PLAIN' },
       ],
     },
-    orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
+    orbs: [orbDto('LEFT', { x: 1, y: 1 }), orbDto('RIGHT', { x: 2, y: 1 })],
     walls: [],
     units: [
       {
@@ -271,7 +271,10 @@ describe('BattleStore', () => {
       };
     }
 
-    /** A 6×3 PLAIN board: LEFT at (1,1) and RIGHT at (2,2), both with 2 AP. */
+    /**
+     * A 6×3 PLAIN board: LEFT at (1,1) and RIGHT at (2,2), both with 2 AP, and
+     * the orbs in column 5, beyond either unit's reach.
+     */
     function movementResponse(): BattleStateResponse {
       const terrain: TerrainCellDto[] = [];
       for (let x = 0; x < 6; x++) {
@@ -281,7 +284,7 @@ describe('BattleStore', () => {
       }
       return {
         board: { width: 6, height: 3, terrain },
-        orbs: [offBoardOrb('LEFT'), offBoardOrb('RIGHT')],
+        orbs: [orbDto('LEFT', { x: 5, y: 0 }), orbDto('RIGHT', { x: 5, y: 2 })],
         walls: [],
         units: [
           unitDto('left-unit-1', 'LEFT', { x: 1, y: 1 }),
@@ -685,6 +688,7 @@ describe('BattleStore', () => {
      * A 6×3 PLAIN board. LEFT at (1,1) with attack 10 and 6 AP has a RIGHT
      * unit (10 HP, defense 5) east, a RIGHT wall (5 HP, defense 0) north and
      * a RIGHT orb (5 HP, defense 0) west; another RIGHT unit is out of reach.
+     * The LEFT orb fills the corner the RIGHT orb and the wall close off.
      */
     function attackResponse(): BattleStateResponse {
       const terrain: TerrainCellDto[] = [];
@@ -696,7 +700,7 @@ describe('BattleStore', () => {
       return {
         board: { width: 6, height: 3, terrain },
         orbs: [
-          offBoardOrb('LEFT'),
+          orbDto('LEFT', { x: 0, y: 2 }),
           {
             id: 'right-orb',
             owner: 'RIGHT',
