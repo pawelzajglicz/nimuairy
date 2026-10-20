@@ -101,10 +101,11 @@ async function clickCell(page: Page, x: number, y: number) {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
+// Required: the generated PositionDto marks x and y optional.
 async function destroyOrb(
   page: Page,
-  attacker: PositionDto,
-  orbCell: PositionDto,
+  attacker: Required<PositionDto>,
+  orbCell: Required<PositionDto>,
 ) {
   await clickCell(page, attacker.x, attacker.y);
   await modeButton(page, 'ATTACK').click();
@@ -122,6 +123,7 @@ const newBattleButton = (page: Page) =>
   page.getByRole('button', { name: 'NEW BATTLE' });
 const battleResult = (page: Page) => page.locator('.battle-result');
 const outcome = (page: Page) => page.locator('.last-outcome');
+const unitInfo = (page: Page) => page.locator('.unit-movement');
 const orbCell = (page: Page, owner: 'LEFT' | 'RIGHT') =>
   page.locator(`.entity-cell[data-kind="orb"][data-owner="${owner}"]`);
 const orbHealth = (page: Page, owner: 'LEFT' | 'RIGHT') =>
@@ -156,13 +158,31 @@ test.describe('battle victory and restart', () => {
     await expect(page.locator('.attack-target')).toHaveCount(0);
     await expect(page.locator('.attack-range-cell')).toHaveCount(0);
 
-    // A unit can still be inspected, but offers nothing to do.
+    const finalOutcome =
+      'LEFT left-1 attacked ORB orb-right · damage 10 · remaining HP 0 · cost 2 AP · destroyed';
+
+    // Units can still be inspected. In a running battle this click would
+    // attack right-1, the selected left-1's target; now it only selects it.
+    await clickCell(page, 1, 1);
+    await expect(unitInfo(page)).toHaveText(
+      'right-1 (RIGHT) · HP 100 · AP spent 0 / 6 · remaining 6',
+    );
+    await expect(outcome(page)).toHaveText(finalOutcome);
+
+    // left-1 still has AP and right-1 in reach, yet is offered no target.
     await clickCell(page, 2, 1);
-    await expect(page.locator('.unit-movement')).toContainText('left-1');
+    await expect(unitInfo(page)).toHaveText(
+      'left-1 (LEFT) · HP 100 · AP spent 2 / 6 · remaining 4',
+    );
     await expect(page.locator('.attack-target')).toHaveCount(0);
-    await expect(page.locator('button.movement-target')).toHaveCount(0);
+    await expect(page.locator('.attack-range-cell')).toHaveCount(0);
+
+    // The destroyed orb is no target either: the click reaches the terrain
+    // beneath, which only clears the selection.
     await clickCell(page, 3, 1);
-    await expect(outcome(page)).toContainText('attacked ORB orb-right');
+    await expect(page.locator('.entity-cell.selected')).toHaveCount(0);
+    await expect(outcome(page)).toHaveText(finalOutcome);
+    await expect(orbHealth(page, 'RIGHT')).toHaveText('0/5');
     await expect(battleResult(page)).toHaveText(
       'Bitwa zakończona — zwycięzca: LEFT',
     );

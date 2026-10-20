@@ -331,7 +331,10 @@ test.describe('turns', () => {
     await expect(page.locator('.last-outcome')).toHaveText(
       'Move rejected: UNIT_CANNOT_MOVE',
     );
-    await expect.poll(() => unitCells(page)).toContain('LEFT@2,2');
+    // The full board: after a move to (1,2), left-wide would still cover (2,2).
+    await expect
+      .poll(() => unitCells(page))
+      .toEqual(['LEFT@2,0', 'LEFT@2,2', 'LEFT@3,2', 'RIGHT@5,0']);
 
     await endTurn(page);
     await expect(currentPlayer(page)).toHaveText('Turn: RIGHT');

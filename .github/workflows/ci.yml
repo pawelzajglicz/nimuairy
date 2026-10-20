@@ -80,6 +80,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      # Playwright runs the e2e specs without type-checking them.
+      - run: npx tsc -p e2e
       - run: npm run format:check
       - run: npm test -- --watch=false
       - run: npm run build

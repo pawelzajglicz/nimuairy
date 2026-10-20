@@ -1,0 +1,11 @@
+/* Type-checks the Playwright specs and config: the app and unit-test tsconfigs do not include them, and Playwright only strips types. */
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The Playwright config lies one level up, outside the default rootDir.
+    "rootDir": "..",
+    "types": ["node"]
+  },
+  "include": ["**/*.ts", "../playwright.config.ts"]
+}
