@@ -1,4 +1,4 @@
-import type { Position } from './battle-state';
+import type { Board, Position } from './battle-state';
 
 /**
  * Cells covered by an object at `anchor`. Derived on demand rather than
@@ -21,4 +21,13 @@ export function positionKey(position: Position): string {
 
 export function samePosition(a: Position, b: Position): boolean {
   return a.x === b.x && a.y === b.y;
+}
+
+export function isOnBoard(
+  board: Pick<Board, 'width' | 'height'>,
+  cell: Position,
+): boolean {
+  return (
+    cell.x >= 0 && cell.y >= 0 && cell.x < board.width && cell.y < board.height
+  );
 }

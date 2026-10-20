@@ -8,13 +8,14 @@ import type {
 } from '../api/generated/model';
 import type {
   BattleState,
+  Board,
   Orb,
   Position,
   TerrainCell,
   Unit,
   Wall,
 } from './domain/battle-state';
-import { validateNewBattle } from './domain/new-battle';
+import { type NewBattleError, validateNewBattle } from './domain/new-battle';
 
 /**
  * Converts the backend's initial battle state into the domain model.
@@ -25,8 +26,14 @@ export function toBattleState(response: BattleStateResponse): BattleState {
 
   const state: BattleState = {
     board: {
-      width: required(board.width, 'board.width'),
-      height: required(board.height, 'board.height'),
+      width: positiveInteger(
+        required(board.width, 'board.width'),
+        'board.width',
+      ),
+      height: positiveInteger(
+        required(board.height, 'board.height'),
+        'board.height',
+      ),
       terrain: required(board.terrain, 'board.terrain').map(toTerrainCell),
     },
     orbs: required(response.orbs, 'orbs').map(toOrb),
@@ -42,12 +49,20 @@ export function toBattleState(response: BattleStateResponse): BattleState {
 
   const validated = validateNewBattle(state);
   if (!validated.ok) {
-    const { side, reason } = validated.error;
     throw new Error(
-      `Battle state response is not a valid new battle: ${side} orb ${reason}`,
+      `Battle state response is not a valid new battle: ${describeNewBattleError(validated.error, state.board)}`,
     );
   }
   return validated.value;
+}
+
+function describeNewBattleError(error: NewBattleError, board: Board): string {
+  if (error.type === 'INVALID_ORBS') {
+    return `${error.side} orb ${error.reason}`;
+  }
+  const subject =
+    error.object === 'TERRAIN' ? 'TERRAIN' : `${error.object} ${error.id}`;
+  return `${subject} at (${error.cell.x},${error.cell.y}) is outside the ${board.width}x${board.height} board`;
 }
 
 function toUnit(dto: UnitDto): Unit {
@@ -139,8 +154,8 @@ function toTerrainCell(dto: TerrainCellDto): TerrainCell {
 
 function toPosition(dto: PositionDto): Position {
   return {
-    x: required(dto.x, 'position.x'),
-    y: required(dto.y, 'position.y'),
+    x: integer(required(dto.x, 'position.x'), 'position.x'),
+    y: integer(required(dto.y, 'position.y'), 'position.y'),
   };
 }
 
@@ -160,12 +175,27 @@ function required<T>(value: T | null | undefined, field: string): T {
  * The engine relies on these statistics being positive integers: AP are
  * integers, and a zero cost factor would make steps free, breaking
  * pathfinding's positive-cost assumption; a maximum HP of 0 would mean an
- * object that starts destroyed. The OpenAPI type is only `number`.
+ * object that starts destroyed, and a board needs at least one column and
+ * row. The OpenAPI type is only `number`.
  */
 function positiveInteger(value: number, field: string): number {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(
       `Battle state response has invalid ${field}: ${value}, expected a positive integer`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Coordinates and footprint offsets count whole cells; a fractional one would
+ * name no cell. Whether a cell lies on the board is a domain rule, checked by
+ * validateNewBattle.
+ */
+function integer(value: number, field: string): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(
+      `Battle state response has invalid ${field}: ${value}, expected an integer`,
     );
   }
   return value;
