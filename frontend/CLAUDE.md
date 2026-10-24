@@ -13,6 +13,9 @@ Generate files with `ng generate`, not by hand.
 - No static `style="..."` attributes or inline scripts: the production CSP (`nginx.conf`) blocks
   them, while `ng serve` sends no CSP, so it only breaks after deploy. Use classes or `[style.x]`
   bindings, which Angular applies through the CSSOM.
+- Spec files import the Vitest functions they use (`import { describe, it, expect } from 'vitest';`)
+  instead of relying on `vitest/globals` from `tsconfig.spec.json`: IntelliJ doesn't resolve those
+  globals and reports `TS2593: Cannot find name 'describe'`, even though `ng test` passes.
 
 ## Recommendations
 
