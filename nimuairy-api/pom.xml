@@ -19,6 +19,7 @@
 		<!-- Spring Boot 4.1.1 manages Tomcat 11.0.24 (CVE-2026-65182, CVE-2026-65905,
 		     CVE-2026-68525). Remove once the parent manages 11.0.25 or later. -->
 		<tomcat.version>11.0.27</tomcat.version>
+		<opentelemetry-javaagent.version>2.32.0</opentelemetry-javaagent.version>
 	</properties>
 
 	<dependencies>
@@ -136,5 +137,64 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- Local tracing: `./mvnw spring-boot:run -Potel -Dspring-boot.run.profiles=dev`, see
+		     docs/OBSERVABILITY.md. The agent jar is only copied into target/ and attached to the
+		     forked application JVM, so it is never on the classpath, and the default build and the
+		     Docker image are unaffected. -->
+		<profile>
+			<id>otel</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-dependency-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>copy-opentelemetry-javaagent</id>
+								<phase>process-resources</phase>
+								<goals>
+									<goal>copy</goal>
+								</goals>
+								<configuration>
+									<artifactItems>
+										<artifactItem>
+											<groupId>io.opentelemetry.javaagent</groupId>
+											<artifactId>opentelemetry-javaagent</artifactId>
+											<version>${opentelemetry-javaagent.version}</version>
+											<outputDirectory>${project.build.directory}/otel</outputDirectory>
+										</artifactItem>
+									</artifactItems>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.springframework.boot</groupId>
+						<artifactId>spring-boot-maven-plugin</artifactId>
+						<configuration>
+							<agents>
+								<!-- Versioned file name: dependency:copy keeps an existing file unless the
+								     source is newer, so a fixed name could leave a different agent
+								     version in place after a downgrade. -->
+								<agent>${project.build.directory}/otel/opentelemetry-javaagent-${opentelemetry-javaagent.version}.jar</agent>
+							</agents>
+							<environmentVariables>
+								<OTEL_SERVICE_NAME>nimuairy-api</OTEL_SERVICE_NAME>
+								<OTEL_TRACES_EXPORTER>console</OTEL_TRACES_EXPORTER>
+								<OTEL_METRICS_EXPORTER>none</OTEL_METRICS_EXPORTER>
+								<OTEL_LOGS_EXPORTER>none</OTEL_LOGS_EXPORTER>
+								<!-- The console exporter writes through the agent's own logger, which
+								     defaults to stderr; "application" routes it through the app's
+								     Logback console, i.e. stdout. -->
+								<OTEL_JAVAAGENT_LOGGING>application</OTEL_JAVAAGENT_LOGGING>
+							</environmentVariables>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>
