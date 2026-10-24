@@ -6,6 +6,13 @@
       "sourceType": "github",
       "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "106acf230014cbb43ca34e6410371321b56ca742f9ee0442e8ec05bf02eb0384"
+    },
+    "otel-instrumentation": {
+      "source": "ewoludev/otel-skills",
+      "ref": "d28228d2c1680b7186c99e56f74d8f31f2d0cc22",
+      "sourceType": "github",
+      "skillPath": "skills/otel-instrumentation/SKILL.md",
+      "computedHash": "d24964dcea1e0e3fc32d086a4cb6d10c98ddb72d0cf272b81a44a29c2981b7f7"
     }
   }
 }
