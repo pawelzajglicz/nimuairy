@@ -166,5 +166,11 @@ calling `/actuator/health` instead of `curl`, and why nginx listens on 8080 inst
 backend reports healthy, which includes a working database connection.
 
 For backend/frontend development outside Docker, see `nimuairy-api/CLAUDE.md` and
-`frontend/CLAUDE.md`. To run the backend locally with OpenTelemetry tracing, see
-`docs/OBSERVABILITY.md`.
+`frontend/CLAUDE.md`.
+
+### Observability
+
+`observability/` holds a local Prometheus, Tempo, Loki, Alloy and Grafana stack, and
+`compose.observability*.yaml` attach the backend to it with the OpenTelemetry Java agent. Neither
+is used by a plain `docker compose up` or in production. How to run, verify and update it, and
+the earlier local tracing stage, are in `docs/OBSERVABILITY.md`.
