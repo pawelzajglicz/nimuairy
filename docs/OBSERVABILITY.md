@@ -232,9 +232,11 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
 
 ### Update
 
-- **Stack images**: change the tag in `observability/compose.yaml` after reading the release
-  notes, then `docker compose -f observability/compose.yaml config -q`, `pull`, `up -d --wait`
-  and run the checks above. The tags were tested together upstream, so bump one at a time.
+- **Stack images**: Dependabot proposes tag bumps for `observability/compose.yaml` (weekly, after
+  a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes,
+  then check out the change and run `docker compose -f observability/compose.yaml config -q`,
+  `pull`, `up -d --wait` and the checks above before merging. The tags were tested together
+  upstream, so take one bump at a time.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).

@@ -80,7 +80,11 @@ updates:
       default-days: 7
 
   - package-ecosystem: docker-compose
-    directory: /
+    directories:
+      - /
+      # The observability stack pins its own images; bumps are checked with the
+      # verification steps in docs/OBSERVABILITY.md.
+      - /observability
     registries:
       - dhi
     schedule:
