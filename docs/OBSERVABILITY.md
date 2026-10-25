@@ -148,6 +148,8 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
 | Grafana trace-to-metrics uses `http_server_request_duration_seconds` | The course queried its own Node metric |
+| Image tags | Dependabot updates them here; the course keeps its own. Never take the course's tags over, they are older |
+| Tempo: no `ingester` and `compactor` blocks; the 7-day retention is `overrides.defaults.compaction.block_retention` | Tempo 3 removed both blocks and refuses to start with them (`field ingester not found`); the course still runs Tempo 2.10 |
 
 `steps.md` was not copied; its content is in this document.
 
@@ -210,8 +212,8 @@ and queries silently match nothing. Generate some traffic first:
 for i in $(seq 90); do curl -s -o /dev/null http://127.0.0.1:8000/api/v1/battles/demo; sleep 1; done
 ```
 
-A trace becomes searchable in Tempo 10–15 s after its request (exporter batch plus Tempo's
-`trace_idle_period`).
+Tempo returns a trace by ID about 2 s after its request, but TraceQL search finds it only after
+about 30 s (measured with Tempo 3.1).
 
 | Signal | Check | Expected |
 |---|---|---|
@@ -237,8 +239,8 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
 - **Stack images**: Dependabot proposes tag bumps for `observability/compose.yaml` (weekly, after
   a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes,
   then check out the change and run `docker compose -f observability/compose.yaml config -q`,
-  `pull`, `up -d --wait` and the checks above before merging. The tags were tested together
-  upstream, so take one bump at a time.
+  `pull`, `up -d --wait` and the checks above before merging; CI does not start the stack. Take
+  one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).
@@ -254,6 +256,13 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
   `GF_FEATURE_TOGGLES_ENABLE` is deprecated. Loki logs one `empty ring` error while starting, and
   Tempo warns that the metrics generator is not configured. These flags come from the course and
   are kept as they are.
+- Grafana logs errors at startup for the provisioning directories the stack does not use
+  (`dashboards`, `plugins`, `alerting`) and for a failed background install of the bundled
+  `elasticsearch` plugin. Neither affects the provisioned datasources.
+- Tempo 3 logs `error calling scheduler … no jobs found` about once a minute while it has no
+  compaction work ([grafana/tempo#7666](https://github.com/grafana/tempo/issues/7666)). At start it
+  also warns about empty worker and scheduler addresses in single-binary mode and an `unowned file
+  entry` in the WAL.
 - With the agent attached, the JVM prints one plain-text line on stderr (`Sharing is only
   supported for boot loader classes…`). In Loki it is in the `logstream="stderr"` stream; add
   `| __error__=""` after `| json` to hide lines that are not JSON.
