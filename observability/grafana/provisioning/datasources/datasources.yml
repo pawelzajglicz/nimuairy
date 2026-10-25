@@ -57,10 +57,10 @@ datasources:
         filterByTraceID: true
         filterBySpanID: false
         tags:
+          # Alloy maps the container label observability.app to the Loki label "app";
+          # there are no "service" or "namespace" labels to match.
           - key: service.name
-            value: service
-          - key: service.namespace
-            value: namespace
+            value: app
         customQuery: true
         query: '{$${__tags}} |= "$${__trace.traceId}"'
       tracesToMetrics:
@@ -71,7 +71,8 @@ datasources:
           - key: service.name
             value: service_name
         queries:
+          # The Java agent's http.server.request.duration, as named after the Prometheus translation.
           - name: 'Request rate'
-            query: 'sum(rate(app_request_duration_count{$$__tags}[5m]))'
+            query: 'sum(rate(http_server_request_duration_seconds_count{$$__tags}[5m]))'
           - name: 'p95 latency'
-            query: 'histogram_quantile(0.95, sum(rate(app_request_duration_bucket{$$__tags}[5m])) by (le))'
+            query: 'histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{$$__tags}[5m])) by (le))'
