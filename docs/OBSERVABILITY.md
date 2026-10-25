@@ -109,7 +109,9 @@ Collector:
 | Logs | Logback JSON on stdout → Docker → Alloy (`loki.source.docker`) → Loki |
 
 Grafana links the three. A log line's `trace_id` opens the trace in Tempo, a span opens its log
-lines in Loki, and a span opens the request rate and p95 latency in Prometheus.
+lines in Loki, and a span opens the request rate and p95 latency in Prometheus. A point on the
+latency graph opens the trace of a request it counts
+([stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)).
 
 ### Files
 
@@ -120,6 +122,7 @@ lines in Loki, and a span opens the request rate and p95 latency in Prometheus.
 | `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `nimuairy-observability` network |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify)) |
+| `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
 (`down -v`) without touching Grafana or the stored telemetry. A plain `docker compose up`
@@ -212,9 +215,10 @@ bash scripts/observability-smoke-test.sh
 ```
 
 It waits for every service to be ready, checks Grafana's three datasources and the Prometheus
-targets, and sends a probe through each path: an OTLP trace to Tempo and the logs of a container
-labelled `observability.app` through Alloy to Loki. CI's `observability` job starts the stack and
-runs it on every PR that touches the stack, the overlay files or the script. Set `GRAFANA_AUTH`
+targets, checks that Prometheus stores exemplars and Grafana links them to Tempo, and sends a probe
+through each path: an OTLP trace to Tempo and the logs of a container labelled `observability.app`
+through Alloy to Loki. CI's `observability` job starts the stack and runs it on every PR that
+touches the stack, the overlay files or the script. Set `GRAFANA_AUTH`
 (default `admin:admin`) if you changed Grafana's password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
@@ -247,19 +251,26 @@ Query Prometheus with `curl -sG 127.0.0.1:9090/api/v1/query --data-urlencode 'qu
 Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query=...'
 --data-urlencode since=15m`, or use Grafana's Explore view.
 
+Fetching `/metrics` by hand, as in the first metrics check, discards the exemplars the backend
+collected since the last scrape, so Prometheus never stores them
+([stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)).
+
 ### Update
 
 - **Stack images**: Dependabot proposes tag bumps for `observability/compose.yaml` (weekly, after
   a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes
   and wait for CI's `observability` job, which starts the stack with the new image and runs the
   smoke test. It does not start the backend, so for a bump that can change what the app sees
-  (Tempo's OTLP intake, Loki or Grafana queries) also run the backend checks above before merging.
+  (Tempo's OTLP intake, Prometheus scraping, Loki or Grafana queries) also run the backend checks
+  above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).
 - **Agent version**: change `opentelemetry-javaagent.version` in `nimuairy-api/pom.xml`. The
-  local `otel` profile and the image both read it; rebuild the image.
+  local `otel` profile and the image both read it; rebuild the image. Then run
+  `bash scripts/observability-exemplar-check.sh`: the exporter that writes the exemplars ships
+  inside the agent.
 - **A newer course stack**: run the `diff` from
   [Where the stack comes from](#where-the-stack-comes-from) against the new tag. Differences that
   are not in the table there come from the course and can be taken over.
@@ -284,3 +295,80 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
   every container on the host, including nginx access logs with client IPs. Server spans record
   `client.address` and `user_agent.original`. Grafana uses `admin`/`admin`. Running it on the VPS
   needs separate hardening and is not part of this stage.
+
+## Stage 3: from a metric to its trace (exemplars)
+
+A point on the HTTP latency graph in Grafana links to the trace of a request it counts. The link
+comes from an *exemplar*: one measurement stored next to a histogram bucket, together with the
+`trace_id` and `span_id` of the span that was active when it was recorded.
+
+Stage 2 already had every piece in place, so this stage changed no application code and no
+configuration. It adds checks and this section. The course's stack is unchanged up to its
+`solution-metrics-to-traces-v2` tag too. The course's Node app needed `prom-client` code for this
+stage, but the Java agent's exporter writes exemplars on its own.
+
+| Step | Where | What happens |
+|---|---|---|
+| Record | OTel SDK in the agent | The default exemplar filter, `trace_based`, keeps a measurement only while a sampled span is active, so a request's exemplar names its SERVER span. Each histogram bucket keeps one exemplar, the latest, until the next scrape |
+| Expose | The agent's Prometheus exporter, `:9464/metrics` | Writes exemplars only in the OpenMetrics format, as `# {span_id="…",trace_id="…"} <value> <timestamp>` after a bucket line. The plain text format (`text/plain; version=0.0.4`) has none |
+| Store | Prometheus | Asks for OpenMetrics first (its default `scrape_protocols`) and keeps the exemplars because of `--enable-feature=exemplar-storage` |
+| Link | Grafana | The Prometheus datasource's `exemplarTraceIdDestinations` turns the exemplar label `trace_id` into a link to the Tempo datasource |
+
+### Verify
+
+With the stack and the app running as in [stage 2](#run-1):
+
+```bash
+bash scripts/observability-exemplar-check.sh
+```
+
+It sends requests to `/api/v1/battles/demo` and checks, in this order, that:
+
+1. Prometheus stores an exemplar of that route from its own scrape (`/api/v1/query_exemplars`).
+2. Tempo has the trace with that `trace_id`, and the exemplar's `span_id` is its SERVER span
+   `GET /api/v1/battles/demo`.
+3. Grafana returns the exemplar through its Prometheus datasource (`/api/ds/query`).
+4. `/metrics` shows a bucket line with an exemplar when asked for OpenMetrics.
+
+It takes about 15 s. CI runs only the smoke test, which checks the stack's side without the
+backend: Prometheus stores exemplars, and Grafana links them to Tempo.
+
+Grafana's frontend adds the link itself, so check it in the browser:
+
+1. Generate traffic, for example with the loop from stage 2's [Verify](#verify-1).
+2. In Explore, choose Prometheus and enter in Code mode:
+   `histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name="nimuairy-api"}[2m])))`.
+   Under Options, set Type to Range and turn on Exemplars.
+3. Hover over an exemplar marker on the graph and choose **View in Tempo**. The trace opens in a
+   split view. Its Trace ID is the exemplar's `trace_id`, and its root span is the request, for
+   example `GET /api/v1/battles/demo`.
+4. From that trace, the links to the span's logs in Loki and to the request rate and p95 latency
+   in Prometheus work as in stage 2.
+
+To see raw exemplars, ask for OpenMetrics. This takes the exemplars away from Prometheus (see
+below):
+
+```bash
+curl -s -H 'Accept: application/openmetrics-text; version=1.0.0' http://127.0.0.1:9464/metrics | grep ' # {'
+```
+
+```
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/api/v1/battles/demo",...,le="0.005"} 112 # {span_id="a6e9a9361de138f7",trace_id="4949ce1fe3eb040f3cd3a025356a8ba7"} 0.004837072 1792957872.270
+```
+
+### Limits
+
+- **Every scrape of `/metrics` resets the exemplars.** The backend holds only the exemplars
+  recorded since the previous scrape, and any scrape takes them: a manual `curl`, or the `wget` in
+  stage 2's checks. Prometheus then never stores them. A scrape in the plain text format discards
+  them without showing them. The check script reads `/metrics` last for this reason.
+- An exemplar is a sample: at most one per bucket per scrape interval, not one per request.
+- Only sampled spans produce exemplars. The agent's default sampler (`parentbased_always_on`)
+  samples every request. With a lower sampling rate, exemplars would follow the sampled traces.
+- The image's health check calls `/actuator/health` every 30 s, so that route always has
+  exemplars.
+- Prometheus keeps the latest 100 000 exemplars (`storage.exemplars.max_exemplars`), independently
+  of Tempo's 7-day retention. An old exemplar can point to a trace that Tempo has already deleted.
+- On a `histogram_quantile(...)` graph, the exemplars come from the bucket series in the query.
+  A marker shows the measured duration, not the quantile.
+- `trace_id` and `span_id` are exemplar labels, not series labels, so they add no series.
