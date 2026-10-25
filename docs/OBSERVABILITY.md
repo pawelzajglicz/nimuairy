@@ -266,7 +266,7 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
 
 ### Known warnings and limits
 
-- Prometheus 3.11 logs that `--enable-feature=native-histograms` is a no-op. Grafana 13 logs that
+- Prometheus 3.11+ logs that `--enable-feature=native-histograms` is a no-op. Grafana 13 logs that
   `GF_FEATURE_TOGGLES_ENABLE` is deprecated. Loki logs one `empty ring` error while starting, and
   Tempo warns that the metrics generator is not configured. These flags come from the course and
   are kept as they are.
