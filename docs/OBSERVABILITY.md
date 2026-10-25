@@ -119,6 +119,7 @@ lines in Loki, and a span opens the request rate and p95 latency in Prometheus.
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `nimuairy-observability` network |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
+| `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
 (`down -v`) without touching Grafana or the stored telemetry. A plain `docker compose up`
@@ -204,7 +205,19 @@ for this.
 
 ### Verify
 
-The commands below use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
+Check the stack on its own first:
+
+```bash
+bash scripts/observability-smoke-test.sh
+```
+
+It waits for every service to be ready, checks Grafana's three datasources and the Prometheus
+targets, and sends a probe through each path: an OTLP trace to Tempo and the logs of a container
+labelled `observability.app` through Alloy to Loki. CI's `observability` job starts the stack and
+runs it on every PR that touches the stack, the overlay files or the script. Set `GRAFANA_AUTH`
+(default `admin:admin`) if you changed Grafana's password.
+
+The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
 and queries silently match nothing. Generate some traffic first:
 
@@ -237,10 +250,11 @@ Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'que
 ### Update
 
 - **Stack images**: Dependabot proposes tag bumps for `observability/compose.yaml` (weekly, after
-  a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes,
-  then check out the change and run `docker compose -f observability/compose.yaml config -q`,
-  `pull`, `up -d --wait` and the checks above before merging; CI does not start the stack. Take
-  one bump at a time: a major version can need config changes, as Tempo 3 did.
+  a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes
+  and wait for CI's `observability` job, which starts the stack with the new image and runs the
+  smoke test. It does not start the backend, so for a bump that can change what the app sees
+  (Tempo's OTLP intake, Loki or Grafana queries) also run the backend checks above before merging.
+  Take one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).

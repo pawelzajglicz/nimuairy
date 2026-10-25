@@ -31,6 +31,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
+      observability: ${{ steps.filter.outputs.observability }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,24 +42,30 @@ jobs:
         run: |
           frontend=false
           backend=false
+          observability=false
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
             frontend=true
             backend=true
+            observability=true
           else
             while read -r file; do
               case "$file" in
-                .github/workflows/* | nimuairy-api/openapi.json) frontend=true; backend=true ;;
+                .github/workflows/*) frontend=true; backend=true; observability=true ;;
+                nimuairy-api/openapi.json) frontend=true; backend=true ;;
                 frontend/*) frontend=true ;;
                 nimuairy-api/*) backend=true ;;
+                observability/* | compose.yaml | compose.override.yaml | compose.observability*.yaml | \
+                  scripts/observability-smoke-test.sh) observability=true ;;
               esac
             # --no-renames lists both paths of a move, so moving a file out of an area still
             # runs that area's checks.
             done < <(git diff --no-renames --name-only HEAD^1 HEAD)
           fi
-          echo "frontend=$frontend backend=$backend"
+          echo "frontend=$frontend backend=$backend observability=$observability"
           {
             echo "frontend=$frontend"
             echo "backend=$backend"
+            echo "observability=$observability"
           } >> "$GITHUB_OUTPUT"
 
   frontend:
@@ -113,6 +120,33 @@ jobs:
           cache: maven
       - run: ./mvnw test
 
+  # Nothing else in CI starts the local stack in observability/, yet Dependabot bumps its images
+  # and a major version can need config changes (Tempo 3 did). `up --wait` alone would pass a
+  # broken stack: Loki, Tempo and Alloy have no healthcheck, so a service that crash-loops on its
+  # config still counts as started. The smoke test polls each service instead. The backend is not
+  # started, only its overlay validated; docs/OBSERVABILITY.md lists the checks that need it.
+  observability:
+    needs: changes
+    if: needs.changes.outputs.observability == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate the Compose files
+        run: |
+          docker compose -f observability/compose.yaml config -q
+          docker compose -f compose.yaml -f compose.override.yaml \
+            -f compose.observability.yaml -f compose.observability.dev.yaml config -q
+      - run: docker compose -f observability/compose.yaml up -d --wait --wait-timeout 180
+      - run: bash scripts/observability-smoke-test.sh
+      - name: Stack status and logs
+        if: failure()
+        run: |
+          docker compose -f observability/compose.yaml ps -a
+          docker compose -f observability/compose.yaml logs --no-color
+
   # Nightly-only: catches advisories published after the last PR. Only high/critical fail the
   # run; lower ones are left to the weekly Dependabot updates. Unlike the Trivy SCA scan, it also
   # covers devDependencies, i.e. the build tooling that runs in CI.
@@ -135,7 +169,7 @@ jobs:
   # The single check to mark as required in branch protection: skipped jobs count as passed,
   # failed or cancelled ones do not.
   ci-result:
-    needs: [changes, frontend, backend, npm-audit]
+    needs: [changes, frontend, backend, observability, npm-audit]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
