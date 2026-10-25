@@ -115,9 +115,9 @@ lines in Loki, and a span opens the request rate and p95 latency in Prometheus.
 
 | File | Role |
 |---|---|
-| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `observability` network |
+| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
-| `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `observability` network |
+| `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `nimuairy-observability` network |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -143,6 +143,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Change | Why |
 |---|---|
 | Project name `nimuairy-observability` | Its volumes never mix with a copy of the course stack |
+| Network name `nimuairy-observability` (course: `observability`) | A generic name could clash with another project's network or a copy of the course stack. The Compose key stays `observability`, so the services' `networks:` entries are unchanged |
 | Every port bound to `127.0.0.1` | As in `compose.override.yaml`: Docker's port publishing bypasses the host firewall, and Grafana's `admin/admin` and the unauthenticated Loki/Tempo endpoints must stay off the LAN |
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
@@ -161,8 +162,9 @@ docker compose -f compose.yaml -f compose.override.yaml \
   -f compose.observability.yaml -f compose.observability.dev.yaml up -d --build --wait
 ```
 
-Without the stack the second command fails with `network observability declared as external,
-but could not be found`; nothing is sent anywhere else. The overlay only changes the backend.
+Without the stack the second command fails, because the external network
+`nimuairy-observability` does not exist; nothing is sent anywhere else. The overlay only changes
+the backend.
 Run the second command without the two overlay files to go back to the backend without the
 agent.
 

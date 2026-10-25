@@ -15,7 +15,7 @@ scrape_configs:
       - targets: ["alloy:12345"]
 
   # The OpenTelemetry Java agent's Prometheus exporter in the backend. The target is down
-  # until compose.observability.yaml attaches the backend to the observability network.
+  # until compose.observability.yaml attaches the backend to the nimuairy-observability network.
   - job_name: nimuairy-api
     metrics_path: /metrics
     static_configs:

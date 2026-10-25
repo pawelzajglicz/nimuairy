@@ -1,4 +1,4 @@
-# Sends backend telemetry to the stack in observability/ over its "observability" network.
+# Sends backend telemetry to the stack in observability/ over its "nimuairy-observability" network.
 # Start the stack first, then combine this file with a variant file, e.g. for development:
 #   docker compose -f compose.yaml -f compose.override.yaml \
 #     -f compose.observability.yaml -f compose.observability.dev.yaml up -d --build
@@ -30,4 +30,5 @@ services:
 
 networks:
   observability:
+    name: nimuairy-observability
     external: true

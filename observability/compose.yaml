@@ -6,7 +6,7 @@ name: nimuairy-observability
 
 networks:
   observability:
-    name: observability
+    name: nimuairy-observability
     driver: bridge
 
 volumes:
