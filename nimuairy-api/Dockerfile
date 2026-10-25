@@ -48,4 +48,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     --start-period=90s --start-interval=3s \
     CMD ["java", "-XX:+UseSerialGC", "-Xmx16m", "-cp", "/app/healthcheck", "HealthCheck"]
 
+# Runs without the OpenTelemetry agent. compose.observability.yaml overrides this
+# entrypoint to add -javaagent, so a change to the start command must be copied
+# there too.
 ENTRYPOINT ["java", "-jar", "app.jar"]
