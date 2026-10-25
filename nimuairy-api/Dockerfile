@@ -13,6 +13,12 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B dependency:go-offline
 
+# The OpenTelemetry agent ships in every image but is attached only by
+# compose.observability.yaml. Reusing the otel profile's copy execution keeps
+# the agent version in one place (pom.xml).
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B -Potel -Dmdep.stripVersion=true dependency:copy@copy-opentelemetry-javaagent
+
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -DskipTests package
 
@@ -30,6 +36,7 @@ USER 65532
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 COPY --from=build /app/healthcheck ./healthcheck
+COPY --from=build /app/target/otel/opentelemetry-javaagent.jar ./otel/opentelemetry-javaagent.jar
 
 ENV SPRING_PROFILES_ACTIVE=docker
 EXPOSE 8000
@@ -41,4 +48,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     --start-period=90s --start-interval=3s \
     CMD ["java", "-XX:+UseSerialGC", "-Xmx16m", "-cp", "/app/healthcheck", "HealthCheck"]
 
+# Runs without the OpenTelemetry agent. compose.observability.yaml overrides this
+# entrypoint to add -javaagent, so a change to the start command must be copied
+# there too.
 ENTRYPOINT ["java", "-jar", "app.jar"]

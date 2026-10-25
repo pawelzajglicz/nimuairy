@@ -141,8 +141,9 @@
 	<profiles>
 		<!-- Local tracing: `./mvnw spring-boot:run -Potel -Dspring-boot.run.profiles=dev`, see
 		     docs/OBSERVABILITY.md. The agent jar is only copied into target/ and attached to the
-		     forked application JVM, so it is never on the classpath, and the default build and the
-		     Docker image are unaffected. -->
+		     forked application JVM, so it is never on the classpath and the default build is
+		     unaffected. The Dockerfile runs the copy execution on its own to put the agent in the
+		     image; only compose.observability.yaml attaches it there. -->
 		<profile>
 			<id>otel</id>
 			<build>

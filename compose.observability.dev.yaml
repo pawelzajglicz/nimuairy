@@ -1,0 +1,8 @@
+# Development variant of compose.observability.yaml.
+services:
+  backend:
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=development
+    ports:
+      # Host-side diagnostics only; Prometheus scrapes over the nimuairy-observability network.
+      - "127.0.0.1:9464:9464"
