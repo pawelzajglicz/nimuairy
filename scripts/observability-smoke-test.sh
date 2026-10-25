@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Smoke test for the running stack in observability/: every service is ready, Grafana reaches its
-# datasources, and a trace, a log line and a scrape each make it through (see docs/OBSERVABILITY.md,
-# Verify). CI runs it after `docker compose -f observability/compose.yaml up -d --wait`. It does not
-# need the backend; the checks that do stay manual.
+# datasources, a trace, a log line and a scrape each make it through, and exemplars can be stored and
+# linked to Tempo (see docs/OBSERVABILITY.md, Verify). CI runs it after
+# `docker compose -f observability/compose.yaml up -d --wait`. It does not need the backend; the
+# checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars).
 set -euo pipefail
 
 GRAFANA_AUTH=${GRAFANA_AUTH:-admin:admin}
@@ -31,6 +32,11 @@ ready() { curl -fsS --max-time 5 "$1"; }
 datasource_ok() {
   curl -fsS --max-time 10 -u "$GRAFANA_AUTH" "127.0.0.1:3000/api/datasources/uid/$1/health" | grep -q '"status":"OK"'
 }
+# Reads the provisioning as Grafana loaded it, not the file. Grafana returns jsonData keys sorted.
+exemplars_link_to_tempo() {
+  curl -fsS --max-time 10 -u "$GRAFANA_AUTH" 127.0.0.1:3000/api/datasources/uid/prometheus |
+    grep -qE '"exemplarTraceIdDestinations":\[[^]]*\{"datasourceUid":"tempo","name":"trace_id"'
+}
 # Compares the result of a Prometheus scalar-like query (count(...)) with the expected value.
 prometheus_equals() {
   curl -fsSG --max-time 5 127.0.0.1:9090/api/v1/query --data-urlencode "query=$1" |
@@ -50,10 +56,14 @@ check "Grafana ready" 120 ready 127.0.0.1:3000/api/health
 for uid in prometheus loki tempo; do
   check "Grafana datasource $uid" 60 datasource_ok "$uid"
 done
+check "Grafana links exemplars to Tempo" 60 exemplars_link_to_tempo
 
 # The nimuairy-api target is down without the backend, but it must be configured.
 check "Prometheus scrapes itself and Alloy" 60 prometheus_equals 'count(up{job=~"prometheus|alloy"} == 1)' 2
 check "Prometheus has the nimuairy-api job" 60 prometheus_equals 'count(up{job="nimuairy-api"})' 1
+# Without --enable-feature=exemplar-storage the limit is 0 and Prometheus drops every exemplar it scrapes.
+check "Prometheus stores exemplars" 60 \
+  prometheus_equals 'count(prometheus_tsdb_exemplar_max_exemplars{job="prometheus"} > 0)' 1
 
 # OTLP/JSON takes hex IDs. Tempo returns a trace by ID within seconds; search would take ~30 s.
 trace_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
