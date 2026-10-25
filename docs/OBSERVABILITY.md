@@ -121,7 +121,7 @@ latency graph opens the trace of a request it counts
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `nimuairy-observability` network |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
-| `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify)) |
+| `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
