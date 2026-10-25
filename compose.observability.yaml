@@ -1,0 +1,33 @@
+# Sends backend telemetry to the stack in observability/ over its "observability" network.
+# Start the stack first, then combine this file with a variant file, e.g. for development:
+#   docker compose -f compose.yaml -f compose.override.yaml \
+#     -f compose.observability.yaml -f compose.observability.dev.yaml up -d --build
+# See docs/OBSERVABILITY.md.
+services:
+  backend:
+    # Mirrors the Dockerfile ENTRYPOINT plus -javaagent. JAVA_TOOL_OPTIONS would also attach the
+    # agent to the HEALTHCHECK JVM, which would then fight the app for port 9464.
+    entrypoint: ["java", "-javaagent:/app/otel/opentelemetry-javaagent.jar", "-jar", "app.jar"]
+    environment:
+      OTEL_SERVICE_NAME: nimuairy-api
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+      # Prometheus pull instead of OTLP push: the agent serves /metrics itself.
+      OTEL_METRICS_EXPORTER: prometheus
+      OTEL_EXPORTER_PROMETHEUS_HOST: 0.0.0.0
+      OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
+      # Logs reach Loki from stdout via Alloy, so the agent's OTLP log export stays off.
+      OTEL_LOGS_EXPORTER: none
+      # Agent warnings (e.g. failed span exports) go through Logback, i.e. JSON on stdout.
+      OTEL_JAVAAGENT_LOGGING: application
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: logstash
+    labels:
+      # Alloy turns this into the Loki label "app".
+      observability.app: nimuairy-api
+    networks:
+      - observability
+
+networks:
+  observability:
+    external: true
