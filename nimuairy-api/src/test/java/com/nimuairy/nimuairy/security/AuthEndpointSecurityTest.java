@@ -2,8 +2,11 @@ package com.nimuairy.nimuairy.security;
 
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@ExtendWith(OutputCaptureExtension.class)
 class AuthEndpointSecurityTest {
 
     @Autowired
@@ -69,6 +73,24 @@ class AuthEndpointSecurityTest {
         mockMvc.perform(get("/api/auth/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenCookie.getValue()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void login_withBadCredentials_logsRejectionWithoutCredentials(CapturedOutput output) throws Exception {
+        String username = uniqueUsername();
+        String password = "secret-" + UUID.randomUUID();
+
+        mockMvc.perform(post("/api/auth/login").with(xsrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"%s","password":"%s"}
+                                """.formatted(username, password)))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(output.getOut())
+                .contains("Login rejected: invalid credentials")
+                .doesNotContain(username)
+                .doesNotContain(password);
     }
 
     @Test
