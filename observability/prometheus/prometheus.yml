@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: local
+    stack: observability
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+
+  # Example application target. Adjust hostname/port/path to your app's
+  # Prometheus exposition endpoint (works for any language — Java, .NET,
+  # Node, Python, Go, etc.). Attach the app container to the
+  # `observability` external network for DNS to resolve.
+  - job_name: app
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app:9464"]
+        labels:
+          service: app
