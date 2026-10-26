@@ -13,6 +13,13 @@
       "sourceType": "github",
       "skillPath": "skills/otel-instrumentation/SKILL.md",
       "computedHash": "d24964dcea1e0e3fc32d086a4cb6d10c98ddb72d0cf272b81a44a29c2981b7f7"
+    },
+    "otel-semantic-conventions": {
+      "source": "ewoludev/otel-skills",
+      "ref": "d28228d2c1680b7186c99e56f74d8f31f2d0cc22",
+      "sourceType": "github",
+      "skillPath": "skills/otel-semantic-conventions/SKILL.md",
+      "computedHash": "174a55d99863fdc2f93ccdf221ef444aedabbd35ef4bc3ef24b61be52ce6148c"
     }
   }
 }
