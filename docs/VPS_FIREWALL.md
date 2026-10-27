@@ -97,10 +97,13 @@ The deploy workflow does not copy this script, so copy it to the VPS yourself:
 
 1. **SSH.** From a new terminal, open a second SSH connection through the provider-mapped port.
    Close the first session only after the second one works.
-2. **App.** The public URL (the deploy's `SMOKE_URL`) should return 200:
+2. **App.** Check the exact URL the deploy's smoke test uses: the `SMOKE_URL` variable of the
+   `production` GitHub Environment. Replace `<SMOKE_URL>` with its value as it is, including any
+   path. As in the smoke test in `deploy-on-vps.yml`, the check passes when `curl -f` succeeds,
+   that is, for any status below 400 (redirects are not followed):
 
    ```bash
-   curl -fsS -o /dev/null -w '%{http_code}\n' https://<public-hostname>/
+   curl -fsS -o /dev/null -w '%{http_code}\n' --max-time 30 '<SMOKE_URL>'
    ```
 
 3. **Containers.** On the VPS, in `/var/nimuairy`:
