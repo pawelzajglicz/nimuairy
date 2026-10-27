@@ -43,6 +43,8 @@ Passing files explicitly skips `compose.override.yaml`, so no host ports are pub
 The app is reachable only through a Cloudflare Tunnel: the `cloudflared` container opens an
 outbound connection to Cloudflare, and the tunnel's route points at `http://frontend:8080`.
 Production also runs `cloudflare/cloudflared`, the only image not from DHI.
+The VPS firewall (UFW and the provider's) and `scripts/configure-ufw.sh` are described in
+[docs/VPS_FIREWALL.md](docs/VPS_FIREWALL.md).
 
 The VPS runs prebuilt images instead: `build-and-push.yml` pushes
 `ghcr.io/pawelzajglicz/nimuairy-{api,frontend}:<commit SHA>` on every master push, and the manual
