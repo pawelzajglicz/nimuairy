@@ -46,6 +46,8 @@ Production also runs `cloudflare/cloudflared`, the only image not from DHI.
 The VPS firewall (UFW and the provider's) and `scripts/configure-ufw.sh` are described in
 [docs/VPS_FIREWALL.md](docs/VPS_FIREWALL.md). Fail2ban, which bans addresses that keep failing SSH
 logins, and `scripts/configure-fail2ban.sh` are described in [docs/VPS_FAIL2BAN.md](docs/VPS_FAIL2BAN.md).
+Automatic Ubuntu security updates and `scripts/configure-unattended-upgrades.sh` are described in
+[docs/VPS_UNATTENDED_UPGRADES.md](docs/VPS_UNATTENDED_UPGRADES.md).
 
 The VPS runs prebuilt images instead: `build-and-push.yml` pushes
 `ghcr.io/pawelzajglicz/nimuairy-{api,frontend}:<commit SHA>` on every master push, and the manual
