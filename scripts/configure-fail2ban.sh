@@ -91,8 +91,28 @@ if ((${#packages[@]})); then
 fi
 command -v nft >/dev/null || fail "'nft' not found after installing nftables"
 
+lift_test_ban() {
+  fail2ban-client set sshd unbanip "$TEST_IPV4" "$TEST_IPV6" >/dev/null || return
+  test_ban_active=false
+}
+
+# Once the test ban below has started, any exit lifts it: an error, a failed check or a signal (a
+# dropped SSH session sends SIGHUP). The signal traps turn a signal into an exit so this runs, and
+# further signals are ignored while it does.
+cleanup() {
+  trap '' HUP INT TERM
+  if $test_ban_active && ! lift_test_ban; then
+    echo "WARNING: the test ban of $TEST_IPV4 and $TEST_IPV6 could not be lifted. It ends after the" \
+      "bantime, or run: fail2ban-client set sshd unbanip $TEST_IPV4 $TEST_IPV6" >&2
+  fi
+  rm -rf "$tmp"
+}
+test_ban_active=false
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # The new file is tested in a copy of /etc/fail2ban, so the live configuration changes only once the
 # whole configuration parses. The test only warns about a wrong value, which is why the values of the
 # running jail are checked as well.
@@ -207,6 +227,8 @@ if ((${#ssh_ports[@]} == 1)); then
 else
   dport="dport { ${ports//,/, } }"
 fi
+# Set before the ban, so a ban that fails halfway is lifted as well.
+test_ban_active=true
 fail2ban-client set sshd banip "$TEST_IPV4" "$TEST_IPV6" >/dev/null
 chain=$(nft list chain inet f2b-table f2b-chain 2>&1) || true
 blocked=true
@@ -217,7 +239,7 @@ for entry in "addr-set-sshd ip $TEST_IPV4" "addr6-set-sshd ip6 $TEST_IPV6"; do
     blocked=false
   fi
 done
-fail2ban-client set sshd unbanip "$TEST_IPV4" "$TEST_IPV6" >/dev/null
+lift_test_ban
 $blocked ||
   fail "a test ban of $TEST_IPV4 and $TEST_IPV6 did not produce a reject rule for port(s) $ports in" \
     "nftables, so bans would not block SSH. Current chain:"$'\n'"$chain"$'\n'"See the action errors in" \
