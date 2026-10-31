@@ -7,6 +7,7 @@ BACKUP_DIR=${BACKUP_DIR:-$(cd "$(dirname "$0")/.." && pwd)/backups}
 KEEP_DAYS=${KEEP_DAYS:-14}
 # rclone remote for the off-site copy (r2crypt: in the cron entry); empty keeps backups local only.
 BACKUP_REMOTE=${BACKUP_REMOTE:-}
+POSTGRES_CONTAINER=${POSTGRES_CONTAINER:-postgres-nimuairy}
 LABEL=${1:-daily}
 
 if [[ ! "$LABEL" =~ ^[a-z0-9-]+$ ]]; then
@@ -21,13 +22,20 @@ file="$BACKUP_DIR/nimuairy-$(date -u +%Y%m%dT%H%M%SZ)-$LABEL.dump"
 trap 'rm -f "$file.tmp"' EXIT
 
 # Runs inside the container: postgres is only on an internal network the host cannot reach, and its
-# local socket needs no password. The variables expand from the container's own environment.
-docker exec postgres-nimuairy sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$file.tmp"
+# local socket needs no password. The variables expand from the container's own environment. -w
+# makes a changed auth setup fail the dump instead of leaving it waiting for a password.
+docker exec "$POSTGRES_CONTAINER" sh -c 'pg_dump -w -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$file.tmp"
+# pg_dump writes to a pipe here, so the archive's table of contents is complete before any table
+# data and listing it would pass a truncated dump. Reading it all back decodes every data block.
+if ! docker exec -i "$POSTGRES_CONTAINER" pg_restore -f /dev/null < "$file.tmp"; then
+  echo "Backup validation failed, $file.tmp discarded" >&2
+  exit 1
+fi
 # Only a complete dump gets a name that rotation and upload pick up.
 mv "$file.tmp" "$file"
 echo "Dumped $file ($(du -h "$file" | cut -f1))"
 
-find "$BACKUP_DIR" -name 'nimuairy-*.dump' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'nimuairy-*.dump' -mtime +"$KEEP_DAYS" -delete
 
 # copy, not sync: local rotation must not delete off-site copies; the R2 bucket's lifecycle rule
 # handles their retention.
