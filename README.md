@@ -86,10 +86,12 @@ docker compose down -v
 
 `scripts/backup-db.sh` dumps the database (`pg_dump -Fc`) into `/var/nimuairy/backups`, keeps
 14 days locally and, with `BACKUP_REMOTE` set, copies the dumps to Cloudflare R2 through an
-rclone `crypt` remote, so they leave the VPS already encrypted. It runs daily from cron and before
-every rollout in `deploy-on-vps.yml`: rolling back `APP_SHA` reverts the code but not Liquibase
-migrations, so that pre-deploy dump is the way back to the previous schema. The deploy copies the
-script to the VPS; cron and rclone are set up once by hand.
+rclone `crypt` remote, so they leave the VPS already encrypted. A dump gets its final name only
+after `pg_restore` has read it back in full inside the container, so a truncated or corrupt dump
+fails the run, and with it the deploy, and is never kept or uploaded. It runs daily from cron and
+before every rollout in `deploy-on-vps.yml`: rolling back `APP_SHA` reverts the code but not
+Liquibase migrations, so that pre-deploy dump is the way back to the previous schema. The deploy
+copies the script to the VPS; cron and rclone are set up once by hand.
 
 One-time setup on the VPS, after the first deploy that copied the script:
 
@@ -119,15 +121,45 @@ One-time setup on the VPS, after the first deploy that copied the script:
    30 3 * * * deploy bash /var/nimuairy/scripts/backup-db.sh 2>&1 | logger -t nimuairy-backup
    ```
 
-Test a restore into a scratch database, leaving production untouched:
+`backup-db.sh` shows that a dump is a complete archive; `scripts/verify-db-backup.sh` shows that
+it restores. It takes the newest `nimuairy-*.dump` in `/var/nimuairy/backups` (by modification
+time) and, in the running `postgres-nimuairy` container:
+
+1. creates a temporary database with a unique name, `nimuairy_verify_<UTC time>_<PID>_<random>`;
+2. restores the dump into it with `pg_restore --exit-on-error --no-owner`, so any error fails it;
+3. runs a smoke test: `users`, `characters` and Liquibase's `databasechangelog` must exist and be
+   readable, and `databasechangelog` must have rows (one per applied migration); the other tables
+   may be empty, their row counts are only reported;
+4. drops the temporary database, also after a failure or Ctrl-C.
+
+It never touches the production database, stops nothing and starts no container, but the restore
+runs on the production instance and briefly holds a second copy of the data there, so run it
+outside busy hours. The deploy copies only `backup-db.sh`, so copy this script by hand, and again
+whenever it changes:
 
 ```bash
-f=$(ls -t /var/nimuairy/backups/*.dump | head -1)
-docker exec postgres-nimuairy sh -c 'createdb -U "$POSTGRES_USER" restore_test'
-docker exec -i postgres-nimuairy sh -c 'pg_restore -U "$POSTGRES_USER" -d restore_test --no-owner' < "$f"
-docker exec postgres-nimuairy sh -c 'psql -U "$POSTGRES_USER" -d restore_test -c "select count(*) from users"'
-docker exec postgres-nimuairy sh -c 'dropdb -U "$POSTGRES_USER" restore_test'
+scp -P <port> scripts/verify-db-backup.sh deploy@<host>:/var/nimuairy/scripts/
+ssh -p <port> deploy@<host> bash /var/nimuairy/scripts/verify-db-backup.sh
 ```
+
+The report at the end names the dump, the PostgreSQL version and the result of every step.
+`RESULT: PASSED` (exit status 0) means the dump restored, the smoke test passed and the temporary
+database is gone. `RESULT: FAILED at <stage>` (non-zero) names the step that failed: `create`, the
+temporary database could not be created; `restore`, the dump does not restore, so do not count on
+it and find out why before the next deploy; `smoke`, it restored but tables or data are missing;
+`cleanup`, the test passed but the temporary database is still there. A `WARNING` names a temporary
+database that is left behind, with the command that drops it. A run killed outright (`kill -9`, a
+reboot) can also leave one; the script drops only the database it created in that run, never older
+`nimuairy_verify_*` ones, so drop those by hand. `BACKUP_DIR` and `POSTGRES_CONTAINER` override the
+directory and the container. No cron entry runs it yet.
+
+It tests the local copy only, not that the off-site copy downloads from R2 and decrypts. For that,
+bring a dump back into an empty directory as for a production restore below and point the script
+at it: `BACKUP_DIR=/tmp/restore bash /var/nimuairy/scripts/verify-db-backup.sh`.
+
+`bash scripts/db-backup-test.sh` tests both scripts against fake `docker`, PostgreSQL tools and
+`rclone`. `bash scripts/db-backup-integration-test.sh` runs them against a throwaway container of
+the production PostgreSQL image (needs Docker and `docker login dhi.io`).
 
 Restoring production (an off-site dump first comes back with
 `rclone copy r2crypt: /tmp/restore --include '<file name>'`):
