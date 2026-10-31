@@ -128,8 +128,8 @@ time) and, in the running `postgres-nimuairy` container:
 1. creates a temporary database with a unique name, `nimuairy_verify_<UTC time>_<PID>_<random>`;
 2. restores the dump into it with `pg_restore --exit-on-error --no-owner`, so any error fails it;
 3. runs a smoke test: `users`, `characters` and Liquibase's `databasechangelog` must exist and be
-   readable, and `databasechangelog` must have rows (one per applied migration); the other tables
-   may be empty, their row counts are only reported;
+   readable, and `databasechangelog`, where Liquibase records every applied changeset, must have
+   rows; the other tables may be empty, their row counts are only reported;
 4. drops the temporary database, also after a failure or Ctrl-C.
 
 It never touches the production database, stops nothing and starts no container, but the restore
