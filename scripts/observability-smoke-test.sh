@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test for the running stack in observability/: every service is ready, Grafana reaches its
-# datasources, a trace, a log line and a scrape each make it through, and exemplars can be stored and
-# linked to Tempo (see docs/OBSERVABILITY.md, Verify). CI runs it after
+# datasources, a trace, a log line and a scrape each make it through, the logs of a container without
+# the observability.logs=true label stay out of Loki, and exemplars can be stored and linked to Tempo
+# (see docs/OBSERVABILITY.md, Verify). CI runs it after
 # `docker compose -f observability/compose.yaml up -d --wait`. It does not need the backend; the
 # checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars).
 set -euo pipefail
@@ -9,6 +10,12 @@ set -euo pipefail
 GRAFANA_AUTH=${GRAFANA_AUTH:-admin:admin}
 # Marks the probe trace and log line, so they never mix with the backend's.
 PROBE=observability-smoke-test
+# A container Alloy must not collect: it has observability.app but not observability.logs=true.
+UNLABELLED=$PROBE-unlabelled
+# Seconds to wait after the labelled container's log reaches Loki before checking that the unlabelled
+# one's did not: an ingestion margin, which also spans three of Alloy's discovery rounds
+# (refresh_interval = "5s" in observability/alloy/config.alloy).
+NEGATIVE_WAIT=20
 failures=()
 
 # Retries a check until it passes or the timeout (seconds) runs out. Loki, for one, reports ready
@@ -47,6 +54,14 @@ log_stored() {
   curl -fsSG --max-time 5 127.0.0.1:3100/loki/api/v1/query_range \
     --data-urlencode "query={app=\"$PROBE\"} |= \"$1\"" --data-urlencode since=5m | grep -q "$1"
 }
+# Searches every stream Alloy ships (loki.write adds stack="observability" to all of them). A failed
+# query proves nothing, so only an answered query without any stream counts as absent.
+log_absent() {
+  local body
+  body=$(curl -fsSG --max-time 5 127.0.0.1:3100/loki/api/v1/query_range \
+    --data-urlencode "query={stack=\"observability\"} |= \"$1\"" --data-urlencode since=5m) || return 1
+  grep -q '"status":"success"' <<<"$body" && grep -q '"result":\[\]' <<<"$body"
+}
 
 check "Prometheus ready" 120 ready 127.0.0.1:9090/-/ready
 check "Loki ready" 120 ready 127.0.0.1:3100/ready
@@ -81,16 +96,38 @@ else
 fi
 
 # A labelled container stands in for the backend: Alloy must ship its stdout and map the
-# observability.app label to the Loki label app, which Grafana's trace-to-logs link relies on. It
-# reuses the Prometheus image (busybox-based, already pulled) and keeps logging, because Alloy only
-# picks up containers it discovers while they run.
+# observability.app label to the Loki label app, which Grafana's trace-to-logs link relies on. The
+# unlabelled one must be left out. Both reuse the Prometheus image (busybox-based, already pulled)
+# and keep logging, because Alloy only picks up containers it discovers while they run.
 token="$PROBE-$trace_id"
+unlabelled_token="$UNLABELLED-$trace_id"
 image=$(docker inspect --format '{{.Config.Image}}' prometheus)
-docker rm -f "$PROBE" >/dev/null 2>&1 || true
-trap 'docker rm -f "$PROBE" >/dev/null 2>&1 || true' EXIT
-docker run -d --name "$PROBE" --label "observability.app=$PROBE" --entrypoint sh "$image" \
-  -c "while true; do echo $token; sleep 1; done" >/dev/null
+docker rm -f "$PROBE" "$UNLABELLED" >/dev/null 2>&1 || true
+trap 'docker rm -f "$PROBE" "$UNLABELLED" >/dev/null 2>&1 || true' EXIT
+# The unlabelled container starts first, so both are running before any discovery round can find
+# the labelled one. Without the allowlist filter, the round that discovers the labelled container
+# would discover the unlabelled one as well.
+docker run -d --name "$UNLABELLED" --label "observability.app=$UNLABELLED" \
+  --entrypoint sh "$image" -c "while true; do echo $unlabelled_token; sleep 1; done" >/dev/null
+docker run -d --name "$PROBE" --label observability.logs=true --label "observability.app=$PROBE" \
+  --entrypoint sh "$image" -c "while true; do echo $token; sleep 1; done" >/dev/null
+failures_before=${#failures[@]}
 check "Alloy ships a labelled container's logs to Loki" 60 log_stored "$token"
+
+# The labelled log's arrival proves that a discovery round including both containers has run. The
+# full NEGATIVE_WAIT after it gives the unlabelled log time to reach Loki too, had Alloy shipped it.
+# Without that arrival, absence proves nothing.
+if ((${#failures[@]} > failures_before)); then
+  echo "skip Alloy skips a container without observability.logs=true (no labelled log arrived)"
+else
+  sleep "$NEGATIVE_WAIT"
+  if log_absent "$unlabelled_token"; then
+    echo "ok   Alloy skips a container without observability.logs=true"
+  else
+    echo "FAIL Alloy skips a container without observability.logs=true"
+    failures+=("Alloy skips a container without observability.logs=true")
+  fi
+fi
 
 if ((${#failures[@]})); then
   echo "${#failures[@]} check(s) failed: ${failures[*]}" >&2

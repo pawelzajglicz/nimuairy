@@ -106,7 +106,7 @@ Collector:
 |---|---|
 | Traces | agent → OTLP http/protobuf → `http://tempo:4318/v1/traces` |
 | Metrics | agent's Prometheus exporter on `:9464/metrics` ← scraped by Prometheus every 15 s |
-| Logs | Logback JSON on stdout → Docker → Alloy (`loki.source.docker`) → Loki |
+| Logs | Logback JSON on stdout → Docker → Alloy (`loki.source.docker`) → Loki, for containers labelled `observability.logs=true` only ([Which logs are collected](#which-logs-are-collected)) |
 
 Grafana links the three. A log line's `trace_id` opens the trace in Tempo, a span opens its log
 lines in Loki, and a span opens the request rate and p95 latency in Prometheus. A point on the
@@ -119,7 +119,7 @@ latency graph opens the trace of a request it counts
 |---|---|
 | `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
-| `compose.observability.yaml` | Overlay for the app: attaches the agent and joins the `nimuairy-observability` network |
+| `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
@@ -151,6 +151,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Every port bound to `127.0.0.1` | As in `compose.override.yaml`: Docker's port publishing bypasses the host firewall, and Grafana's `admin/admin` and the unauthenticated Loki/Tempo endpoints must stay off the LAN |
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
+| Alloy collects only containers labelled `observability.logs=true` (a `filter` in `discovery.docker`) | The course ships the logs of every container on the host. Production may collect the backend and frontend only, and one allowlist for development and production keeps the two from drifting apart |
 | Grafana trace-to-metrics uses `http_server_request_duration_seconds` | The course queried its own Node metric |
 | Image tags | Dependabot updates them here; the course keeps its own. Never take the course's tags over, they are older |
 | Tempo: no `ingester` and `compactor` blocks; the 7-day retention is `overrides.defaults.compaction.block_retention` | Tempo 3 removed both blocks and refuses to start with them (`field ingester not found`); the course still runs Tempo 2.10 |
@@ -169,10 +170,10 @@ docker compose -f compose.yaml -f compose.override.yaml \
 ```
 
 Without the stack the second command fails, because the external network
-`nimuairy-observability` does not exist; nothing is sent anywhere else. The overlay only changes
-the backend.
+`nimuairy-observability` does not exist; nothing is sent anywhere else. The overlay changes the
+backend and adds a label to the frontend.
 Run the second command without the two overlay files to go back to the backend without the
-agent.
+agent. Without the overlay no app container is labelled, so Alloy ships none of their logs.
 
 | Service | URL (host) |
 |---|---|
@@ -198,13 +199,30 @@ delete the stored metrics, traces, logs and Grafana state.
 | `OTEL_LOGS_EXPORTER` | `none` | Logs reach Loki from stdout; this does not affect the app's own Logback output |
 | `OTEL_JAVAAGENT_LOGGING` | `application` | Agent warnings (e.g. failed exports) go through Logback, so they are JSON too |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | `logstash` | Spring Boot's built-in structured logging: one JSON object per line, stack traces in a single `stack_trace` field, no banner |
-| label `observability.app` | `nimuairy-api` | Alloy turns it into the Loki label `app` |
+| label `observability.logs` (backend and frontend) | `"true"` | Alloy collects the logs of labelled containers only ([Which logs are collected](#which-logs-are-collected)) |
+| label `observability.app` (backend) | `nimuairy-api` | Alloy turns it into the Loki label `app` |
 | `OTEL_RESOURCE_ATTRIBUTES` (dev file) | `deployment.environment.name=development` | |
 
 The agent adds `trace_id`, `span_id` and `trace_flags` to Logback's MDC for each log event,
 captured on the thread that logs and only when a valid span is active. A log line written during a
 request therefore carries the IDs, and the startup log does not. The application has no code
 for this.
+
+### Which logs are collected
+
+Alloy ships a container's logs only if the container has the label `observability.logs=true`. This
+allowlist is the same in development and production. `discovery.docker` passes it to the Docker API
+as a filter, so Alloy never lists, inspects or tails any other container. With the overlay that means
+the backend and the frontend (nginx writes access lines to stdout and errors to stderr). Without the
+overlay it means nothing from the app.
+
+- `observability.app` alone does not opt a container in. It only sets the Loki label `app`. The
+  frontend has no `app` label, so query it with `{container="frontend-nimuairy"}`.
+- Postgres, the stack's own services and every other container are not collected. Read their logs
+  with `docker logs <container>`. To collect another container, add the label to its Compose
+  service.
+- Compose does not restart Alloy when `observability/alloy/config.alloy` changes. Run
+  `docker compose -f observability/compose.yaml restart alloy`.
 
 ### Verify
 
@@ -216,10 +234,17 @@ bash scripts/observability-smoke-test.sh
 
 It waits for every service to be ready, checks Grafana's three datasources and the Prometheus
 targets, checks that Prometheus stores exemplars and Grafana links them to Tempo, and sends a probe
-through each path: an OTLP trace to Tempo and the logs of a container labelled `observability.app`
-through Alloy to Loki. CI's `observability` job starts the stack and runs it on every PR that
-touches the stack, the overlay files or the script. Set `GRAFANA_AUTH`
-(default `admin:admin`) if you changed Grafana's password.
+through each path: an OTLP trace to Tempo, and the logs of a container labelled
+`observability.logs=true` and `observability.app` through Alloy to Loki.
+
+A second container that has only `observability.app` must stay out of Loki. After the labelled
+container's log reaches Loki, the test waits another 20 s before checking that the unlabelled
+container's log is still missing from every stream. This gives Alloy time for at least three
+discovery rounds and Loki time to ingest the log, had it been collected.
+
+CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
+overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
+password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
@@ -246,6 +271,8 @@ about 30 s (measured with Tempo 3.1).
 | Logs | A rejected login (the curl recipe from stage 1), then `docker logs backend-nimuairy \| grep 'Login rejected'` | One JSON line with `trace_id` and `span_id`. That trace in Tempo has the root span `POST /api/auth/login` with the same span ID |
 | Logs | The `Started NimuairyApiApplication` line | No `trace_id`/`span_id` |
 | Logs | Loki: `{app="nimuairy-api"} \| json \| trace_id="<id>"` | The login line. `trace_id` is a parsed field, not an indexed label (`/loki/api/v1/labels`) |
+| Logs | `curl -s -o /dev/null 127.0.0.1:4200/`, then Loki: `{container="frontend-nimuairy"}` | The nginx access line of that request |
+| Logs | `curl -sG 127.0.0.1:3100/loki/api/v1/query --data-urlencode 'query=sum by (container) (count_over_time({stack="observability"}[5m]))'` | Only `backend-nimuairy` and `frontend-nimuairy` (plus the smoke test's probe, if it ran in that window). Use this, not `/label/container/values`: label values also list streams that have no lines in the time range |
 
 Query Prometheus with `curl -sG 127.0.0.1:9090/api/v1/query --data-urlencode 'query=...'` and
 Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query=...'
@@ -291,10 +318,10 @@ collected since the last scrape, so Prometheus never stores them
 - With the agent attached, the JVM prints one plain-text line on stderr (`Sharing is only
   supported for boot loader classes…`). In Loki it is in the `logstream="stderr"` stream; add
   `| __error__=""` after `| json` to hide lines that are not JSON.
-- The stack is for local development only. Alloy reads the Docker socket and ships the logs of
-  every container on the host, including nginx access logs with client IPs. Server spans record
-  `client.address` and `user_agent.original`. Grafana uses `admin`/`admin`. Running it on the VPS
-  needs separate hardening and is not part of this stage.
+- The stack is for local development only. Alloy mounts the Docker socket, which is root-equivalent
+  access to the host. It ships the logs of the labelled containers, including nginx access logs
+  with client IPs. Server spans record `client.address` and `user_agent.original`. Grafana uses
+  `admin`/`admin`. Running it on the VPS needs separate hardening and is not part of this stage.
 
 ## Stage 3: from a metric to its trace (exemplars)
 

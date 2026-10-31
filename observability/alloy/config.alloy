@@ -1,6 +1,6 @@
-// Grafana Alloy — universal log shipper for Docker containers.
-// Discovers every container on the Docker socket and ships its stdout/stderr
-// to Loki with low-cardinality labels (container_name, image, compose_service).
+// Grafana Alloy — log shipper for Docker containers.
+// Ships the stdout/stderr of the containers labelled observability.logs=true to Loki with
+// low-cardinality labels (container, logstream, compose_service, compose_project, app).
 
 logging {
   level  = "info"
@@ -10,6 +10,13 @@ logging {
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
   refresh_interval = "5s"
+
+  // Collection is an explicit allowlist: only containers with this label are listed, so no
+  // other container is ever inspected or tailed. The Docker API applies the filter.
+  filter {
+    name   = "label"
+    values = ["observability.logs=true"]
+  }
 }
 
 discovery.relabel "containers" {

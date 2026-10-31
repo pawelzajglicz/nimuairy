@@ -1,4 +1,5 @@
-# Sends backend telemetry to the stack in observability/ over its "nimuairy-observability" network.
+# Sends backend telemetry to the stack in observability/ over its "nimuairy-observability" network,
+# and labels the backend and frontend for log collection.
 # Start the stack first, then combine this file with a variant file, e.g. for development:
 #   docker compose -f compose.yaml -f compose.override.yaml \
 #     -f compose.observability.yaml -f compose.observability.dev.yaml up -d --build
@@ -23,10 +24,17 @@ services:
       OTEL_JAVAAGENT_LOGGING: application
       LOGGING_STRUCTURED_FORMAT_CONSOLE: logstash
     labels:
+      # Alloy collects the logs of labelled containers only (observability/alloy/config.alloy).
+      observability.logs: "true"
       # Alloy turns this into the Loki label "app".
       observability.app: nimuairy-api
     networks:
       - observability
+
+  # Alloy reads the frontend's logs through the Docker API, so it does not join the network.
+  frontend:
+    labels:
+      observability.logs: "true"
 
 networks:
   observability:
