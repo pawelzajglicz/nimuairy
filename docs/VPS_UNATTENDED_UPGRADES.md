@@ -172,9 +172,18 @@ To run it:
 
 The `NEXT` column at the end shows when each timer fires first. If the timers last ran before they
 were masked, the first run catches up within the random delay: within 60 minutes for the upgrade.
-If they never ran, the first upgrade is at the next 06:00 plus the delay. Your own apt commands
-cannot run at the same time as a timer run. apt's lock makes whichever starts second wait, or
-stop with `Could not get lock`.
+If they never ran, the first upgrade is at the next 06:00 plus the delay.
+
+apt's and dpkg's locks keep package operations from running at the same time, so a timer run
+and your own apt command never overlap. Commands react differently to a lock that is held,
+though:
+
+- `apt` waits (`Waiting for cache lock`).
+- `apt-get` stops at once with `Could not get lock`. With `-o DPkg::Lock::Timeout=<seconds>` it
+  waits up to that long instead.
+- `unattended-upgrade`, its dry run included, exits without waiting (see [Verify](#verify)).
+
+If a command stops, run it again after the timer run has finished.
 
 ## Verify
 
