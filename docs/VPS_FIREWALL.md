@@ -132,7 +132,8 @@ If no session is left, log in through the provider console in the Mikrus panel, 
   provider's mapping can point at another server port. If it can't, keep `22`. If it can:
   1. Make sshd listen on the new port as well as on `22`. On Ubuntu 24.04 with socket
      activation, that also means `systemctl daemon-reload && systemctl restart ssh.socket`.
-  2. Rerun the script, which then allows both ports.
+  2. Rerun the script, which then allows both ports. Also rerun `scripts/configure-fail2ban.sh`, so
+     the Fail2ban jail covers both ports too (see [VPS_FAIL2BAN.md](VPS_FAIL2BAN.md)).
   3. Point the provider's mapping at the new port and check a new connection through it.
   4. Only then remove `22` from sshd. The script never deletes the old `22/tcp` rule, so remove it
      by hand (see [Inspect](#inspect)).

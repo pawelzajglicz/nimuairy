@@ -44,7 +44,8 @@ The app is reachable only through a Cloudflare Tunnel: the `cloudflared` contain
 outbound connection to Cloudflare, and the tunnel's route points at `http://frontend:8080`.
 Production also runs `cloudflare/cloudflared`, the only image not from DHI.
 The VPS firewall (UFW and the provider's) and `scripts/configure-ufw.sh` are described in
-[docs/VPS_FIREWALL.md](docs/VPS_FIREWALL.md).
+[docs/VPS_FIREWALL.md](docs/VPS_FIREWALL.md). Fail2ban, which bans addresses that keep failing SSH
+logins, and `scripts/configure-fail2ban.sh` are described in [docs/VPS_FAIL2BAN.md](docs/VPS_FAIL2BAN.md).
 
 The VPS runs prebuilt images instead: `build-and-push.yml` pushes
 `ghcr.io/pawelzajglicz/nimuairy-{api,frontend}:<commit SHA>` on every master push, and the manual
