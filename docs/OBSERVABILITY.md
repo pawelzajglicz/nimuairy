@@ -235,11 +235,16 @@ bash scripts/observability-smoke-test.sh
 It waits for every service to be ready, checks Grafana's three datasources and the Prometheus
 targets, checks that Prometheus stores exemplars and Grafana links them to Tempo, and sends a probe
 through each path: an OTLP trace to Tempo, and the logs of a container labelled
-`observability.logs=true` and `observability.app` through Alloy to Loki. A second container that
-has only `observability.app` must stay out of Loki. 20 s after it starts (at least three of Alloy's
-5 s discovery rounds), its log line must still be missing from every stream. CI's
-`observability` job starts the stack and runs it on every PR that touches the stack, the overlay
-files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
+`observability.logs=true` and `observability.app` through Alloy to Loki.
+
+A second container that has only `observability.app` must stay out of Loki. After the labelled
+container's log reaches Loki, the test waits another 20 s before checking that the unlabelled
+container's log is still missing from every stream. This gives Alloy time for at least three
+discovery rounds and Loki time to ingest the log, had it been collected.
+
+CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
+overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
+password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
