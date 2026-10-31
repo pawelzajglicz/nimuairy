@@ -151,7 +151,8 @@ it and find out why before the next deploy; `smoke`, it restored but tables or d
 database that is left behind, with the command that drops it. A run killed outright (`kill -9`, a
 reboot) can also leave one; the script drops only the database it created in that run, never older
 `nimuairy_verify_*` ones, so drop those by hand. `BACKUP_DIR` and `POSTGRES_CONTAINER` override the
-directory and the container. No cron entry runs it yet.
+directory and the container. No cron entry runs it yet; why, and when to add one, is in
+[docs/DEFERRED_WORK.md](docs/DEFERRED_WORK.md), which tracks deferred infrastructure work.
 
 It tests the local copy only, not that the off-site copy downloads from R2 and decrypts. For that,
 bring a dump back into an empty directory as for a production restore below and point the script
