@@ -486,6 +486,23 @@ What it checks:
   every engine, because the proxy's port is not published and its network is internal. The host
   check is strict on a Linux engine and a `WARN` on Docker Desktop, even when the proxy refuses the
   client there.
+- **Log continuity in normal operation**: the labelled probe writes numbered lines. At the end, Loki
+  must hold every line from 1 to the last one the probe wrote, at least 15.
+  - Duplicates are reported as `info`.
+  - Alloy must log no `could not transfer logs` for the probe while the probe and Alloy keep
+    running. That message means a followed stream broke with an error. It is also the sign of an
+    `http://` host in `config.alloy`, whose streams restart every 5 s and could pass the line
+    check with duplicates.
+  - `finished transferring logs` (a stream that ended cleanly, normally because its container
+    stopped) and failed attempts to open a stream are only counted, as `info`. Alloy reopens a
+    stream within 5 s from the last second it read, so these say nothing about loss.
+  - This covers normal operation during the run only. It covers no outage, and it is no proof that
+    collection is lossless.
+- **Alloy's own requests**: at the end, no refusal in the proxy's log since the run started may come
+  from Alloy.
+  - A refusal is Alloy's when it comes from Alloy's address without a `smoke=` parameter, so the
+    test's own refusals from that address never count.
+  - Requests Alloy made before the run, such as its first `HEAD /_ping`, are not covered.
 
 The test starts and changes nothing but its own probe containers. It removes them when it exits,
 including when it is interrupted, and checks that only Alloy and the proxy are left on
@@ -565,7 +582,10 @@ collected since the last scrape, so Prometheus never stores them
   above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Alloy and the socket proxy**: a new Alloy version may make a Docker API call the proxy refuses.
-  - Before merging such a bump, check `docker logs docker-socket-proxy` for `blocked request` lines
+  - The smoke test fails on any refusal of Alloy's own requests during its run, so CI catches that
+    on the bump's PR.
+  - Calls Alloy makes only at startup fall before that window. After a bump, also check
+    `docker logs docker-socket-proxy` for `blocked request` lines from Alloy's address
     ([Docker API access](#docker-api-access)).
   - The smoke test pins the proxy's image and exact command. A new proxy version, or a change to
     its command, therefore needs the script updated too, once the checks pass with it.
