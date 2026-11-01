@@ -71,3 +71,47 @@ would also need a decision on how results are reported and how failures are hand
 - do not change the existing backup schedule unless it is necessary;
 - do not run the verification at the same time as a deploy or other database maintenance;
 - do not modify the production database during the test.
+
+## S3 — Application secrets out of container environment variables
+
+**Status:** Deferred
+
+**Origin:** Observability production rollout, S3 (Docker socket proxy for Alloy).
+
+**Current state:**
+
+- `compose.prod.yaml` passes the production secrets as environment variables:
+  `POSTGRES_PASSWORD` (postgres), `SPRING_DATASOURCE_PASSWORD` and `JWT_SECRET` (backend),
+  `TUNNEL_TOKEN` (cloudflared).
+- `GET /containers/{id}/json` returns them in `Config.Env`. Anyone with Docker access on the host
+  can read them. Since S3 so can a compromised Alloy, through `docker-socket-proxy`: its allowlist
+  cannot restrict which container is inspected (see
+  [Docker API access](OBSERVABILITY.md#docker-api-access)).
+- The proxy limits Alloy to read-only calls. It does not hide environment variables.
+
+**Reason for deferral:** Reading secrets from files changes how the backend, Postgres and
+cloudflared are configured and how the deploy workflow provisions them on the VPS. That is a
+change to the application deployment that needs its own plan and tests. S3 changes only the
+observability stack.
+
+**Reconsider when:**
+
+- the residual risk is to be removed rather than accepted before Alloy collects the app's logs on
+  the VPS (S7);
+- another service or person gets access to the Docker API on the VPS;
+- a production secret is rotated or a new one is added.
+
+**Potential scope when resumed:**
+
+- Compose file secrets (`secrets:` with `file:`, mounted under `/run/secrets`) instead of
+  `environment:`.
+- For each consumer, verify what it supports at that time: `POSTGRES_PASSWORD_FILE` in the
+  `dhi.io/postgres` image, Spring Boot's `configtree:` config import for the backend, and
+  cloudflared's options for reading the tunnel token from a file.
+- The deploy workflow writes the secret files on the VPS instead of `.env` entries.
+- Check with `docker inspect` that no secret is left in `Config.Env`.
+
+**Constraints:**
+
+- do not change the deploy workflow or the VPS `.env` without a tested rollback path;
+- never commit secret files; keep them out of the repository like `.env`.

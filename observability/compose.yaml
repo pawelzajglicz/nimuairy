@@ -17,6 +17,11 @@ networks:
   # non-internal network, and every service here publishes one.
   stack:
     driver: bridge
+  # Alloy and the Docker socket proxy only. Internal: neither publishes a port through it (Alloy
+  # publishes through stack), and the proxy needs no traffic beyond Alloy's requests.
+  docker-api:
+    driver: bridge
+    internal: true
 
 volumes:
   prom-data: {}
@@ -96,13 +101,50 @@ services:
       - "127.0.0.1:12345:12345"  # Alloy UI / debug
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
-    networks: [stack]
+    networks: [stack, docker-api]
+    # Orders `up` only: the proxy can open the socket before Alloy starts, and a proxy that cannot
+    # fails `up --wait`. It does not mean the proxy's API answers, and a daemon restart ignores it;
+    # Alloy retries the Docker API every 5 s (docs/OBSERVABILITY.md, Docker API access).
     depends_on:
       loki:
         condition: service_started
+      docker-socket-proxy:
+        condition: service_healthy
     # Distroless image — see comment on `loki`.
+
+  # The only service that mounts the Docker socket (root-equivalent). It passes on the read calls
+  # Alloy makes and refuses everything else (docs/OBSERVABILITY.md, Docker API access).
+  docker-socket-proxy:
+    image: wollomatic/socket-proxy:1.13.2
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    # The socket's group: 0 on Docker Desktop (root:root 0660); on Linux the docker group, set as
+    # DOCKER_SOCKET_GID in observability/.env. A wrong group fails closed: the proxy exits.
+    user: "65534:${DOCKER_SOCKET_GID:-0}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=alloy
+      - -allowHEAD=/_ping
+      - '-allowGET=/v1\.[0-9]+/(containers/json|networks|containers/[0-9a-f]{64}/(json|logs))'
+      - -allowhealthcheck
+      # After a Docker upgrade with live-restore the bind-mounted socket goes stale; exiting lets
+      # the restart policy mount the new one.
+      - -watchdoginterval=60
+      - -stoponwatchdog
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    # Reports whether the proxy can open the Docker socket, not whether its API on 2375 answers or
+    # its allowlist is right; the smoke test checks those.
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   grafana:
     image: grafana/grafana-oss:13.0.2

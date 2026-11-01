@@ -1,6 +1,7 @@
 // Grafana Alloy — log shipper for Docker containers.
 // Ships the stdout/stderr of the containers labelled observability.logs=true to Loki with
-// low-cardinality labels (container, logstream, compose_service, compose_project, app).
+// low-cardinality labels (container, logstream, compose_service, compose_project, app). It reads
+// the Docker API through docker-socket-proxy and never mounts the Docker socket itself.
 
 logging {
   level  = "info"
@@ -8,7 +9,10 @@ logging {
 }
 
 discovery.docker "containers" {
-  host             = "unix:///var/run/docker.sock"
+  // Through the socket proxy (observability/compose.yaml), which allows only the calls these two
+  // components make. tcp://, not http://: for http(s) hosts Alloy v1.20 sets the client timeout to
+  // refresh_interval, which cuts every followed log stream (grafana/alloy#7290, fixed in v1.21).
+  host             = "tcp://docker-socket-proxy:2375"
   refresh_interval = "5s"
 
   // Collection is an explicit allowlist: only containers with this label are listed, so no
@@ -50,7 +54,7 @@ discovery.relabel "containers" {
 }
 
 loki.source.docker "containers" {
-  host          = "unix:///var/run/docker.sock"
+  host          = "tcp://docker-socket-proxy:2375"
   targets       = discovery.relabel.containers.output
   forward_to    = [loki.write.local.receiver]
   relabel_rules = discovery.relabel.containers.rules

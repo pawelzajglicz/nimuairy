@@ -106,7 +106,7 @@ Collector:
 |---|---|
 | Traces | agent → OTLP http/protobuf → `http://tempo:4318/v1/traces` |
 | Metrics | agent's Prometheus exporter on `:9464/metrics` ← scraped by Prometheus every 15 s |
-| Logs | Logback JSON on stdout → Docker → Alloy (`loki.source.docker`) → Loki, for containers labelled `observability.logs=true` only ([Which logs are collected](#which-logs-are-collected)) |
+| Logs | Logback JSON on stdout → Docker → Alloy (`loki.source.docker`, through `docker-socket-proxy`) → Loki, for containers labelled `observability.logs=true` only ([Which logs are collected](#which-logs-are-collected)) |
 
 Grafana links the three. A log line's `trace_id` opens the trace in Tempo, a span opens its log
 lines in Loki, and a span opens the request rate and p95 latency in Prometheus. A point on the
@@ -117,7 +117,7 @@ latency graph opens the trace of a request it counts
 
 | File | Role |
 |---|---|
-| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` network ([Networks](#networks)) |
+| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)) |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
@@ -153,6 +153,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
 | Alloy collects only containers labelled `observability.logs=true` (a `filter` in `discovery.docker`) | The course ships the logs of every container on the host. Production may collect the backend and frontend only, and one allowlist for development and production keeps the two from drifting apart |
+| Alloy reads the Docker API through `docker-socket-proxy` (`wollomatic/socket-proxy`) and no longer mounts the Docker socket | The socket is root-equivalent access to the host. The proxy passes on only the read calls Alloy makes ([Docker API access](#docker-api-access)) |
 | Grafana trace-to-metrics uses `http_server_request_duration_seconds` | The course queried its own Node metric |
 | Image tags | Dependabot updates them here; the course keeps its own. Never take the course's tags over, they are older |
 | Tempo: no `ingester` and `compactor` blocks; the 7-day retention is `overrides.defaults.compaction.block_retention` | Tempo 3 removed both blocks and refuses to start with them (`field ingester not found`); the course still runs Tempo 2.10 |
@@ -161,8 +162,20 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 
 ### Run
 
-The stack images come from Docker Hub and need no `dhi.io` login. Start the stack, then the app
-with the overlay:
+The stack images come from Docker Hub and need no `dhi.io` login.
+
+On a Linux engine, first give the socket proxy the group of the Docker socket, in
+`observability/.env` (Git ignores it):
+
+```bash
+echo "DOCKER_SOCKET_GID=$(stat -c %g /var/run/docker.sock)" >> observability/.env
+```
+
+Docker Desktop needs nothing: its socket belongs to `root:root` with mode `0660`, and the default
+group is `0`. With a wrong group the proxy cannot open the socket and exits, so `up --wait` fails
+and Alloy does not start.
+
+Start the stack, then the app with the overlay:
 
 ```bash
 docker compose -f observability/compose.yaml up -d --wait
@@ -219,6 +232,9 @@ overlay it means nothing from the app.
 
 - `observability.app` alone does not opt a container in. It only sets the Loki label `app`. The
   frontend has no `app` label, so query it with `{container="frontend-nimuairy"}`.
+- The allowlist is what Alloy collects, not a security boundary. The socket proxy cannot see the
+  filter, so a compromised Alloy could still list, inspect and read every container
+  ([Docker API access](#docker-api-access)).
 - Postgres, the stack's own services and every other container are not collected. Read their logs
   with `docker logs <container>`. To collect another container, add the label to its Compose
   service.
@@ -234,11 +250,13 @@ talk to join it:
 |---|---|---|---|
 | `nimuairy-observability` | the stack; the app joins it as an external network (`compose.observability.yaml`) | backend, Tempo, Prometheus | traces to `tempo:4318`; Prometheus's scrape of `backend-nimuairy:9464` |
 | `nimuairy-observability_stack` | the stack | Prometheus, Tempo, Loki, Grafana, Alloy | Grafana's queries; Alloy's pushes to Loki; Prometheus's scrape of Alloy |
+| `nimuairy-observability_docker-api` (internal) | the stack | Alloy, docker-socket-proxy | Alloy's Docker API calls ([Docker API access](#docker-api-access)) |
 
 So the backend shares no network with Loki, Grafana or Alloy, and their names don't resolve on its
 networks. Whether a connection to their addresses is also dropped depends on the Docker engine: a
 Linux engine drops it, while Docker Desktop lets connections to published ports through (see below).
-The frontend joins neither network: Alloy reads its logs, and the backend's, through the Docker API.
+The frontend joins neither network: Alloy reads its logs, and the backend's, through the Docker API,
+via the socket proxy.
 
 Keep the definition of `nimuairy-observability` (key, name and settings) as it is. Compose stores a
 hash of it on the network and would have to recreate the network after a change, which Docker refuses
@@ -259,10 +277,103 @@ What the separation does not do:
   With the stack's development ports, the backend can therefore reach Loki, Grafana and Alloy by
   address on Docker Desktop. The smoke test reports these connections as `WARN`, never as passed.
   Only a Linux engine, such as CI or the VPS, verifies the isolation.
-- **`internal: true` would not help here.** Docker publishes a container's ports only through a
-  non-internal network, and every service of the stack publishes one. An internal network does not
-  separate a container from the host either: the host reaches every container address, and
-  containers reach host services on the bridge's address.
+- **`internal: true` would not help for the first two networks.** Docker publishes a container's
+  ports only through a non-internal network, and every service on them publishes one. An internal
+  network does not separate a container from the host either: the host reaches every container
+  address, and containers reach host services on the bridge's address. Only
+  `nimuairy-observability_docker-api` is internal: no port is published through it, and the proxy
+  needs no traffic beyond Alloy's requests. That the host can still reach the proxy's address is why
+  the proxy also accepts only Alloy as a client.
+
+### Docker API access
+
+Alloy finds containers and reads their logs through the Docker Engine API. Access to the Docker
+socket is root-equivalent: anything that can call the API can start a privileged container. So the
+stack's `docker-socket-proxy` ([wollomatic/socket-proxy](https://github.com/wollomatic/socket-proxy))
+is the only service that mounts the socket, and Alloy reaches it over the internal
+`nimuairy-observability_docker-api` network at `tcp://docker-socket-proxy:2375`:
+
+```
+Alloy ──tcp://docker-socket-proxy:2375──► docker-socket-proxy ──/var/run/docker.sock──► Docker Engine (root)
+      nimuairy-observability_docker-api     user 65534, the socket's group,
+      (internal: Alloy and the proxy only)  read-only root filesystem, no capabilities
+```
+
+The proxy allows only the requests that Alloy v1.20 makes, as read in its source and in the Docker
+client it uses:
+
+| Request | Made by | Why |
+|---|---|---|
+| `HEAD /_ping` | both components | API version negotiation |
+| `GET /v1.NN/containers/json` | `discovery.docker`, every 5 s | Lists the labelled containers (the label filter is a query parameter) |
+| `GET /v1.NN/networks` | `discovery.docker`, every 5 s | Network metadata; a refresh fails without it |
+| `GET /v1.NN/containers/<64-hex id>/json` | `loki.source.docker`, at start and every 5 s per container | Container state and TTY mode |
+| `GET /v1.NN/containers/<64-hex id>/logs` | `loki.source.docker` | The followed log stream |
+
+Every other method gets `405` and every other path `403`, and so does any client other than `alloy`
+(`-allowfrom=alloy`, resolved through Docker's DNS on each request). The proxy logs each refusal as
+`blocked request`, with the reason, method, URL and client. Containers are addressed by ID only, so
+`/containers/<name>/json` is refused as well. The proxy publishes no port.
+
+**`tcp://`, not `http://`.** For `http(s)://` hosts, Alloy v1.20 gives `loki.source.docker` an HTTP
+client whose timeout is `refresh_interval`, and that timeout also covers reading the response body.
+Every followed log stream would end after 5 s and restart from a timestamp with one-second
+precision ([grafana/alloy#7290](https://github.com/grafana/alloy/issues/7290), fixed in v1.21).
+With `tcp://` the Docker client uses its own HTTP client, which has no timeout, and the
+`refresh_interval` of `loki.source.docker` has no effect.
+
+**Health and readiness.** The proxy's health check proves less than "the API works":
+
+| Signal | Proves | Does not prove |
+|---|---|---|
+| The proxy is `healthy` (the image's `/healthcheck`) | The proxy runs and can open the Docker socket with its group. Its listener on 2375 is bound: the proxy exits if binding fails, before it starts the health check server | That 2375 answers HTTP, that the allowlist and `-allowfrom` work, or that the Docker API answers |
+| Alloy's `depends_on` the proxy being `service_healthy` | `up` starts Alloy only once the proxy can open the socket, and a wrong group fails `up --wait` | Anything after a daemon restart or a reboot: restart policies start containers without that order |
+
+What brings log collection back is Alloy's own retry. `discovery.docker` repeats a failed refresh
+every 5 s and keeps the targets it found last. `loki.source.docker` inspects each container every
+5 s and reopens its log stream when it has ended. If the proxy's API does not answer yet when Alloy
+starts, or goes away later, collection resumes within about 5 s of it answering again, without a
+restart of Alloy. Alloy has no backoff, so during a long outage it logs an error every 5 s. The
+smoke test sends its probe's logs along this whole path ([Verify](#verify-1)).
+
+What the proxy does not protect:
+
+- **The environment of every container.** `GET /containers/<id>/json` returns `Config.Env`, and
+  container IDs are opaque, so the allowlist cannot limit which container is inspected. Whoever
+  controls Alloy can read the environment of any container, including the secrets the production
+  app passes as variables (`POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`,
+  `TUNNEL_TOKEN`). Moving them out of the environment is
+  [deferred](DEFERRED_WORK.md#s3--application-secrets-out-of-container-environment-variables).
+- **The label allowlist.** The proxy matches paths, not query parameters, so it never sees the
+  `observability.logs=true` filter. A compromised Alloy could list every container and read the
+  logs of any of them.
+- **Against its own flaws, only partly.** The proxy holds the socket. Its user, read-only file
+  system and dropped capabilities limit what a flaw in the proxy process could do, nothing more.
+  Anyone else with access to the Docker API, such as the members of the host's `docker` group, has
+  root anyway.
+- **Every log line.** When a stream ends, Alloy resumes it from the second of the last line it read,
+  so lines of that second can arrive twice. It also drops the container's saved position; if Alloy
+  itself restarts before the stream reopens, it reads that container's log from the start again
+  (duplicates, or lines Loki rejects as too old). Lines written during a short interruption are
+  read once the stream reopens, as long as Docker's log driver still keeps them. Collection is not
+  guaranteed to be lossless, for example across a long outage or a log rotation.
+- **Against a hanging API.** Alloy v1.20 sets no timeout on inspecting a container or opening its
+  log stream, just as with the socket before. A proxy or daemon that hangs stalls collection until
+  it answers.
+
+To find out why logs are missing:
+
+- `docker logs docker-socket-proxy`: `blocked request` lines show what the proxy refused. Alloy
+  should never appear there. If it does after an Alloy upgrade, the new version makes another API
+  call; extend the allowlist only for a call you have traced to Alloy. `socket not available` with
+  `permission denied` at start means a wrong `DOCKER_SOCKET_GID`.
+- `docker logs alloy`: `Unable to refresh target groups` means discovery cannot reach the API;
+  `could not inspect container info` and `could not fetch logs` mean a stream cannot start;
+  `could not transfer logs` and `finished transferring logs` mean a stream ended. In normal
+  operation the last two appear only when a container stops.
+- The Alloy UI (<http://127.0.0.1:12345>), component `loki.source.docker.containers`: each target's
+  `is_running` and `last_error`.
+- To see every request the proxy lets through, add `-loglevel=debug` to its `command` for a while.
 
 ### Verify
 
@@ -372,6 +483,9 @@ collected since the last scrape, so Prometheus never stores them
   (Tempo's OTLP intake, Prometheus scraping, Loki or Grafana queries) also run the backend checks
   above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
+- **Alloy and the socket proxy**: a new Alloy version may make a Docker API call the proxy refuses.
+  Before merging such a bump, check `docker logs docker-socket-proxy` for `blocked request` lines
+  ([Docker API access](#docker-api-access)).
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).
@@ -399,10 +513,12 @@ collected since the last scrape, so Prometheus never stores them
 - With the agent attached, the JVM prints one plain-text line on stderr (`Sharing is only
   supported for boot loader classes…`). In Loki it is in the `logstream="stderr"` stream; add
   `| __error__=""` after `| json` to hide lines that are not JSON.
-- The stack is for local development only. Alloy mounts the Docker socket, which is root-equivalent
-  access to the host. It ships the logs of the labelled containers, including nginx access logs
-  with client IPs. Server spans record `client.address` and `user_agent.original`. Grafana uses
-  `admin`/`admin`. Running it on the VPS needs separate hardening and is not part of this stage.
+- The stack is for local development only. Only the socket proxy mounts the Docker socket, but
+  through it Alloy can still read the environment and logs of every container
+  ([Docker API access](#docker-api-access)). Alloy ships the logs of the labelled containers,
+  including nginx access logs with client IPs. Server spans record `client.address` and
+  `user_agent.original`. Grafana uses `admin`/`admin`, and the other services publish their ports on
+  `127.0.0.1`. Running it on the VPS needs further hardening, which later stages add.
 
 ## Stage 3: from a metric to its trace (exemplars)
 
