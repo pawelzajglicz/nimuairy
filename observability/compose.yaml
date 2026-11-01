@@ -5,8 +5,17 @@
 name: nimuairy-observability
 
 networks:
+  # Shared with the app: compose.observability.yaml attaches the backend as an external network.
+  # Only Tempo (trace intake) and Prometheus (scrape) join it, so the backend shares no network with
+  # Loki, Grafana or Alloy (docs/OBSERVABILITY.md, Networks, has what that does and does not block).
+  # Keep its key, name and settings unchanged: Compose would have to recreate it, which fails while
+  # the backend, from another project, is attached.
   observability:
     name: nimuairy-observability
+    driver: bridge
+  # The stack's own traffic. Not internal: Docker publishes a container's ports only through a
+  # non-internal network, and every service here publishes one.
+  stack:
     driver: bridge
 
 volumes:
@@ -34,7 +43,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom-data:/prometheus
-    networks: [observability]
+    networks: [observability, stack]
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
       interval: 10s
@@ -52,7 +61,7 @@ services:
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki-data:/loki
-    networks: [observability]
+    networks: [stack]
     # Image is distroless (no shell, no wget/curl) — Compose can only check
     # that the process is running. Grafana waits for `service_started` and
     # retries the datasource connection on its own.
@@ -70,7 +79,7 @@ services:
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo
-    networks: [observability]
+    networks: [observability, stack]
     # Distroless image — see comment on `loki`.
 
   alloy:
@@ -89,7 +98,7 @@ services:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
-    networks: [observability]
+    networks: [stack]
     depends_on:
       loki:
         condition: service_started
@@ -113,7 +122,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
-    networks: [observability]
+    networks: [stack]
     depends_on:
       prometheus:
         condition: service_healthy
