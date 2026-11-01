@@ -526,31 +526,53 @@ docker rm -fv "$FOREIGN_PROBE" >/dev/null 2>&1 || true
 # The stack's other networks: a container on each, on that network alone. The proxy's name must not
 # resolve and its address must not take a connection. Controls: the same probe resolves and reaches
 # a service that only its network carries, and Alloy's network namespace reaches the proxy's address.
+#
+# One TCP connect from inside a probe. The probe prints its own line with nc's exit code and message,
+# so the verdict never rests on docker exec's status: CONNECTED (nc reports the port open),
+# UNREACHABLE (nc ran and could not connect: timed out, refused or unreachable, or busybox nc's silent
+# exit 1 on a refused connection), or ERROR with what came back instead (the exec failed, nc is
+# missing, a name did not resolve). Only UNREACHABLE is evidence of isolation.
+tcp_probe() {
+  local out
+  out=$(docker exec "$1" sh -c 'command -v nc >/dev/null || { echo "no nc in the probe"; exit; }
+    err=$(nc -v -w 3 "$1" "$2" </dev/null 2>&1 >/dev/null); echo "nc-exit=$? $err"' _ "$2" "$3" 2>&1 |
+    tr -d '\r') || true
+  case $out in
+    'nc-exit=0 '*' open'*) echo CONNECTED ;;
+    'nc-exit=1 ' | 'nc-exit=1 '*'timed out'* | 'nc-exit=1 '*refused* | 'nc-exit=1 '*nreachable* | \
+      'nc-exit=1 '*'o route to host'*) echo UNREACHABLE ;;
+    *) echo "ERROR (${out:-no output})" ;;
+  esac
+}
+tcp_connects() { [[ $(tcp_probe "$@") == CONNECTED ]]; }
 proxy_ip=$(net_ip "$PROXY" "$API_NET") || proxy_ip=
 proxy_port_open=false
 failures_before=${#failures[@]}
 check "Alloy's network namespace connects to $PROXY at ${proxy_ip:-?}:2375 (control)" 10 \
-  connects_from "$ALLOY_NS_PROBE" "${proxy_ip:-unknown}" 2375
+  tcp_connects "$ALLOY_NS_PROBE" "${proxy_ip:-unknown}" 2375
 if ((${#failures[@]} == failures_before)) && [[ -n $proxy_ip ]]; then proxy_port_open=true; fi
 proxy_unreachable_from() {
-  local before=${#failures[@]}
+  local before=${#failures[@]} result
   if ! start_probe "$1" --network "$2" || ! assert_vantage "$1" "$2" "$2"; then
     echo "skip $PROXY is unreachable from $2 (no probe on $2 alone)"
     return 0
   fi
   check "A container on $2 alone resolves $3 (control)" 10 resolves_from "$1" "$3"
-  check "A container on $2 alone connects to $3:$4 (control)" 10 connects_from "$1" "$3" "$4"
+  check "A container on $2 alone connects to $3:$4 (control)" 10 tcp_connects "$1" "$3" "$4"
   if ((${#failures[@]} > before)) || ! $proxy_port_open; then
     echo "skip $PROXY is unreachable from $2 (a control failed, so a refusal would prove nothing)"
     return 0
   fi
   if resolves_from "$1" "$PROXY"; then fail "$PROXY does not resolve on $2"; else pass "$PROXY does not resolve on $2"; fi
-  if connects_from "$1" "$proxy_ip" 2375; then
-    request "$1" "$proxy_ip" HEAD /_ping
-    fail "$PROXY at $proxy_ip:2375 is unreachable from $2 (TCP connects; HTTP ${status:-no response})"
-  else
-    pass "$PROXY at $proxy_ip:2375 is unreachable from $2"
-  fi
+  result=$(tcp_probe "$1" "$proxy_ip" 2375)
+  case $result in
+    UNREACHABLE) pass "$PROXY at $proxy_ip:2375 is unreachable from $2" ;;
+    CONNECTED)
+      request "$1" "$proxy_ip" HEAD /_ping
+      fail "$PROXY at $proxy_ip:2375 is unreachable from $2 (TCP connects; HTTP ${status:-no response})"
+      ;;
+    *) fail "$PROXY at $proxy_ip:2375 is unreachable from $2 (no usable TCP answer, so nothing is verified: $result)" ;;
+  esac
 }
 proxy_unreachable_from "$SHARED_PROBE" "$SHARED_NET" tempo 4318
 proxy_unreachable_from "$STACK_PROBE" "$STACK_NET" loki 3100
@@ -590,23 +612,38 @@ expect_equal "Only Alloy and $PROXY are on $API_NET after these checks" "$(membe
 # Normal log-stream continuity: every numbered line the labelled probe wrote reached Loki through
 # Alloy's followed stream and the proxy. This covers normal operation in this run's window only; it
 # says nothing about outages and is no proof of lossless collection.
+#
+# Loki returns at most LOKI_LIMIT lines. A result that size may be cut off, so a gap in it would prove
+# nothing. The query starts a second before the probe did (daemon clock), so it covers exactly the
+# lines judged, however long the run takes.
+LOKI_LIMIT=1000
+loki_start=$(($(date -d "$probe_started" +%s) - 1))
 probe_seqs() {
   local body
   body=$(curl -fsSG --max-time 10 127.0.0.1:3100/loki/api/v1/query_range \
-    --data-urlencode "query={app=\"$PROBE\"} |= \"$token\"" --data-urlencode since=15m \
-    --data-urlencode limit=1000) || return 1
-  grep -q '"status":"success"' <<<"$body" || return 1
+    --data-urlencode "query={app=\"$PROBE\"} |= \"$token\"" --data-urlencode "start=$loki_start" \
+    --data-urlencode "limit=$LOKI_LIMIT") || return 1
+  # Anything but an answered log query is no answer, never an empty result.
+  grep -q '"status":"success"' <<<"$body" && grep -q '"resultType":"streams"' <<<"$body" || return 1
   grep -oE "$token seq=[0-9]+" <<<"$body" | sed 's/.* seq=//' || true
 }
 last=$(docker logs --tail 1 "$PROBE" 2>&1 | tr -d '\r' | sed -n 's/.* seq=\([0-9]*\)$/\1/p')
 seqs=
 missing=
+returned=0
 answered=false
+truncated=false
 continuity_ok=false
 deadline=$((SECONDS + 30))
 while [[ -n $last ]]; do
-  if seqs=$(probe_seqs); then
+  if result=$(probe_seqs); then
     answered=true
+    seqs=$result
+    returned=$(grep -c . <<<"$seqs" || true)
+    if ((returned >= LOKI_LIMIT)); then
+      truncated=true
+      break
+    fi
     missing=$(awk -v last="$last" '{ seen[$1] = 1 } END { for (i = 1; i <= last; i++) if (!(i in seen)) printf "%d ", i }' <<<"$seqs")
     if [[ -z $missing ]]; then break; fi
   fi
@@ -617,7 +654,9 @@ name="Loki has every line the probe wrote, 1 to ${last:-?}, at least 15"
 if [[ -z $last ]]; then
   fail "$name (no numbered line in docker logs $PROBE)"
 elif ! $answered; then
-  fail "$name (Loki did not answer the query)"
+  fail "$name (Loki did not answer the query with a log result)"
+elif $truncated; then
+  fail "$name (Loki returned $returned lines, the most LOKI_LIMIT allows, so the result may be cut off and completeness cannot be established; the probe writes a line a second, so raise LOKI_LIMIT for a run that long)"
 elif ((last < 15)); then
   fail "$name (only $last lines, too few to judge)"
 elif [[ -n $missing ]]; then
