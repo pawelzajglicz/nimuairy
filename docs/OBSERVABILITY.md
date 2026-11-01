@@ -122,6 +122,7 @@ latency graph opens the trace of a request it counts
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
+| `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -368,6 +369,15 @@ starts, or goes away later, collection resumes within about 5 s of it answering 
 restart of Alloy. Alloy has no backoff, so during a long outage it logs an error every 5 s. The
 smoke test sends its probe's logs along this whole path ([Verify](#verify-1)).
 
+Only the second case is tested. The proxy outage check stops the proxy once, for 20 to 45 s, while
+Alloy runs, and checks that collection resumes without a restart of Alloy ([Verify](#verify-1)).
+That holds for this controlled stop only. Alloy starting while the proxy is down is read in source,
+not tested ([deferred](DEFERRED_WORK.md#s33b--alloy-starting-while-the-socket-proxy-is-down)).
+
+A proxy stopped by hand stays stopped: `restart: unless-stopped` never restarts a container stopped
+with `docker stop` or `docker kill`, not even after a daemon restart. That includes a proxy left
+behind by a killed outage check. Start it with `docker start docker-socket-proxy`.
+
 What the proxy does not protect:
 
 - **The environment of every container.** `GET /containers/<id>/json` returns `Config.Env`, and
@@ -389,8 +399,10 @@ What the proxy does not protect:
   so lines of that second can arrive twice. It also drops the container's saved position; if Alloy
   itself restarts before the stream reopens, it reads that container's log from the start again
   (duplicates, or lines Loki rejects as too old). Lines written during a short interruption are
-  read once the stream reopens, as long as Docker's log driver still keeps them. Collection is not
-  guaranteed to be lossless, for example across a long outage or a log rotation.
+  read once the stream reopens, as long as Docker's log driver still keeps them. The proxy outage
+  check found no gap for one controlled stop of 20 to 45 s on a lightly loaded host, which says
+  nothing about other outages. Collection is not guaranteed to be lossless, for example across a
+  long outage or a log rotation.
 - **Against a hanging API.** Alloy v1.20 sets no timeout on inspecting a container or opening its
   log stream, just as with the socket before. A proxy or daemon that hangs stalls collection until
   it answers.
@@ -511,9 +523,79 @@ The test starts and changes nothing but its own probe containers. It removes the
 including when it is interrupted, and checks that only Alloy and the proxy are left on
 `nimuairy-observability_docker-api`.
 
-CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
-overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
-password.
+Then check that log collection survives a short outage of the socket proxy. Run it on its own, not
+next to the smoke test:
+
+```bash
+bash scripts/observability-proxy-resilience-check.sh
+```
+
+It stops `docker-socket-proxy` with `docker stop` and keeps it stopped while Alloy runs: at least
+20 s, and until Alloy has logged both kinds of failure below, at most 45 s. Then it starts the
+proxy with `docker start` and checks that Alloy resumes without a restart. A run takes about
+1.5 minutes.
+
+This is a controlled proxy stop, not necessarily a graceful one. The proxy's own shutdown waits up
+to 10 s for open connections, and Alloy's log stream keeps one open, so the daemon may kill the
+proxy at its stop timeout: 10 s by default on Linux, 3 s as measured on Docker Desktop 4.96. The
+script reports the stop's duration and exit code as `info` only.
+
+What it checks:
+
+- **Before the stop**: a probe in Alloy's network namespace gets `200` from `HEAD /_ping`. The lines
+  of a labelled probe, numbered and tagged with a token unique to the run, reach Loki.
+- **During the outage**, at each poll, every few seconds:
+  - **The proxy's API does not answer from Alloy's network namespace**: its name does not resolve
+    or the connection fails. Anything else fails the check: an HTTP answer, a timeout, or a probe
+    that could not run. This samples the API at each poll; it does not monitor it continuously.
+  - **The proxy stays stopped.** Its `StartedAt` and `FinishedAt` must be unchanged at each poll and
+    once more right before `docker start`. Every start and stop rewrites them, so a start between
+    two polls shows as well.
+  - If either check fails, the outage did not hold: the recovery checks are skipped and the run
+    fails.
+  - **Alloy notices the outage**: it logs a failed inspect for the probe and a failed discovery
+    refresh. Without both, Alloy never lost the API, and no recovery is claimed.
+  - **Alloy keeps running**: same container, start time and restart count, and it reports ready.
+- **After `docker start`**:
+  - the API answers `200` again and the proxy becomes `healthy`;
+  - at least 3 lines the probe wrote after the API answered reach Loki, so the followed stream
+    resumed;
+  - a second labelled probe, started after the outage, reaches Loki, so discovery resumed;
+  - Alloy still has the same container, start time and restart count;
+  - the proxy refused none of Alloy's requests;
+  - Loki holds every numbered line from 1 to the last, the outage included. Duplicates are `info`.
+- **At the end**, nothing else restarted:
+  - The proxy is the same container, its last start is the script's `docker start`, and its restart
+    count is 0. `docker start` and `docker restart` reset that count, so the count shows only
+    restarts by the restart policy, a crash loop for one. A start by hand changes `StartedAt`,
+    which the script recorded right after its own start.
+  - No other service of the stack restarted, and only Alloy and the proxy are on
+    `nimuairy-observability_docker-api`.
+
+What it does not cover:
+
+- longer outages, log rotation during an outage, or a proxy in a crash loop;
+- daemon or host restarts, and Alloy starting while the proxy is down
+  ([deferred](DEFERRED_WORK.md#s33b--alloy-starting-while-the-socket-proxy-is-down));
+- a proxy or daemon that hangs instead of going away, a network partition, or a Loki outage;
+- heavy log volume, more than one host, or the VPS.
+
+"No gap" holds for the tested window only and is no proof of lossless collection
+([Docker API access](#docker-api-access)).
+
+While it runs, Alloy collects no logs from any container on that Docker host, including the app's
+when it runs locally. Do not run it on the VPS unless you mean to pause collection there.
+
+On `INT` (Ctrl-C), `TERM` or `HUP` the script brings the proxy back with `docker restart` before it
+exits. Interrupts with `INT` and `HUP` were tested; `TERM` goes through the same trap but was not
+tested. A killed script (`SIGKILL`) cannot restore anything. The proxy then stays stopped, the
+next run of either script stops at its first check, and `docker start docker-socket-proxy` repairs
+it. The script changes nothing else: it starts and removes only its own probe containers.
+
+CI's `observability` job starts the stack and runs the smoke test, then the outage check, on every
+PR that touches the stack, the overlay files or either script, and on pushes to master, nightly and
+manual runs. Afterwards it checks that no probe container is left and that the proxy is running
+and `healthy`. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
@@ -541,7 +623,7 @@ about 30 s (measured with Tempo 3.1).
 | Logs | The `Started NimuairyApiApplication` line | No `trace_id`/`span_id` |
 | Logs | Loki: `{app="nimuairy-api"} \| json \| trace_id="<id>"` | The login line. `trace_id` is a parsed field, not an indexed label (`/loki/api/v1/labels`) |
 | Logs | `curl -s -o /dev/null 127.0.0.1:4200/`, then Loki: `{container="frontend-nimuairy"}` | The nginx access line of that request |
-| Logs | `curl -sG 127.0.0.1:3100/loki/api/v1/query --data-urlencode 'query=sum by (container) (count_over_time({stack="observability"}[5m]))'` | Only `backend-nimuairy` and `frontend-nimuairy` (plus the smoke test's probe, if it ran in that window). Use this, not `/label/container/values`: label values also list streams that have no lines in the time range |
+| Logs | `curl -sG 127.0.0.1:3100/loki/api/v1/query --data-urlencode 'query=sum by (container) (count_over_time({stack="observability"}[5m]))'` | Only `backend-nimuairy` and `frontend-nimuairy` (plus the probes of the smoke test or the outage check, if one ran in that window). Use this, not `/label/container/values`: label values also list streams that have no lines in the time range |
 
 To check the network boundaries from the backend itself, run a probe in its network namespace. The
 backend and frontend images have no shell.
@@ -580,9 +662,9 @@ collected since the last scrape, so Prometheus never stores them
 - **Stack images**: Dependabot proposes tag bumps for `observability/compose.yaml` (weekly, after
   a 7-day cooldown), one PR per image; a manual bump works the same way. Read the release notes
   and wait for CI's `observability` job, which starts the stack with the new image and runs the
-  smoke test. It does not start the backend, so for a bump that can change what the app sees
-  (Tempo's OTLP intake, Prometheus scraping, Loki or Grafana queries) also run the backend checks
-  above and `scripts/observability-exemplar-check.sh` before merging.
+  smoke test and the proxy outage check. It does not start the backend, so for a bump that can
+  change what the app sees (Tempo's OTLP intake, Prometheus scraping, Loki or Grafana queries) also
+  run the backend checks above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Alloy and the socket proxy**: a new Alloy version may make a Docker API call the proxy refuses.
   - The smoke test fails on any refusal of Alloy's own requests during its run, so CI catches that
@@ -592,6 +674,10 @@ collected since the last scrape, so Prometheus never stores them
     ([Docker API access](#docker-api-access)).
   - The smoke test pins the proxy's image and exact command. A new proxy version, or a change to
     its command, therefore needs the script updated too, once the checks pass with it.
+  - The outage check recognises the outage by Alloy v1.20.1's log messages
+    (`error inspecting Docker container`, `Unable to refresh target groups`). A version that
+    renames them fails the check instead of passing it. Update the script only once you have
+    confirmed that the new messages mean the same.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).
@@ -660,7 +746,7 @@ It sends requests to `/api/v1/battles/demo` and checks, in this order, that:
 3. Grafana returns the exemplar through its Prometheus datasource (`/api/ds/query`).
 4. `/metrics` shows a bucket line with an exemplar when asked for OpenMetrics.
 
-It takes about 15 s. CI runs only the smoke test, which checks the stack's side without the
+It takes about 15 s. CI does not run it; CI's smoke test checks the stack's side without the
 backend: Prometheus stores exemplars, and Grafana links them to Tempo.
 
 Grafana's frontend adds the link itself, so check it in the browser:
