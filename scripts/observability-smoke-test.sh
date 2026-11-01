@@ -4,11 +4,12 @@
 # the observability.logs=true label stay out of Loki, exemplars can be stored and linked to Tempo, and
 # a container on the network the backend shares with the stack cannot reach Loki, Grafana or Alloy
 # (see docs/OBSERVABILITY.md, Verify and Networks). It also checks the Docker API boundary of
-# docker-socket-proxy: the proxy's running configuration, the requests it lets Alloy make, and the
-# requests, clients and network positions it refuses (docs/OBSERVABILITY.md, Docker API access). CI
-# runs it after `docker compose -f observability/compose.yaml up -d --wait`. It does not need the
-# backend; the checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars).
-# It starts, stops and changes nothing but its own probe containers, which it removes when it exits.
+# docker-socket-proxy: the proxy's running configuration, the requests it lets Alloy make, the
+# requests, clients and network positions it refuses, and that every numbered line of a probe reaches
+# Loki in normal operation (docs/OBSERVABILITY.md, Docker API access). CI runs it after
+# `docker compose -f observability/compose.yaml up -d --wait`. It does not need the backend; the
+# checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars). It starts,
+# stops and changes nothing but its own probe containers, which it removes when it exits.
 set -euo pipefail
 
 GRAFANA_AUTH=${GRAFANA_AUTH:-admin:admin}
@@ -116,6 +117,11 @@ started=$(docker info -f '{{.SystemTime}}')
 run_id=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
 api=$(docker version -f '{{.Server.APIVersion}}')
 alloy_id=$(docker inspect -f '{{.Id}}' alloy)
+alloy_ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$API_NET\").IPAddress}}" alloy 2>/dev/null) ||
+  fatal "alloy has no address on $API_NET"
+# Alloy must not restart during the run: its address tells its requests apart in the proxy's log.
+alloy_state() { docker inspect -f '{{.State.StartedAt}} {{.RestartCount}}' alloy 2>/dev/null || true; }
+alloy_before=$(alloy_state)
 echo "info engine: $(docker info -f '{{.OperatingSystem}}'), Docker $(docker version -f '{{.Server.Version}}'), API $api"
 
 check "Prometheus ready" 120 ready 127.0.0.1:9090/-/ready
@@ -165,9 +171,11 @@ image=$(docker inspect --format '{{.Config.Image}}' prometheus)
 # would discover the unlabelled one as well.
 docker run -d --name "$UNLABELLED" --label "observability.app=$UNLABELLED" --env "$env_marker" \
   --entrypoint sh "$image" -c "while true; do echo $unlabelled_token; sleep 1; done" >/dev/null
+# Numbered lines, so that the continuity check at the end can tell whether one went missing.
 docker run -d --name "$PROBE" --label observability.logs=true --label "observability.app=$PROBE" \
-  --entrypoint sh "$image" -c "while true; do echo $token; sleep 1; done" >/dev/null
+  --entrypoint sh "$image" -c "n=0; while true; do n=\$((n + 1)); echo \"$token seq=\$n\"; sleep 1; done" >/dev/null
 probe_id=$(docker inspect -f '{{.Id}}' "$PROBE")
+probe_started=$(docker inspect -f '{{.State.StartedAt}}' "$PROBE")
 unlabelled_id=$(docker inspect -f '{{.Id}}' "$UNLABELLED")
 failures_before=${#failures[@]}
 check "Alloy ships a labelled container's logs to Loki" 60 log_stored "$token"
@@ -361,7 +369,9 @@ expect_allowed() {
     fail "$1 (expected 200 with Docker's answer, got ${status:-no HTTP response}, ${#response} bytes)"
   fi
 }
+# Sets confirmed, so that the caller can keep the marker of a refusal seen in the proxy's log.
 expect_blocked() {
+  confirmed=false
   request "$2" "$3" "$4" "$5"
   if [[ -z $status ]]; then
     fail "$1 (no HTTP response: the request did not reach the proxy, so nothing is verified)"
@@ -371,6 +381,7 @@ expect_blocked() {
     fail "$1 ($6, but the proxy logged no matching refusal: ${logged:-no line with $marker})"
   else
     pass "$1"
+    confirmed=true
   fi
 }
 
@@ -427,7 +438,8 @@ else
 fi
 
 # Requests from Alloy's address, the only one the proxy accepts: this probe shares Alloy's network
-# namespace.
+# namespace. The markers of the refusals the proxy logged here are kept for the last check.
+refusal_markers=()
 api_answers() {
   request "$ALLOY_NS_PROBE" "$PROXY" HEAD /_ping
   [[ $status == 200 && $response == *$'\n'Api-Version:* ]]
@@ -442,9 +454,10 @@ if start_probe "$ALLOY_NS_PROBE" --network container:alloy &&
   expect_allowed "Alloy's address gets 200 for GET /v$api/networks" GET "/v$api/networks" "\"Name\":\"$API_NET\""
   expect_allowed "Alloy's address gets 200 for GET /v$api/containers/<probe>/json" GET \
     "/v$api/containers/$probe_id/json" "\"Id\":\"$probe_id\""
-  # Without follow, Docker ends the response after the last line.
+  # Without follow, Docker ends the response after the last line. Alloy's followed stream is what
+  # the continuity check at the end covers.
   expect_allowed "Alloy's address gets 200 for GET /v$api/containers/<probe>/logs" GET \
-    "/v$api/containers/$probe_id/logs?stdout=1&tail=1" "$token"
+    "/v$api/containers/$probe_id/logs?stdout=1&tail=1" "$token seq="
   # Accepted risk (docs/OBSERVABILITY.md, Docker API access). If this ever fails, the docs are wrong.
   expect_allowed "Accepted risk: Alloy's address can inspect a container outside the log allowlist, environment included" \
     GET "/v$api/containers/$unlabelled_id/json" "$env_marker"
@@ -466,6 +479,7 @@ if start_probe "$ALLOY_NS_PROBE" --network container:alloy &&
   for r in "${refused_paths[@]}"; do
     expect_blocked "Alloy's address gets 403 for $(shown "$r")" "$ALLOY_NS_PROBE" "$PROXY" "${r%% *}" "${r#* }" \
       403 'path not allowed'
+    if $confirmed; then refusal_markers+=("$marker"); fi
   done
   # The DELETE targets the test's own unlabelled container: had it got through, that container, and
   # nothing else, would be gone.
@@ -479,6 +493,7 @@ if start_probe "$ALLOY_NS_PROBE" --network container:alloy &&
   for r in "${refused_methods[@]}"; do
     expect_blocked "Alloy's address gets 405 for $(shown "$r")" "$ALLOY_NS_PROBE" "$PROXY" "${r%% *}" "${r#* }" \
       405 'method not allowed'
+    if $confirmed; then refusal_markers+=("$marker"); fi
   done
   if [[ $unlabelled_before == true\ * ]]; then
     expect_equal "No refused request reached Docker: $UNLABELLED runs unchanged" "$(unlabelled_state)" \
@@ -571,6 +586,119 @@ elif start_probe "$HOST_PROBE" --network host && assert_vantage "$HOST_PROBE" ho
   fi
 fi
 expect_equal "Only Alloy and $PROXY are on $API_NET after these checks" "$(members_of "$API_NET")" "alloy $PROXY"
+
+# Normal log-stream continuity: every numbered line the labelled probe wrote reached Loki through
+# Alloy's followed stream and the proxy. This covers normal operation in this run's window only; it
+# says nothing about outages and is no proof of lossless collection.
+probe_seqs() {
+  local body
+  body=$(curl -fsSG --max-time 10 127.0.0.1:3100/loki/api/v1/query_range \
+    --data-urlencode "query={app=\"$PROBE\"} |= \"$token\"" --data-urlencode since=15m \
+    --data-urlencode limit=1000) || return 1
+  grep -q '"status":"success"' <<<"$body" || return 1
+  grep -oE "$token seq=[0-9]+" <<<"$body" | sed 's/.* seq=//' || true
+}
+last=$(docker logs --tail 1 "$PROBE" 2>&1 | tr -d '\r' | sed -n 's/.* seq=\([0-9]*\)$/\1/p')
+seqs=
+missing=
+answered=false
+continuity_ok=false
+deadline=$((SECONDS + 30))
+while [[ -n $last ]]; do
+  if seqs=$(probe_seqs); then
+    answered=true
+    missing=$(awk -v last="$last" '{ seen[$1] = 1 } END { for (i = 1; i <= last; i++) if (!(i in seen)) printf "%d ", i }' <<<"$seqs")
+    if [[ -z $missing ]]; then break; fi
+  fi
+  if ((SECONDS >= deadline)); then break; fi
+  sleep 2
+done
+name="Loki has every line the probe wrote, 1 to ${last:-?}, at least 15"
+if [[ -z $last ]]; then
+  fail "$name (no numbered line in docker logs $PROBE)"
+elif ! $answered; then
+  fail "$name (Loki did not answer the query)"
+elif ((last < 15)); then
+  fail "$name (only $last lines, too few to judge)"
+elif [[ -n $missing ]]; then
+  fail "$name (still missing after 30 s: $(cut -d' ' -f1-10 <<<"$missing"))"
+else
+  pass "$name: no gap in normal operation (this run only)"
+  continuity_ok=true
+fi
+if [[ -n $seqs ]]; then
+  total=$(grep -c . <<<"$seqs" || true)
+  unique=$(sort -nu <<<"$seqs" | grep -c . || true)
+  echo "info $((total - unique)) duplicate line(s) of the probe in Loki (reported, never a failure)"
+fi
+# What each message means comes from Alloy v1.20.1's tailer: "could not transfer logs" is a followed
+# stream that broke with an error, which in this window has no harmless cause (Alloy keeps a running,
+# unchanged target's tailer). It is also the one sign of the http:// regression in
+# observability/alloy/config.alloy, whose streams restart every 5 s from the last second, so that
+# the line check alone could pass. "finished transferring logs" is a stream that ended cleanly,
+# normally because its container stopped, and the other two are failed attempts to open one; Alloy
+# reopens a stream within 5 s from the last second it read, so these say nothing about loss.
+stream_messages() { grep -cF "msg=\"$1\"" <<<"$stream_log" || true; }
+name="Alloy reports no broken stream for the probe (could not transfer logs)"
+if [[ $(docker inspect -f '{{.State.Running}} {{.State.StartedAt}}' "$PROBE" 2>/dev/null) != "true $probe_started" ]]; then
+  fail "The labelled probe ran throughout the run"
+  echo "skip $name (it cannot be judged)"
+elif [[ $(alloy_state) != "$alloy_before" ]]; then
+  fail "Alloy kept running throughout the run (it restarted)"
+  echo "skip $name (it cannot be judged)"
+else
+  stream_log=$(docker logs --since "$probe_started" alloy 2>&1 | tr -d '\r' | grep -F "$probe_id" || true)
+  if (($(stream_messages 'could not transfer logs') == 0)); then
+    pass "$name"
+  else
+    grep -F 'msg="could not transfer logs"' <<<"$stream_log" | head -5 | sed 's/^/     /'
+    fail "$name (lines above)"
+  fi
+  echo "info Alloy's other stream messages for the probe: finished transferring logs" \
+    "$(stream_messages 'finished transferring logs'), could not fetch logs for container" \
+    "$(stream_messages 'could not fetch logs for container'), could not inspect container info" \
+    "$(stream_messages 'could not inspect container info') (interruptions Alloy recovers from, not loss)"
+fi
+name="Alloy still skips the container without observability.logs=true at the end of the run"
+if ! $continuity_ok; then
+  echo "skip $name (the labelled probe's lines did not all arrive)"
+elif log_absent "$unlabelled_token"; then
+  pass "$name"
+else
+  fail "$name"
+fi
+
+# Alloy's own requests over the whole run. A refusal is Alloy's when it comes from Alloy's address
+# and has no smoke= parameter: every request of this script has one, and Alloy's never do. So the
+# deliberate refusals above, sent from the same address, never count, whatever the order.
+name="The proxy refused none of Alloy's own requests during the run"
+all_refusals=$(refusals)
+seen_markers=0
+for m in "${refusal_markers[@]}"; do
+  if grep -qF "$m" <<<"$all_refusals"; then seen_markers=$((seen_markers + 1)); fi
+done
+if [[ $(alloy_state) != "$alloy_before" ]]; then
+  fail "Alloy kept running throughout the run (it restarted, so its requests cannot be told apart)"
+  echo "skip $name"
+elif ((${#refusal_markers[@]} == 0 || seen_markers < ${#refusal_markers[@]})); then
+  fail "The proxy's log shows this run's own refusals ($seen_markers of ${#refusal_markers[@]})"
+  echo "skip $name"
+elif ! $continuity_ok; then
+  echo "skip $name (no proof that Alloy used the proxy in this window: the continuity check failed)"
+else
+  alloy_refusals=$(grep -F "client=$alloy_ip:" <<<"$all_refusals" | grep -vF 'smoke=' || true)
+  if [[ -z $alloy_refusals ]]; then
+    pass "$name"
+  else
+    head -5 <<<"$alloy_refusals" | sed 's/^/     /'
+    fail "$name ($(grep -c . <<<"$alloy_refusals") refusal(s), first ones above)"
+  fi
+  others=$(grep -vF "client=$alloy_ip:" <<<"$all_refusals" | grep -vF "smoke=$run_id-" || true)
+  if [[ -n $others ]]; then
+    echo "info $(grep -c . <<<"$others") refusal(s) of other clients without this run's marker, not Alloy's:"
+    head -5 <<<"$others" | sed 's/^/     /'
+  fi
+fi
 
 if ((${#warnings[@]})); then
   echo "${#warnings[@]} check(s) not verified on this engine (WARN):" >&2
