@@ -57,7 +57,7 @@ services:
       start_period: 10s
 
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     container_name: loki
     restart: unless-stopped
     command: ["-config.file=/etc/loki/loki-config.yaml", "-target=all"]
