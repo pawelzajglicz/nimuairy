@@ -115,3 +115,52 @@ observability stack.
 
 - do not change the deploy workflow or the VPS `.env` without a tested rollback path;
 - never commit secret files; keep them out of the repository like `.env`.
+
+## S3.3b — Alloy starting while the socket proxy is down
+
+**Status:** Deferred
+
+**Origin:** Observability production rollout, S3.3 (socket proxy outage check).
+
+**Current state:**
+
+- `scripts/observability-proxy-resilience-check.sh` covers one case: the proxy stops for 20 to 45 s
+  while Alloy keeps running, and Alloy must resume without a restart (see
+  [Verify](OBSERVABILITY.md#verify-1)).
+- Alloy starting, or restarting, while the proxy is down is not tested. It happens after a daemon
+  restart or a reboot, when restart policies start containers without the `depends_on` order (see
+  [Docker API access](OBSERVABILITY.md#docker-api-access)). What is known comes from reading the
+  source of Alloy v1.20.1 and its Docker client:
+  - the client negotiates the API version once, with `HEAD /_ping`. Until that succeeds, it sends
+    paths without a version prefix. The proxy refuses those (`403 path not allowed`), as the smoke
+    test confirms for `GET /containers/json`. So refusals of Alloy's own requests are expected for
+    a while;
+  - when a stream ends, Alloy drops the container's saved position. A restart before the stream
+    reopens reads that container's log from the start again: duplicates, or lines Loki rejects as
+    too old.
+
+**Reason for deferral:** it breaks the S3.3 check's rule that Alloy must not restart, and it runs
+other code. It needs its own expectations for Alloy's refusals and for duplicates. Mixing those
+into the S3.3 check would make that check harder to read and to trust.
+
+**Reconsider when:**
+
+- before Alloy collects logs on the VPS (S6, S7), if the start order after a daemon restart or a
+  reboot matters there;
+- an Alloy upgrade changes how its Docker client negotiates the API version;
+- logs go missing or arrive twice after a daemon restart or a reboot.
+
+**Potential scope when resumed:**
+
+- A separate scenario: stop the proxy, restart Alloy, keep the proxy down for a while, then start
+  it.
+- Check that collection resumes and that a container started meanwhile is found.
+- Report refusals of unversioned paths during the outage separately from refusals after the API
+  answers, which must stay at zero.
+- Report duplicates as `info`.
+
+**Constraints:**
+
+- keep this scenario apart from the S3.3 check, and do not weaken that check's rule that Alloy
+  must not restart;
+- do not widen the proxy's allowlist to unversioned paths to make the scenario pass.
