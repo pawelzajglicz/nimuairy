@@ -117,11 +117,11 @@ latency graph opens the trace of a request it counts
 
 | File | Role |
 |---|---|
-| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network |
+| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` network ([Networks](#networks)) |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
-| `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
+| `scripts/observability-smoke-test.sh` | Checks the running stack and its network boundaries without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -147,7 +147,8 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Change | Why |
 |---|---|
 | Project name `nimuairy-observability` | Its volumes never mix with a copy of the course stack |
-| Network name `nimuairy-observability` (course: `observability`) | A generic name could clash with another project's network or a copy of the course stack. The Compose key stays `observability`, so the services' `networks:` entries are unchanged |
+| Network name `nimuairy-observability` (course: `observability`) | A generic name could clash with another project's network or a copy of the course stack. The Compose key stays `observability` |
+| A second network, `stack`: Loki, Grafana and Alloy are only on it, and only Prometheus and Tempo stay on `nimuairy-observability` | On the course's single network, the backend could reach every service of the stack ([Networks](#networks)) |
 | Every port bound to `127.0.0.1` | As in `compose.override.yaml`: Docker's port publishing bypasses the host firewall, and Grafana's `admin/admin` and the unauthenticated Loki/Tempo endpoints must stay off the LAN |
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
@@ -224,6 +225,45 @@ overlay it means nothing from the app.
 - Compose does not restart Alloy when `observability/alloy/config.alloy` changes. Run
   `docker compose -f observability/compose.yaml restart alloy`.
 
+### Networks
+
+The app and the stack share one network, and on the stack's side only the services the backend must
+talk to join it:
+
+| Network | Created by | Members | Carries |
+|---|---|---|---|
+| `nimuairy-observability` | the stack; the app joins it as an external network (`compose.observability.yaml`) | backend, Tempo, Prometheus | traces to `tempo:4318`; Prometheus's scrape of `backend-nimuairy:9464` |
+| `nimuairy-observability_stack` | the stack | Prometheus, Tempo, Loki, Grafana, Alloy | Grafana's queries; Alloy's pushes to Loki; Prometheus's scrape of Alloy |
+
+So the backend shares no network with Loki, Grafana or Alloy, and their names don't resolve on its
+networks. Whether a connection to their addresses is also dropped depends on the Docker engine: a
+Linux engine drops it, while Docker Desktop lets connections to published ports through (see below).
+The frontend joins neither network: Alloy reads its logs, and the backend's, through the Docker API.
+
+Keep the definition of `nimuairy-observability` (key, name and settings) as it is. Compose stores a
+hash of it on the network and would have to recreate the network after a change, which Docker refuses
+while the backend, from the other project, is attached.
+
+What the separation does not do:
+
+- **It does not filter ports.** Membership opens every port of a network's members, so besides
+  Tempo's OTLP intake the backend also reaches Tempo's query API (`3200`) and Prometheus's API
+  (`9090`). This is an accepted limitation.
+- **It does not limit who reaches the backend's metrics.** The agent serves them on `0.0.0.0:9464`,
+  so every container on the backend's other networks reaches the port too: the frontend (and, in
+  production, cloudflared) on `frontend`, Postgres on `backend`. Also accepted. nginx has no route
+  to the port.
+- **It is not enforced on Docker Desktop for published ports.** A container there can connect to a
+  published port of a container in another network by its address, while a Linux engine drops
+  such connections (with a raw-table rule since Docker 28.2). Unpublished ports are dropped on both.
+  With the stack's development ports, the backend can therefore reach Loki, Grafana and Alloy by
+  address on Docker Desktop. The smoke test reports these connections as `WARN`, never as passed.
+  Only a Linux engine, such as CI or the VPS, verifies the isolation.
+- **`internal: true` would not help here.** Docker publishes a container's ports only through a
+  non-internal network, and every service of the stack publishes one. An internal network does not
+  separate a container from the host either: the host reaches every container address, and
+  containers reach host services on the bridge's address.
+
 ### Verify
 
 Check the stack on its own first:
@@ -241,6 +281,23 @@ A second container that has only `observability.app` must stay out of Loki. Afte
 container's log reaches Loki, the test waits another 20 s before checking that the unlabelled
 container's log is still missing from every stream. This gives Alloy time for at least three
 discovery rounds and Loki time to ingest the log, had it been collected.
+
+The test then checks the [network boundaries](#networks) with a stand-in for the backend: a container
+on `nimuairy-observability`.
+
+- The stand-in must reach Tempo's OTLP intake, and Prometheus must reach the stand-in.
+- Loki, Grafana and Alloy must not be on that network and must not resolve there.
+- Connections from the stand-in to their addresses on `nimuairy-observability_stack` must fail. A
+  name that doesn't resolve is no proof on its own.
+- Every negative check has a positive counterpart, so a broken probe cannot pass as isolation. The
+  stand-in must resolve `tempo` and connect to it with the same tools (`nslookup`, `nc`).
+  Prometheus, on `nimuairy-observability_stack`, must connect to each address and port the stand-in
+  must not reach.
+
+On Docker Desktop, a connection that succeeds to a published port is reported as `WARN`. On any other
+engine, including one the test cannot identify, it fails the test. With warnings, the run ends with
+"No check failed, but the WARN checks above were not verified" instead of "All checks passed". The
+`info` lines show the accepted limitation: the stand-in reaches Tempo's and Prometheus's APIs.
 
 CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
 overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
@@ -273,6 +330,30 @@ about 30 s (measured with Tempo 3.1).
 | Logs | Loki: `{app="nimuairy-api"} \| json \| trace_id="<id>"` | The login line. `trace_id` is a parsed field, not an indexed label (`/loki/api/v1/labels`) |
 | Logs | `curl -s -o /dev/null 127.0.0.1:4200/`, then Loki: `{container="frontend-nimuairy"}` | The nginx access line of that request |
 | Logs | `curl -sG 127.0.0.1:3100/loki/api/v1/query --data-urlencode 'query=sum by (container) (count_over_time({stack="observability"}[5m]))'` | Only `backend-nimuairy` and `frontend-nimuairy` (plus the smoke test's probe, if it ran in that window). Use this, not `/label/container/values`: label values also list streams that have no lines in the time range |
+
+To check the network boundaries from the backend itself, run a probe in its network namespace. The
+backend and frontend images have no shell.
+
+```bash
+image=$(docker inspect --format '{{.Config.Image}}' prometheus)
+loki_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "nimuairy-observability_stack").IPAddress}}' loki)
+docker run --rm --network container:backend-nimuairy --entrypoint sh "$image" -c \
+  "nslookup tempo.; nslookup loki.; nc -w 3 $loki_ip 3100 </dev/null; echo nc=\$?"
+```
+
+What to expect:
+
+- `tempo.` resolves, so it prints a `Name:` line. `loki.` does not resolve and prints no `Name:`
+  line. Busybox reports that as either `can't find … NXDOMAIN` or `Can't find …: No answer`, and
+  the exit code can be 0 either way, so look for the `Name:` line. The trailing dot matters: with a
+  search domain in `resolv.conf`, busybox `nslookup` queries only `<name>.<search domain>`, so a bare
+  `loki` would never resolve and prove nothing. `tempo.` shows that the lookup itself works.
+- `nc=1` on a Linux engine. Docker Desktop prints `nc=0` ([Networks](#networks)).
+- Repeat the check for `grafana` (`3000`) and `alloy` (`12345`).
+- From `container:frontend-nimuairy`, also check `tempo` and `prometheus`: the frontend shares no
+  network with the stack.
+- Check the backend's port `9464` with `nc` only, which sends no request. An HTTP request to
+  `/metrics` discards exemplars ([stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)).
 
 Query Prometheus with `curl -sG 127.0.0.1:9090/api/v1/query --data-urlencode 'query=...'` and
 Loki with `curl -sG 127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query=...'
