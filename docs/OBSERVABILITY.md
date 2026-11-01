@@ -482,12 +482,15 @@ What it checks:
   - a client in the host's network namespace gets `403` `forbidden IP`, with the gateway of
     `nimuairy-observability_docker-api` as its address.
 
-  A failed connection never counts as a refusal by the proxy. The DNS and TCP checks are strict on
-  every engine, because the proxy's port is not published and its network is internal. The host
-  check is strict on a Linux engine and a `WARN` on Docker Desktop, even when the proxy refuses the
-  client there.
+  A failed connection never counts as a refusal by the proxy. A TCP check counts as isolation only
+  when `nc` ran in the probe and reported that it could not connect (timed out or refused). A probe
+  that could not run fails the check. The DNS and TCP checks are strict on every engine, because the
+  proxy's port is not published and its network is internal. The host check is strict on a Linux
+  engine and a `WARN` on Docker Desktop, even when the proxy refuses the client there.
 - **Log continuity in normal operation**: the labelled probe writes numbered lines. At the end, Loki
   must hold every line from 1 to the last one the probe wrote, at least 15.
+  - The query covers the probe's lifetime. If it returns as many lines as its limit (1000), the
+    result may be cut off. The check then fails instead of judging completeness.
   - Duplicates are reported as `info`.
   - Alloy must log no `could not transfer logs` for the probe while the probe and Alloy keep
     running. That message means a followed stream broke with an error. It is also the sign of an
