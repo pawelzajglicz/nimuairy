@@ -31,7 +31,9 @@ services:
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:
       # Read from the environment rather than passed as --token, which would
-      # leave it visible in `docker inspect` and the process list.
+      # show it in the host's process list. `docker inspect` still shows it
+      # (Config.Env), as it does every secret in this file; see
+      # docs/DEFERRED_WORK.md.
       TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN:?set CLOUDFLARED_TOKEN in .env}
     depends_on:
       - frontend

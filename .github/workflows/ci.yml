@@ -134,6 +134,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The Docker socket proxy runs with the socket's group (observability/compose.yaml).
+      - name: Set Docker socket GID
+        run: echo "DOCKER_SOCKET_GID=$(stat -c %g /var/run/docker.sock)" >> "$GITHUB_ENV"
       - name: Validate the Compose files
         run: |
           docker compose -f observability/compose.yaml config -q
