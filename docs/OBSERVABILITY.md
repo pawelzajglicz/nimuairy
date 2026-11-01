@@ -121,7 +121,7 @@ latency graph opens the trace of a request it counts
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
-| `scripts/observability-smoke-test.sh` | Checks the running stack without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
+| `scripts/observability-smoke-test.sh` | Checks the running stack and its network boundaries without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -256,7 +256,8 @@ What the separation does not do:
   published port of a container in another network by its address, while a Linux engine drops
   such connections (with a raw-table rule since Docker 28.2). Unpublished ports are dropped on both.
   With the stack's development ports, the backend can therefore reach Loki, Grafana and Alloy by
-  address on Docker Desktop. Only a Linux engine, such as CI or the VPS, verifies the isolation.
+  address on Docker Desktop. The smoke test reports these connections as `WARN`, never as passed.
+  Only a Linux engine, such as CI or the VPS, verifies the isolation.
 - **`internal: true` would not help here.** Docker publishes a container's ports only through a
   non-internal network, and every service of the stack publishes one. An internal network does not
   separate a container from the host either: the host reaches every container address, and
@@ -279,6 +280,23 @@ A second container that has only `observability.app` must stay out of Loki. Afte
 container's log reaches Loki, the test waits another 20 s before checking that the unlabelled
 container's log is still missing from every stream. This gives Alloy time for at least three
 discovery rounds and Loki time to ingest the log, had it been collected.
+
+The test then checks the [network boundaries](#networks) with a stand-in for the backend: a container
+on `nimuairy-observability`.
+
+- The stand-in must reach Tempo's OTLP intake, and Prometheus must reach the stand-in.
+- Loki, Grafana and Alloy must not be on that network and must not resolve there.
+- Connections from the stand-in to their addresses on `nimuairy-observability_stack` must fail. A
+  name that doesn't resolve is no proof on its own.
+- Every negative check has a positive counterpart, so a broken probe cannot pass as isolation. The
+  stand-in must resolve `tempo` and connect to it with the same tools (`nslookup`, `nc`).
+  Prometheus, on `nimuairy-observability_stack`, must connect to each address and port the stand-in
+  must not reach.
+
+On Docker Desktop, a connection that succeeds to a published port is reported as `WARN`. On any other
+engine, including one the test cannot identify, it fails the test. With warnings, the run ends with
+"No check failed, but the WARN checks above were not verified" instead of "All checks passed". The
+`info` lines show the accepted limitation: the stand-in reaches Tempo's and Prometheus's APIs.
 
 CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
 overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
