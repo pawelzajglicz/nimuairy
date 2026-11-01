@@ -121,7 +121,7 @@ latency graph opens the trace of a request it counts
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
-| `scripts/observability-smoke-test.sh` | Checks the running stack and its network boundaries without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
+| `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -283,7 +283,11 @@ What the separation does not do:
   address, and containers reach host services on the bridge's address. Only
   `nimuairy-observability_docker-api` is internal: no port is published through it, and the proxy
   needs no traffic beyond Alloy's requests. That the host can still reach the proxy's address is why
-  the proxy also accepts only Alloy as a client.
+  the proxy also accepts only Alloy as a client. Docker's documentation says so too: the bridge of an
+  internal network normally gets a host address, so "processes on the Docker host can access the
+  network" (only the opt-in gateway mode `isolated` removes that address). The smoke test checks
+  that a client in the host's network namespace gets `403` from the proxy, strictly on a Linux engine
+  only ([Verify](#verify-1)).
 
 ### Docker API access
 
@@ -310,10 +314,38 @@ client it uses:
 | `GET /v1.NN/containers/<64-hex id>/json` | `loki.source.docker`, at start and every 5 s per container | Container state and TTY mode |
 | `GET /v1.NN/containers/<64-hex id>/logs` | `loki.source.docker` | The followed log stream |
 
-Every other method gets `405` and every other path `403`, and so does any client other than `alloy`
-(`-allowfrom=alloy`, resolved through Docker's DNS on each request). The proxy logs each refusal as
-`blocked request`, with the reason, method, URL and client. Containers are addressed by ID only, so
-`/containers/<name>/json` is refused as well. The proxy publishes no port.
+The proxy checks each request in this order and refuses it at the first check it fails:
+
+| Check | Refusal | Logged reason |
+|---|---|---|
+| Client: only `alloy` (`-allowfrom=alloy`, resolved through Docker's DNS on each request) | `403 Forbidden` | `forbidden IP` |
+| Method: only `HEAD` and `GET` | `405 Method Not Allowed` | `method not allowed` |
+| Path: the patterns above, anchored at both ends and matched against the decoded path, without removing `.` or `..` segments | `403 Forbidden` | `path not allowed` |
+
+So any other client gets `403` even for a request Alloy may make. The proxy logs every refusal before
+it answers, as a `blocked request` line with the reason, method, URL (query string included) and
+client address. Containers are addressed by their full ID only, so `/containers/<name>/json` and
+short IDs are refused as well. The proxy publishes no port.
+
+The proxy takes its rules only from its command-line flags and from `SP_*` environment variables.
+`SP_ALLOW_<METHOD>` would allow another method, and `-proxycontainername` (or
+`SP_PROXYCONTAINERNAME`) would add allowlists read from container labels. The stack sets neither; the
+smoke test pins the proxy's exact command and fails on any `SP_*` variable. `-allowfrom` trusts
+Docker's DNS: a container that joined `nimuairy-observability_docker-api` under the alias `alloy`
+would be accepted. Joining a network takes access to the Docker API, which is root-equivalent anyway.
+
+**A `403` is not a network block.** A `403` from the proxy is an HTTP answer: the client reached the
+proxy over TCP and the proxy refused it. A name that does not resolve, or a connection that is
+refused or times out, is a block below HTTP. The two prove different things, so the smoke test
+expects the one that fits where the client is:
+
+| Client | Expected |
+|---|---|
+| Alloy (the smoke test uses a probe in Alloy's network namespace) | `200` for the requests above, `403` `path not allowed` for other paths, `405` `method not allowed` for other methods |
+| Another container on `nimuairy-observability_docker-api` | Reaches the proxy; `403` `forbidden IP` for every request |
+| A container on `nimuairy-observability` only, or on `nimuairy-observability_stack` only | `docker-socket-proxy` does not resolve, and its address takes no TCP connection |
+| A process in the host's network namespace, Linux engine | Reaches the proxy's address ([Networks](#networks)); `403` `forbidden IP`, logged with the network's gateway as the client |
+| The same on Docker Desktop | Not verified: host networking there is an opt-in feature, and Docker does not document which network namespace it uses |
 
 **`tcp://`, not `http://`.** For `http(s)://` hosts, Alloy v1.20 gives `loki.source.docker` an HTTP
 client whose timeout is `refresh_interval`, and that timeout also covers reading the response body.
@@ -344,9 +376,11 @@ What the proxy does not protect:
   app passes as variables (`POSTGRES_PASSWORD`, `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`,
   `TUNNEL_TOKEN`). Moving them out of the environment is
   [deferred](DEFERRED_WORK.md#s3--application-secrets-out-of-container-environment-variables).
+  This is an accepted risk, and the smoke test confirms it with a harmless variable of its own probe.
 - **The label allowlist.** The proxy matches paths, not query parameters, so it never sees the
-  `observability.logs=true` filter. A compromised Alloy could list every container and read the
-  logs of any of them.
+  `observability.logs=true` filter. The filter decides what Alloy collects; it is not a security
+  boundary of the Docker API. A compromised Alloy could list every container and read the logs of
+  any of them. The smoke test shows Alloy's address inspecting a container without the label.
 - **Against its own flaws, only partly.** The proxy holds the socket. Its user, read-only file
   system and dropped capabilities limit what a flaw in the proxy process could do, nothing more.
   Anyone else with access to the Docker API, such as the members of the host's `docker` group, has
@@ -409,6 +443,53 @@ On Docker Desktop, a connection that succeeds to a published port is reported as
 engine, including one the test cannot identify, it fails the test. With warnings, the run ends with
 "No check failed, but the WARN checks above were not verified" instead of "All checks passed". The
 `info` lines show the accepted limitation: the stand-in reaches Tempo's and Prometheus's APIs.
+
+Last, the test checks the [Docker API boundary](#docker-api-access) of `docker-socket-proxy`.
+
+- Its probes run the Grafana image, which has `curl`, `nc` and `nslookup`. Busybox `nc` cannot be the
+  HTTP client: it half-closes the connection once it has sent the request, and the proxy then
+  cancels a request it is passing on to Docker (`502`).
+- Before a probe is used, its network mode and networks are checked, so each result describes only
+  that probe's network position.
+
+What it checks:
+
+- **Configuration**, as the running containers have it:
+  - only the proxy, of the stack's containers, mounts the Docker socket;
+  - it publishes no port and is on `nimuairy-observability_docker-api` only, which is internal and
+    has only Alloy and the proxy;
+  - its image, user, read-only root filesystem, capabilities and `no-new-privileges`;
+  - its exact command, and no `SP_*` variable.
+- **Alloy's requests**, from a probe in Alloy's network namespace:
+  - `HEAD /_ping` and the four `GET` requests return `200` with Docker's data;
+  - `HEAD /_ping` is retried for up to 60 s. It is the first answer of the proxy's API, which
+    `healthy` does not prove.
+- **Refusals**: other paths get `403` and other methods `405`, for example `GET /v1.NN/info`, a
+  container name or short ID, or `DELETE` and `PUT` on a container.
+  - Docker would answer most of these itself, so each status must come with the proxy's
+    `blocked request` line for that exact request. Every request carries its own `smoke=` query
+    parameter, which the proxy logs and Docker ignores.
+  - The `DELETE` targets the test's own container, which must still run unchanged afterwards.
+- **Accepted risk**: Alloy's address can inspect the test's unlabelled container, environment
+  included. The test fails if that ever changes, because this document would then be wrong.
+- **Other clients**, as in the table under Docker API access:
+  - another container on `nimuairy-observability_docker-api` resolves the proxy, connects to it and
+    gets `403` `forbidden IP`;
+  - a container on `nimuairy-observability` alone, and one on `nimuairy-observability_stack` alone,
+    neither resolves the proxy nor connects to its address. Each must still resolve and reach a
+    service of its own network (Tempo, Loki), and a probe in Alloy's network namespace must
+    connect to that address;
+  - a client in the host's network namespace gets `403` `forbidden IP`, with the gateway of
+    `nimuairy-observability_docker-api` as its address.
+
+  A failed connection never counts as a refusal by the proxy. The DNS and TCP checks are strict on
+  every engine, because the proxy's port is not published and its network is internal. The host
+  check is strict on a Linux engine and a `WARN` on Docker Desktop, even when the proxy refuses the
+  client there.
+
+The test starts and changes nothing but its own probe containers. It removes them when it exits,
+including when it is interrupted, and checks that only Alloy and the proxy are left on
+`nimuairy-observability_docker-api`.
 
 CI's `observability` job starts the stack and runs it on every PR that touches the stack, the
 overlay files or the script. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's
@@ -484,8 +565,10 @@ collected since the last scrape, so Prometheus never stores them
   above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
 - **Alloy and the socket proxy**: a new Alloy version may make a Docker API call the proxy refuses.
-  Before merging such a bump, check `docker logs docker-socket-proxy` for `blocked request` lines
-  ([Docker API access](#docker-api-access)).
+  - Before merging such a bump, check `docker logs docker-socket-proxy` for `blocked request` lines
+    ([Docker API access](#docker-api-access)).
+  - The smoke test pins the proxy's image and exact command. A new proxy version, or a change to
+    its command, therefore needs the script updated too, once the checks pass with it.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
   with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
   `--web.enable-lifecycle`).
