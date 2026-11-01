@@ -235,9 +235,10 @@ talk to join it:
 | `nimuairy-observability` | the stack; the app joins it as an external network (`compose.observability.yaml`) | backend, Tempo, Prometheus | traces to `tempo:4318`; Prometheus's scrape of `backend-nimuairy:9464` |
 | `nimuairy-observability_stack` | the stack | Prometheus, Tempo, Loki, Grafana, Alloy | Grafana's queries; Alloy's pushes to Loki; Prometheus's scrape of Alloy |
 
-So the backend cannot reach Loki, Grafana or Alloy. Their names don't resolve on its networks, and a
-Linux engine drops connections to their addresses (Docker Desktop doesn't always, see below). The
-frontend joins neither network: Alloy reads its logs, and the backend's, through the Docker API.
+So the backend shares no network with Loki, Grafana or Alloy, and their names don't resolve on its
+networks. Whether a connection to their addresses is also dropped depends on the Docker engine: a
+Linux engine drops it, while Docker Desktop lets connections to published ports through (see below).
+The frontend joins neither network: Alloy reads its logs, and the backend's, through the Docker API.
 
 Keep the definition of `nimuairy-observability` (key, name and settings) as it is. Compose stores a
 hash of it on the network and would have to recreate the network after a change, which Docker refuses
@@ -342,9 +343,11 @@ docker run --rm --network container:backend-nimuairy --entrypoint sh "$image" -c
 
 What to expect:
 
-- `tempo.` resolves and `loki.` does not. The trailing dot matters: with a search domain in
-  `resolv.conf`, busybox `nslookup` queries only `<name>.<search domain>`, so a bare `loki` would
-  never resolve and prove nothing. `tempo.` shows that the lookup itself works.
+- `tempo.` resolves, so it prints a `Name:` line. `loki.` does not resolve and prints no `Name:`
+  line. Busybox reports that as either `can't find … NXDOMAIN` or `Can't find …: No answer`, and
+  the exit code can be 0 either way, so look for the `Name:` line. The trailing dot matters: with a
+  search domain in `resolv.conf`, busybox `nslookup` queries only `<name>.<search domain>`, so a bare
+  `loki` would never resolve and prove nothing. `tempo.` shows that the lookup itself works.
 - `nc=1` on a Linux engine. Docker Desktop prints `nc=0` ([Networks](#networks)).
 - Repeat the check for `grafana` (`3000`) and `alloy` (`12345`).
 - From `container:frontend-nimuairy`, also check `tempo` and `prometheus`: the frontend shares no
