@@ -55,7 +55,8 @@ jobs:
                 frontend/*) frontend=true ;;
                 nimuairy-api/*) backend=true ;;
                 observability/* | compose.yaml | compose.override.yaml | compose.observability*.yaml | \
-                  scripts/observability-smoke-test.sh) observability=true ;;
+                  scripts/observability-smoke-test.sh | scripts/observability-proxy-resilience-check.sh)
+                  observability=true ;;
               esac
             # --no-renames lists both paths of a move, so moving a file out of an area still
             # runs that area's checks.
@@ -125,6 +126,8 @@ jobs:
   # broken stack: Loki, Tempo and Alloy have no healthcheck, so a service that crash-loops on its
   # config still counts as started. The smoke test polls each service instead. The backend is not
   # started, only its overlay validated; docs/OBSERVABILITY.md lists the checks that need it.
+  # After the smoke test, a second script stops the Docker socket proxy for a while and checks
+  # that Alloy resumes log collection without a restart.
   observability:
     needs: changes
     if: needs.changes.outputs.observability == 'true'
@@ -144,10 +147,21 @@ jobs:
             -f compose.observability.yaml -f compose.observability.dev.yaml config -q
       - run: docker compose -f observability/compose.yaml up -d --wait --wait-timeout 180
       - run: bash scripts/observability-smoke-test.sh
-      # The smoke test removes its probe containers when it exits; one left over means that failed.
+      # Only after a green smoke test: an outage means something only on a stack whose boundary
+      # passed. Its own limit leaves the job time for the checks below if the script hangs.
+      - name: Socket proxy outage
+        run: bash scripts/observability-proxy-resilience-check.sh
+        timeout-minutes: 6
+      # The tests remove their probe containers when they exit; one left over means that failed.
+      # docker ps ORs two name filters.
       - name: No probe containers left
         if: always()
-        run: test -z "$(docker ps -aq --filter name=observability-smoke-test)"
+        run: test -z "$(docker ps -aq --filter name=observability-smoke-test --filter name=observability-proxy-resilience)"
+      # The outage check restores the proxy on exit, but a killed script cannot, and a proxy
+      # stopped by hand stays stopped (restart: unless-stopped).
+      - name: Socket proxy running again
+        if: always()
+        run: test "$(docker inspect -f '{{.State.Running}} {{.State.Health.Status}}' docker-socket-proxy)" = "true healthy"
       - name: Stack status and logs
         if: failure()
         run: |
