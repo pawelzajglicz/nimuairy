@@ -152,7 +152,9 @@ else
   docker_desktop=false
 fi
 in_app() { docker exec "$APP_PROBE" "$@"; }
-resolves() { in_app nslookup "$1" 2>/dev/null | grep -q '^Name:'; }
+# The trailing dot makes the name absolute. With a search domain in resolv.conf (GitHub's runners
+# have one), busybox nslookup queries only <name>.<search domain>, never the bare name.
+resolves() { in_app nslookup "$1." 2>/dev/null | grep -q '^Name:'; }
 connects() { in_app nc -w 3 "$1" "$2" </dev/null >/dev/null 2>&1; }
 stack_ip() { docker inspect -f "{{(index .NetworkSettings.Networks \"$STACK_NET\").IPAddress}}" "$1" 2>/dev/null; }
 published() { [[ -n $(docker port "$1" "$2/tcp" 2>/dev/null) ]]; }

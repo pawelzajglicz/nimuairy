@@ -337,12 +337,14 @@ backend and frontend images have no shell.
 image=$(docker inspect --format '{{.Config.Image}}' prometheus)
 loki_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "nimuairy-observability_stack").IPAddress}}' loki)
 docker run --rm --network container:backend-nimuairy --entrypoint sh "$image" -c \
-  "nslookup loki; nc -w 3 $loki_ip 3100 </dev/null; echo nc=\$?"
+  "nslookup tempo.; nslookup loki.; nc -w 3 $loki_ip 3100 </dev/null; echo nc=\$?"
 ```
 
 What to expect:
 
-- `loki` does not resolve.
+- `tempo.` resolves and `loki.` does not. The trailing dot matters: with a search domain in
+  `resolv.conf`, busybox `nslookup` queries only `<name>.<search domain>`, so a bare `loki` would
+  never resolve and prove nothing. `tempo.` shows that the lookup itself works.
 - `nc=1` on a Linux engine. Docker Desktop prints `nc=0` ([Networks](#networks)).
 - Repeat the check for `grafana` (`3000`) and `alloy` (`12345`).
 - From `container:frontend-nimuairy`, also check `tempo` and `prometheus`: the frontend shares no
