@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.nimuairy</groupId>
@@ -19,7 +19,7 @@
 		<!-- Spring Boot 4.1.1 manages Tomcat 11.0.24 (CVE-2026-65182, CVE-2026-65905,
 		     CVE-2026-68525). Remove once the parent manages 11.0.25 or later. -->
 		<tomcat.version>11.0.27</tomcat.version>
-		<opentelemetry-javaagent.version>2.32.0</opentelemetry-javaagent.version>
+		<opentelemetry-javaagent.version>2.33.0</opentelemetry-javaagent.version>
 	</properties>
 
 	<dependencies>
@@ -90,7 +90,7 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>3.1.1</version>
+			<version>3.2.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
