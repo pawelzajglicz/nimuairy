@@ -238,13 +238,16 @@ network.
 export MSYS_NO_PATHCONV=1
 vol=nimuairy-observability_alloy-data
 img=grafana/alloy:v1.20.1
-docker volume ls -q --filter "name=$vol"
-docker run --rm --network none -v "$vol:/data:ro" --entrypoint find "$img" /data ! -user 473 -o ! -group 473
+if docker volume inspect "$vol" >/dev/null 2>&1; then
+  docker run --rm --network none -v "$vol:/data:ro" --entrypoint find "$img" /data ! -user 473 -o ! -group 473
+else
+  echo "no $vol volume: nothing to migrate"
+fi
 ```
 
-- If the first command prints nothing, there is no volume and nothing to migrate. Do not run the
-  second command then: `docker run` would create an empty volume that Compose did not create.
-- If the second command prints nothing, every entry already belongs to `473:473`.
+- **Why the check comes first:** `docker run` creates a named volume that does not exist, even one
+  mounted `:ro`, and Compose did not create that volume.
+- If the block prints nothing, every entry already belongs to `473:473`.
 - Otherwise, migrate:
 
 1. **Stop Alloy**, so that it saves its positions and writes nothing more. On a clean stop the exit
