@@ -156,6 +156,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
 | Alloy collects only containers labelled `observability.logs=true` (a `filter` in `discovery.docker`) | The course ships the logs of every container on the host. Production may collect the backend and frontend only, and one allowlist for development and production keeps the two from drifting apart |
 | Alloy reads the Docker API through `docker-socket-proxy` (`wollomatic/socket-proxy`) and no longer mounts the Docker socket | The socket is root-equivalent access to the host. The proxy passes on only the read calls Alloy makes ([Docker API access](#docker-api-access)) |
+| Alloy runs as `473:473` (course: `0`), the image's `alloy` user, with no capabilities (`cap_drop: [ALL]`) and `no-new-privileges` | Alloy needs no root: it reaches the Docker API over TCP through the proxy, listens on the unprivileged port 12345 and writes only its volume and `HOME`. `cap_drop` leaves it no capabilities, and `no-new-privileges` stops the image's setuid binaries from switching to root. Upstream calls non-root support in its image experimental, so the smoke test checks the user, the capabilities and the storage writes ([Verify](#verify-1)). A volume written by the course's root Alloy needs a one-time migration ([Alloy volumes written by root](#alloy-volumes-written-by-root)) |
 | Grafana trace-to-metrics uses `http_server_request_duration_seconds` | The course queried its own Node metric |
 | Image tags | Dependabot updates them here; the course keeps its own. Never take the course's tags over, they are older |
 | Tempo: no `ingester` and `compactor` blocks; the 7-day retention is `overrides.defaults.compaction.block_retention` | Tempo 3 removed both blocks and refuses to start with them (`field ingester not found`); the course still runs Tempo 2.10 |
@@ -202,6 +203,150 @@ agent. Without the overlay no app container is labelled, so Alloy ships none of 
 
 Stop the stack with `docker compose -f observability/compose.yaml down`. Add `-v` to also
 delete the stored metrics, traces, logs and Grafana state.
+
+#### Alloy volumes written by root
+
+Alloy runs as `473:473` ([Where the stack comes from](#where-the-stack-comes-from)).
+
+**A new `alloy-data` volume needs nothing.** Docker seeds an empty volume from the image, whose
+`/var/lib/alloy/data` belongs to `473:473` with mode `0770`, and Alloy creates its files there
+itself.
+
+**A volume written by an earlier Alloy, which ran as root, does need a migration.**
+
+- Its files belong to `root`:
+  - the positions (`loki.source.docker.containers/positions.yml`), which record how far each
+    container's log was read;
+  - their directory;
+  - the seed file.
+- As 473, Alloy gets `permission denied` on the positions file and its directory.
+  - Going by Alloy's source, it then fails at start, and the restart policy starts it again in a
+    loop.
+  - This was not reproduced.
+- Migrate such a volume once, before the first `up` with the new configuration. The migration
+  changes only the owners and keeps the positions, so Alloy goes on reading each container's log
+  from where it stopped.
+
+The commands use Git Bash from the repository root. `MSYS_NO_PATHCONV=1` keeps Git Bash from
+rewriting container paths such as `/data`. The helper containers use the Alloy image from
+`observability/compose.yaml`, which has `find`, `sha256sum`, `chown` and `tar`, and run without a
+network.
+
+**Check whether a migration is needed:**
+
+```bash
+export MSYS_NO_PATHCONV=1
+vol=nimuairy-observability_alloy-data
+img=grafana/alloy:v1.20.1
+if docker volume inspect "$vol" >/dev/null 2>&1; then
+  docker run --rm --network none -v "$vol:/data:ro" --entrypoint find "$img" /data ! -user 473 -o ! -group 473
+else
+  echo "no $vol volume: nothing to migrate"
+fi
+```
+
+- **Why the check comes first:** `docker run` creates a named volume that does not exist, even one
+  mounted `:ro`, and Compose did not create that volume.
+- If the block prints nothing, every entry already belongs to `473:473`.
+- Otherwise, migrate:
+
+1. **Stop Alloy**, so that it saves its positions and writes nothing more. On a clean stop the exit
+   code is `0`. The 30 s give it time on Docker Desktop, whose default stop timeout is 3 s.
+
+   ```bash
+   docker compose -f observability/compose.yaml stop -t 30 alloy
+   docker inspect -f '{{.State.ExitCode}}' alloy
+   ```
+
+2. **Back up the volume outside the repository**, through the stopped container:
+
+   ```bash
+   backup=$HOME/nimuairy-backups/alloy-data-$(date -u +%Y%m%dT%H%M%SZ)
+   mkdir -p "$backup"
+   docker cp -a alloy:/var/lib/alloy/data - > "$backup/alloy-data.tar"
+   ```
+
+   - The archive keeps every file's numeric owner. `-a` changes nothing when copying to stdout; it
+     matters only for copies into a container.
+   - Keep `$backup` a Git Bash path such as `$HOME/...`. GNU tar would read a `C:\...` archive name
+     as a remote host.
+
+3. **Check the backup. Stop if anything differs.**
+   - (a) The archive lists completely:
+
+     ```bash
+     tar -tvf "$backup/alloy-data.tar" --numeric-owner
+     ```
+
+   - (b) A read-only listing of the volume shows the same entries:
+
+     ```bash
+     docker run --rm --network none -v "$vol:/data:ro" --entrypoint find "$img" /data -printf '%U:%G %m %s %P\n'
+     ```
+
+     Compare them entry by entry: path, owner, mode (`tar` shows `drwxrwx---` where `find` shows
+     `770`) and, for files, size. `find` prints the volume's own directory, `data/` in the archive,
+     with an empty path.
+   - (c) The files Alloy reads have the same hashes in the archive and in the volume:
+
+     ```bash
+     tar -xOf "$backup/alloy-data.tar" data/alloy_seed.json | sha256sum
+     tar -xOf "$backup/alloy-data.tar" data/loki.source.docker.containers/positions.yml | sha256sum
+     docker run --rm --network none -v "$vol:/data:ro" --entrypoint sh "$img" -c \
+       'cd /data && sha256sum alloy_seed.json loki.source.docker.containers/positions.yml'
+     ```
+
+     `tar -xO` writes to stdout and extracts nothing on the host.
+
+4. **Change the owners**, with a throwaway root container:
+
+   ```bash
+   docker run --rm --network none --user 0:0 --entrypoint chown -v "$vol:/data" "$img" -R 473:473 /data
+   ```
+
+   You cannot do this with `docker exec` in the new Alloy container: with `cap_drop: [ALL]`, even
+   root has no right to change owners there.
+
+5. **Check the result**: run the listing from 3(b) and the hashes from 3(c) again.
+   - Every entry is `473:473`.
+   - Paths, modes, sizes and hashes are the same as before.
+
+6. **Start the stack**, which recreates only Alloy:
+
+   ```bash
+   docker compose -f observability/compose.yaml up -d --wait
+   ```
+
+   Then run `bash scripts/observability-smoke-test.sh`. It checks Alloy's user, its capabilities
+   and that Alloy writes its storage as 473 ([Verify](#verify-1)).
+
+**Rollback.**
+
+- **Configuration**: revert the Alloy change in `observability/compose.yaml`, then
+  `docker compose -f observability/compose.yaml up -d --wait`.
+  - No chown back is needed: root with Docker's default capabilities reads and writes files of any
+    owner.
+  - A root Alloy rewrites its positions as `root` again, so a later return to 473 needs the
+    migration again. The smoke test reports such files.
+- **Data**: restore the backup only if the volume's content is damaged, with Alloy stopped:
+
+  ```bash
+  docker compose -f observability/compose.yaml stop -t 30 alloy
+  docker run --rm -i --network none --user 0:0 -v "$vol:/restore" --entrypoint tar "$img" \
+    -C /restore --strip-components=1 --same-owner --numeric-owner -xpf - < "$backup/alloy-data.tar"
+  ```
+
+  - It writes every archived file back with its content, owner and mode. It leaves the volume's
+    own directory as it is.
+  - **It deletes nothing.** Files created after the backup stay, so the result is the archived files
+    plus anything added since, not an exact copy of the volume at backup time.
+  - The restored files belong to `root` again. Start Alloy with the reverted configuration, or run
+    steps 4 to 6 again.
+  - Do not restore with `docker cp -a … alloy:…`. Copying into a container with `-a` gives every
+    extracted file the container's user.
+
+Keep the backup outside the repository and never commit it. It holds container IDs, label sets and
+Alloy's seed, but no secrets.
 
 ### What the overlay sets
 
@@ -418,6 +563,11 @@ To find out why logs are missing:
   `could not inspect container info` and `could not fetch logs` mean a stream cannot start;
   `could not transfer logs` and `finished transferring logs` mean a stream ended. In normal
   operation the last two appear only when a container stops.
+- Alloy restarting over and over (`docker inspect -f '{{.RestartCount}}' alloy` keeps rising), with a
+  permission error for `loki.source.docker.containers/positions.yml` in `docker logs alloy`: its
+  volume holds files written by a root Alloy. Migrate it
+  ([Alloy volumes written by root](#alloy-volumes-written-by-root)). This symptom is read in Alloy
+  v1.20.1's source, not reproduced.
 - The Alloy UI (<http://127.0.0.1:12345>), component `loki.source.docker.containers`: each target's
   `is_running` and `last_error`.
 - To see every request the proxy lets through, add `-loglevel=debug` to its `command` for a while.
@@ -478,7 +628,13 @@ What it checks:
   - it publishes no port and is on `nimuairy-observability_docker-api` only, which is internal and
     has only Alloy and the proxy;
   - its image, user, read-only root filesystem, capabilities and `no-new-privileges`;
-  - its exact command, and no `SP_*` variable.
+  - its exact command, and no `SP_*` variable;
+  - Alloy is configured as `473:473`, with no capabilities and `no-new-privileges`;
+  - Alloy's process, read from its PID 1 and not from the test's own `docker exec`:
+    - it runs as `473:473`;
+    - all five capability sets are empty, and `NoNewPrivs` is `1` (`/proc/1/status`);
+    - its `HOME` is `/home/alloy` (`/proc/1/environ`), owned by 473 and writable. The runtime sets
+      `HOME` from the image's `/etc/passwd` at start, so `docker inspect` does not show it.
 - **Alloy's requests**, from a probe in Alloy's network namespace:
   - `HEAD /_ping` and the four `GET` requests return `200` with Docker's data;
   - `HEAD /_ping` is retried for up to 60 s. It is the first answer of the proxy's API, which
@@ -520,6 +676,13 @@ What it checks:
     stream within 5 s from the last second it read, so these say nothing about loss.
   - This covers normal operation during the run only. It covers no outage, and it is no proof that
     collection is lossless.
+- **Alloy's storage**, after the continuity check:
+  - The probe's position is in `positions.yml`. Alloy saves positions every 10 s and the probe ran
+    for at least 15 s, so this shows that Alloy, as 473, wrote its storage during the run.
+  - Nothing under `/var/lib/alloy/data` belongs to another user or group. A run as root after the
+    migration would leave such files.
+  - Alloy logged no `error writing positions file` during the run.
+  - Whether `HOME` has a `.cache` directory is only `info`: it is a library's side effect.
 - **Alloy's own requests**: at the end, no refusal in the proxy's log since the run started may come
   from Alloy.
   - A refusal is Alloy's when it comes from Alloy's address without a `smoke=` parameter, so the
@@ -685,6 +848,18 @@ collected since the last scrape, so Prometheus never stores them
     (`error inspecting Docker container`, `Unable to refresh target groups`). A version that
     renames them fails the check instead of passing it. Update the script only once you have
     confirmed that the new messages mean the same.
+- **Alloy's user and storage**: upstream calls running its image as non-root experimental and
+  undocumented.
+  - A new image could change:
+    - the `alloy` user's UID (473);
+    - the owner of `/var/lib/alloy/data`;
+    - `HOME`;
+    - the storage layout.
+  - The smoke test pins the user, the capabilities, `HOME` and the storage checks, so CI fails on
+    such a bump.
+  - Update `observability/compose.yaml`, the script and this document together.
+  - If the UID changes, existing volumes need the
+    [migration](#alloy-volumes-written-by-root) again, with the new UID.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, run
   `docker compose -f observability/compose.yaml restart prometheus`. Prometheus has no HTTP reload
   here: the stack runs it without `--web.enable-lifecycle`, so its reload endpoint answers `403`.
