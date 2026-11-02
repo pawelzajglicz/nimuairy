@@ -7,7 +7,8 @@
 # (see docs/OBSERVABILITY.md, Verify and Networks). It also checks the Docker API boundary of
 # docker-socket-proxy: the proxy's running configuration, the requests it lets Alloy make, the
 # requests, clients and network positions it refuses, and that every numbered line of a probe reaches
-# Loki in normal operation (docs/OBSERVABILITY.md, Docker API access). CI runs it after
+# Loki in normal operation (docs/OBSERVABILITY.md, Docker API access). It checks that Alloy runs as
+# 473:473 without capabilities, with its HOME, and writes its own storage. CI runs it after
 # `docker compose -f observability/compose.yaml up -d --wait`. It does not need the backend; the
 # checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars). It starts,
 # stops and changes nothing but its own probe containers, which it removes when it exits.
@@ -458,6 +459,23 @@ if [[ $'\n'$proxy_env == *$'\n'SP_* ]]; then
 else
   pass "$PROXY has no SP_* variables"
 fi
+# Alloy runs as the image's alloy user, without capabilities, and no-new-privileges stops the image's
+# setuid binaries from switching to root (observability/compose.yaml). The credentials are read from
+# its PID 1, not from the exec's own user. Paths stay inside sh -c, where Git Bash leaves them alone.
+expect_equal "Alloy is configured as user 473:473, with no capabilities and no-new-privileges" \
+  "$(docker inspect -f '{{.Config.User}} {{.HostConfig.Privileged}} {{json .HostConfig.CapDrop}} {{len .HostConfig.CapAdd}} {{json .HostConfig.SecurityOpt}}' alloy)" \
+  '473:473 false ["ALL"] 0 ["no-new-privileges:true"]'
+expect_equal "Alloy's process runs as 473:473, with no capabilities and no_new_privs" \
+  "$(docker exec alloy sh -c 'grep -E "^(Uid|Gid|Groups|Cap(Inh|Prm|Eff|Bnd|Amb)|NoNewPrivs):" /proc/1/status' 2>&1 |
+    awk '{ $1 = $1 } 1' | paste -sd'|' -)" \
+  'Uid: 473 473 473 473|Gid: 473 473 473 473|Groups: 473|CapInh: 0000000000000000|CapPrm: 0000000000000000|CapEff: 0000000000000000|CapBnd: 0000000000000000|CapAmb: 0000000000000000|NoNewPrivs: 1'
+# runc adds HOME at start, from the image's /etc/passwd, so docker inspect does not show it. Alloy's
+# caches go under it.
+expect_equal "Alloy's process has HOME=/home/alloy, owned by 473:473 and writable by its user" \
+  "$(docker exec alloy sh -c 'h=$(tr "\0" "\n" </proc/1/environ | sed -n "s/^HOME=//p")
+    printf "%s %s %s" "${h:-unset}" "$(stat -c %u:%g "$h" 2>/dev/null || echo none)" \
+      "$(test -w "$h" && echo writable || echo not-writable)"' 2>&1)" \
+  '/home/alloy 473:473 writable'
 
 # Requests from Alloy's address, the only one the proxy accepts: this probe shares Alloy's network
 # namespace. The markers of the refusals the proxy logged here are kept for the last check.
@@ -720,6 +738,26 @@ else
     "$(stream_messages 'could not fetch logs for container'), could not inspect container info" \
     "$(stream_messages 'could not inspect container info') (interruptions Alloy recovers from, not loss)"
 fi
+# Alloy's storage. It saves positions every 10 s and the probe has run for at least 15 s, so the
+# probe's cursor in the file shows that Alloy, as 473, wrote its storage during this run. Anything
+# not owned by 473:473 was written by a run as root after the one-time chown (docs/OBSERVABILITY.md,
+# Run).
+positions_have_probe() {
+  docker exec alloy sh -c 'grep -qF "cursor-$1" /var/lib/alloy/data/loki.source.docker.containers/positions.yml' \
+    _ "$probe_id"
+}
+check "Alloy saved the probe's position in its storage" 20 positions_have_probe
+expect_equal "Everything in Alloy's storage belongs to 473:473" \
+  "$(docker exec alloy sh -c 'find /var/lib/alloy/data ! -user 473 -o ! -group 473' 2>&1 || true)" ''
+name="Alloy logged no error writing its positions file during the run"
+if alloy_log=$(docker logs --since "$started" alloy 2>&1); then
+  expect_equal "$name" "$(grep -cF 'msg="error writing positions file"' <<<"$alloy_log" || true)" 0
+else
+  fail "$name (docker logs alloy failed, so nothing is verified)"
+fi
+echo "info Alloy's HOME has a .cache directory: $(docker exec alloy sh -c 'test -d /home/alloy/.cache && echo yes || echo no' 2>&1)" \
+  "(a library's side effect, never a failure)"
+
 name="Alloy still skips the container without observability.logs=true at the end of the run"
 if ! $continuity_ok; then
   echo "skip $name (the labelled probe's lines did not all arrive)"

@@ -89,7 +89,13 @@ services:
     image: grafana/alloy:v1.20.1
     container_name: alloy
     restart: unless-stopped
-    user: "0"
+    # The image's own alloy user; the image itself runs as root, which Alloy does not need. Docker
+    # seeds a new alloy-data volume from the image as 473:473, but a volume an earlier root Alloy
+    # wrote needs a one-time chown (docs/OBSERVABILITY.md, Run). cap_drop leaves it no capabilities;
+    # no-new-privileges stops the image's setuid binaries from switching to root.
+    user: "473:473"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     command:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
@@ -109,7 +115,7 @@ services:
         condition: service_started
       docker-socket-proxy:
         condition: service_healthy
-    # Distroless image — see comment on `loki`.
+    # No healthcheck: the image has a shell but no wget or curl. The smoke test polls /-/ready.
 
   # The only service that mounts the Docker socket (root-equivalent). It passes on the read calls
   # Alloy makes and refuses everything else (docs/OBSERVABILITY.md, Docker API access).
