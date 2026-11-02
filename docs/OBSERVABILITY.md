@@ -152,6 +152,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | A second network, `stack`: Loki, Grafana and Alloy are only on it, and only Prometheus and Tempo stay on `nimuairy-observability` | On the course's single network, the backend could reach every service of the stack ([Networks](#networks)) |
 | Every port bound to `127.0.0.1` | As in `compose.override.yaml`: Docker's port publishing bypasses the host firewall, and Grafana's `admin/admin` and the unauthenticated Loki/Tempo endpoints must stay off the LAN |
 | Prometheus job `nimuairy-api` → `backend-nimuairy:9464`, label `service_name: nimuairy-api` | Replaces the course's example `app` target. The agent's exporter puts `service.name` only on `target_info`, so the scrape adds it to every series |
+| Prometheus runs without `--web.enable-lifecycle` and `--web.enable-remote-write-receiver` | Nothing here uses them. Prometheus gets its metrics only by scraping: the backend, Alloy and Tempo push none (Tempo's metrics generator is off), and a changed scrape config takes a restart ([Update](#update)). With them on, anything that reaches port 9090, the backend included ([Networks](#networks)), could reload or stop Prometheus (`/-/reload`, `/-/quit`) or write series into it (`/api/v1/write`) |
 | Grafana trace-to-logs maps `service.name` to the Loki label `app` | Alloy sets `app` from the container label `observability.app`; the course's `service` label does not exist |
 | Alloy collects only containers labelled `observability.logs=true` (a `filter` in `discovery.docker`) | The course ships the logs of every container on the host. Production may collect the backend and frontend only, and one allowlist for development and production keeps the two from drifting apart |
 | Alloy reads the Docker API through `docker-socket-proxy` (`wollomatic/socket-proxy`) and no longer mounts the Docker socket | The socket is root-equivalent access to the host. The proxy passes on only the read calls Alloy makes ([Docker API access](#docker-api-access)) |
@@ -439,6 +440,12 @@ container's log reaches Loki, the test waits another 20 s before checking that t
 container's log is still missing from every stream. This gives Alloy time for at least three
 discovery rounds and Loki time to ingest the log, had it been collected.
 
+It also checks that Prometheus runs with its lifecycle API and remote-write receiver off. Both
+flags must be `false` in `/api/v1/status/flags`. An empty `POST /-/reload` must get `403` with
+`Lifecycle API is not enabled`, and an empty `POST /api/v1/write` `404` with `remote write receiver
+needs to be enabled`. A `403` or `404` without that text fails. The test never calls `/-/quit`,
+which would stop a Prometheus that has the lifecycle API on.
+
 The test then checks the [network boundaries](#networks) with a stand-in for the backend: a container
 on `nimuairy-observability`.
 
@@ -678,9 +685,9 @@ collected since the last scrape, so Prometheus never stores them
     (`error inspecting Docker container`, `Unable to refresh target groups`). A version that
     renames them fails the check instead of passing it. Update the script only once you have
     confirmed that the new messages mean the same.
-- **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, reload it
-  with `curl -X POST 127.0.0.1:9090/-/reload` (the stack runs Prometheus with
-  `--web.enable-lifecycle`).
+- **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, run
+  `docker compose -f observability/compose.yaml restart prometheus`. Prometheus has no HTTP reload
+  here: the stack runs it without `--web.enable-lifecycle`, so its reload endpoint answers `403`.
 - **Agent version**: change `opentelemetry-javaagent.version` in `nimuairy-api/pom.xml`. The
   local `otel` profile and the image both read it; rebuild the image. Then run
   `bash scripts/observability-exemplar-check.sh`: the exporter that writes the exemplars ships

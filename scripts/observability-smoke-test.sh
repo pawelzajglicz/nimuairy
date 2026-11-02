@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test for the running stack in observability/: every service is ready, Grafana reaches its
-# datasources, a trace, a log line and a scrape each make it through, the logs of a container without
-# the observability.logs=true label stay out of Loki, exemplars can be stored and linked to Tempo, and
+# datasources, Prometheus refuses its lifecycle and remote-write endpoints, a trace, a log line and a
+# scrape each make it through, the logs of a container without the observability.logs=true label
+# stay out of Loki, exemplars can be stored and linked to Tempo, and
 # a container on the network the backend shares with the stack cannot reach Loki, Grafana or Alloy
 # (see docs/OBSERVABILITY.md, Verify and Networks). It also checks the Docker API boundary of
 # docker-socket-proxy: the proxy's running configuration, the requests it lets Alloy make, the
@@ -73,6 +74,17 @@ prometheus_equals() {
   curl -fsSG --max-time 5 127.0.0.1:9090/api/v1/query --data-urlencode "query=$1" |
     grep -qE "\"value\":\[[0-9.]+,\"$2\"\]"
 }
+# A flag as the running Prometheus parsed it, not as compose.yaml lists it.
+prometheus_flag_off() {
+  curl -fsS --max-time 5 127.0.0.1:9090/api/v1/status/flags | grep -qF "\"$1\":\"false\""
+}
+# An empty POST Prometheus must refuse with this status and the text of this refusal, so that the
+# same status for another reason does not pass. No -f: it would drop the body.
+prometheus_refuses() {
+  local response
+  response=$(curl -sS --max-time 5 --data-binary '' -w '\n%{http_code}' "127.0.0.1:9090$1") || return 1
+  [[ ${response##*$'\n'} == "$2" && $response == *"$3"* ]]
+}
 trace_stored() { curl -fsS --max-time 5 "127.0.0.1:3200/api/v2/traces/$1" | grep -q "$PROBE"; }
 log_stored() {
   curl -fsSG --max-time 5 127.0.0.1:3100/loki/api/v1/query_range \
@@ -140,6 +152,16 @@ check "Prometheus has the nimuairy-api job" 60 prometheus_equals 'count(up{job="
 # Without --enable-feature=exemplar-storage the limit is 0 and Prometheus drops every exemplar it scrapes.
 check "Prometheus stores exemplars" 60 \
   prometheus_equals 'count(prometheus_tsdb_exemplar_max_exemplars{job="prometheus"} > 0)' 1
+# Nothing in the stack uses the lifecycle API or the remote-write receiver. With them on, anything
+# that reaches port 9090, the backend included, could reload or stop Prometheus or write series into
+# it. Never send /-/quit here: with the lifecycle API on by mistake, it would stop Prometheus.
+check "Prometheus runs with web.enable-lifecycle off" 10 prometheus_flag_off web.enable-lifecycle
+check "Prometheus runs with web.enable-remote-write-receiver off" 10 \
+  prometheus_flag_off web.enable-remote-write-receiver
+check "Prometheus refuses POST /-/reload (403, lifecycle API not enabled)" 10 \
+  prometheus_refuses /-/reload 403 'Lifecycle API is not enabled'
+check "Prometheus refuses POST /api/v1/write (404, remote-write receiver not enabled)" 10 \
+  prometheus_refuses /api/v1/write 404 'remote write receiver needs to be enabled'
 
 # OTLP/JSON takes hex IDs. Tempo returns a trace by ID within seconds; search would take ~30 s.
 trace_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
