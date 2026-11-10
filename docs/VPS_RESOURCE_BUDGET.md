@@ -24,7 +24,7 @@ repository files named next to them.
 
 ### Services
 
-| Service | Image | Storage | What drives its resource use |
+| Service | Configured image (Compose) | Storage | What drives its resource use |
 |---|---|---|---|
 | `postgres-nimuairy` | `dhi.io/postgres:18-debian13` | volume `postgres` | PostgreSQL defaults; the repository sets no configuration. `pg_dump` and `pg_restore` from `scripts/backup-db.sh` run inside this container |
 | `backend-nimuairy` | `ghcr.io/pawelzajglicz/nimuairy-api:${APP_SHA}` | none | `java -jar app.jar` without heap or GC flags, so the JVM sizes itself from the CPUs and memory it detects. The health check starts a second, short-lived JVM without the Java agent (`-XX:+UseSerialGC -Xmx16m`) in the same container every 30 s, and every 3 s during the 90 s start period (`nimuairy-api/Dockerfile`) |
