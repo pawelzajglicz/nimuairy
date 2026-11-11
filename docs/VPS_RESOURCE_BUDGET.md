@@ -97,10 +97,17 @@ VPS, 2026-11-10.
 
 ### After the upgrade
 
-- The VPS was upgraded to 4 GB RAM [USER-REPORTED].
-- What the guest sees (`free`, `/proc/meminfo`, `docker info`) and the effective LXC limit are
-  [UNKNOWN] until the [post-upgrade verification](#post-upgrade-verification) has run. Whether
-  "4 GB" means 4096 MiB is part of that check.
+The VPS was upgraded [USER-REPORTED]. The values visible after the upgrade [VPS]:
+
+| Item | Before the upgrade | After the upgrade |
+|---|---|---|
+| RAM visible in the VPS | about 2.25 GiB (2304 MiB) | 4.25 GiB (4352 MiB) |
+| Disk | 30 GB | 45 GB |
+| Free disk space | about 26 GB | about 40 GB |
+
+- The visible RAM grew by 2 GiB. The effective outer LXC limit is still [UNKNOWN]: the rest of the
+  [post-upgrade verification](#post-upgrade-verification), with the cgroup files and `docker info`,
+  has not run yet.
 - The upgrade does not change the CPU: one CPU remains the production constraint.
 - There is no swap, and swap is not a substitute for memory in this budget.
 - PID limits and counts after the upgrade are re-read by the
@@ -226,15 +233,15 @@ run the difference stayed within 2.5 MiB [LOCAL]. The fields are described in th
 
 | Term | Meaning | How to measure it on the VPS | Current evidence |
 |---|---|---|---|
-| T | Memory available to the VPS: the effective outer LXC limit | Root cgroup `memory.max`; `MemTotal` only if LXCFS provides `/proc/meminfo` | 2304 MiB before the upgrade [VPS], limit not confirmed; 4 GB after it [USER-REPORTED]; the guest's view [UNKNOWN] |
+| T | Memory available to the VPS: the effective outer LXC limit | Root cgroup `memory.max`; `MemTotal` only if LXCFS provides `/proc/meminfo` | Visible RAM: 2304 MiB before the upgrade, 4352 MiB (4.25 GiB) after it [VPS]. The effective outer limit is not confirmed [UNKNOWN] |
 | H | OS, Docker and other host overhead: systemd, journald, sshd, Fail2ban, cron and rclone, dockerd, containerd and the shims | The LXC's `anon + shmem + kernel + sock` minus the containers' at the same moment. Its peak during the 03:30 backup and the apt runs needs a day-long sampling, which is an optional follow-up | [UNKNOWN]; the backup and apt peaks [UNKNOWN] |
 | P | The application: backend (with the Java agent from S7 and the health check's probe JVM), postgres (with the backup tools), frontend, cloudflared | Per-container `anon + shmem + kernel + sock` peaks | `docker stats` without the agent: an estimated 909–986 MiB, a sum of separately observed ranges, not a simultaneous measurement [ESTIMATE from VPS ranges]. `anon + shmem + kernel + sock` and the agent's overhead [UNKNOWN] |
 | O | The observability stack | Per-container `anon + shmem + kernel + sock` peaks after S6 (idle) and S7 (ingest) | Phase maxima of 446–555 MiB `anon + shmem`, 469–579 MiB with `kernel` [LOCAL], still rising; VPS [UNKNOWN] |
 | K | The file working set needed to run without thrashing: binaries, memory-mapped TSDB, chunks and blocks. It excludes `shmem`, which H, P and O count | Not directly. Mapped files show in the processes' `RssFile`; a growing `workingset_refault_file` or major-fault count shows that the working set does not fit | [UNKNOWN]. Indication only: Alloy and Grafana mapped about 179 and 175 MiB of files [LOCAL, 2026-11-02] |
 | R | Safety reserve for spikes between samples, JVM growth with uptime, growth of series and ingest, and query bursts | A policy, not a measurement | Proposed: 20–25 % of T. A recommendation that requires confirmation |
 
-If the post-upgrade check confirms T = 4096 MiB, a 20–25 % reserve is 819–1024 MiB. That leaves
-3072–3277 MiB for H + P + O + K [ESTIMATE].
+If the post-upgrade check confirms the visible 4352 MiB as T, a 20–25 % reserve is 870–1088 MiB.
+That leaves 3264–3482 MiB for H + P + O + K [ESTIMATE].
 
 ### What must not be added together
 
@@ -294,13 +301,14 @@ The gap between them is what the reserve has to cover.
 
 ## Conclusions
 
-- The VPS was upgraded to 4 GB RAM [USER-REPORTED]. Use the 4 GB configuration as the target for
-  the application plus the observability stack in their current scope.
-- 4 GB is not yet verified as the effective LXC capacity, and the combined workload is not yet shown
-  to fit. The terms marked UNKNOWN decide that.
+- The VPS was upgraded [USER-REPORTED] and now shows 4.25 GiB of RAM [VPS]. Use this configuration
+  as the target for the application plus the observability stack in their current scope.
+- The visible 4.25 GiB is not yet verified as the effective LXC limit, and the combined workload is
+  not yet shown to fit. The terms marked UNKNOWN decide that.
 - S4.4 assigns per-container resource limits from this budget.
 - Measurements after S6 and S7 validate the budget under real VPS ingestion and retention.
-- The upgrade changes memory only. The CPU and disk risks below remain.
+- The upgrade adds memory and disk space, not CPU. The CPU risk below remains, and so do the disk
+  risks: nothing bounds the growth of logs and telemetry.
 
 ## Risks
 
@@ -309,7 +317,7 @@ The gap between them is what the reserve has to cover.
 | CPU | One CPU runs everything. Not tested: host contention (steal time is not observable inside the LXC), simultaneous startup with WAL replay, and a deploy (a 90 s start period with a probe JVM every 3 s, inside a 180 s wait) | No throttling in the short sample [VPS]; the rest [UNKNOWN] |
 | Memory: Tempo | Grew through the whole local window | [LOCAL]; not levelled off |
 | Memory: Java agent | Its overhead on the VPS | [UNKNOWN] |
-| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects: about 576 MiB at 2.25 GiB, about 1024 MiB if it sees 4 GiB. A backend started after the upgrade can therefore use more memory than before, and an S4.4 container limit becomes the JVM's sizing base | [ESTIMATE]; the GC chosen on one CPU [UNKNOWN] |
+| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects: about 576 MiB at 2.25 GiB, about 1088 MiB if it sees 4.25 GiB. A backend started after the upgrade can therefore use more memory than before, and an S4.4 container limit becomes the JVM's sizing base | [ESTIMATE]; the GC chosen on one CPU [UNKNOWN] |
 | Disk: container logs | `json-file` with no rotation, so logs grow without bound | Growth [UNKNOWN] |
 | Disk: telemetry | Retention is by time only (Prometheus 15 days, Loki and Tempo 168 h); nothing caps size | Growth [UNKNOWN] until S7 |
 | Disk: images | The deploy prunes only images built from this repository. The stack's images are never pruned, so each version bump leaves the old one | About 3.2 GB [LOCAL, 2026-11-02]; VPS [UNKNOWN] |
@@ -369,7 +377,7 @@ They show the CPU count, the memory limit, the heap and the GC that a JVM starti
 
 | What | How | When |
 |---|---|---|
-| T: the guest's memory and the effective LXC limit | [Post-upgrade verification](#post-upgrade-verification) | Before S4.4 |
+| T: the effective LXC limit (the VPS now shows 4.25 GiB) | [Post-upgrade verification](#post-upgrade-verification) | Before S4.4 |
 | CPU count and quota after the upgrade | The same | Before S4.4 |
 | The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before S4.4, and again after S7 |
 | H | The LXC's and every container's `anon + shmem + kernel + sock`, read at the same moment | Optional follow-up; not required before S4.4 |
