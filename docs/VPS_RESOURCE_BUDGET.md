@@ -107,6 +107,8 @@ The VPS was upgraded [USER-REPORTED]. Readings after the upgrade [VPS]:
 | Kernel | `7.0.14-26-pve` | `5.15.158-2-pve`. Why it changed is not determined |
 | Root cgroup memory | `memory.max=max` | `memory.max=max`, `memory.high=max`; `memory.current` about 1.15 GiB, which includes page cache; every `memory.events` counter 0 |
 | CPU | One CPU; cpuset CPU ID 17 | `nproc` 1, `cpuset.cpus.effective` 0; `cpu.max` `max 100000`, so no CFS quota at this level; `nr_throttled` 0 |
+| CPU pressure (`cpu.pressure`, one reading) | Low; no values recorded | `some` avg10 2.64, avg60 2.70, avg300 2.71; `full` avg10 1.00, avg60 1.11, avg300 1.15 |
+| `docker info` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; 2.25 GiB; limit support `true` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; NCPU 1; MemTotal 4563402752 bytes (4352 MiB, the same as the visible RAM); `MemoryLimit`, `SwapLimit`, `PidsLimit` and `CPUCfsQuota` `true`; no warnings |
 | PIDs | Root `pids.max=max`, `pids.current=161`, `pids.peak=208` | Root `pids.max=max`, `pids.current=159`; `pids.events` `max 0` |
 | Swap | None reported | `SwapTotal` 0, but `/proc/swaps` and `swapon --show` list a virtual entry, `none virtual 4G` |
 
@@ -119,8 +121,13 @@ The VPS was upgraded [USER-REPORTED]. Readings after the upgrade [VPS]:
   - this budget does not count on swap: swap is not a substitute for memory.
 - **Kernel memory:** the filtered `memory.stat` output had no `kernel` field. Kernel memory on the VPS
   is not computed until the fields this kernel provides have been checked [UNKNOWN].
-- **Docker:** the `docker info` values (NCPU, MemTotal, limit support) are not recorded here
-  [UNKNOWN].
+- **CPU pressure:**
+  - one `cpu.pressure` reading: `some` about 2.7 % and `full` about 1.1 % over 60 and 300 s;
+  - PSI measures time spent waiting for a CPU, while CFS throttling is time a quota withholds, so
+    the reading does not contradict `nr_throttled` 0;
+  - one reading says nothing about sustained load.
+- **Docker** sees one CPU and the same 4352 MiB as the guest. It reports support for memory, swap,
+  PID and CPU-quota limits.
 
 ## Measured VPS usage
 
