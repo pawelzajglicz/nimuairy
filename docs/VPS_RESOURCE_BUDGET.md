@@ -88,7 +88,7 @@ VPS, 2026-11-10.
 | Docker | Engine 29.8.2; cgroup v2 with the `systemd` driver; storage driver `overlayfs`; logging driver `json-file` |
 | CPU | One available CPU; the effective cpuset was CPU ID 17 in the latest consistent sample |
 | Memory | 2.25 GiB (2304 MiB) as reported by LXCFS and Docker. The visible root cgroup has `memory.max=max`: no finite limit is exposed at the visible cgroup root. The effective outer LXC limit remains unverified until the post-upgrade measurements are available |
-| Swap | None |
+| Swap | None reported |
 | Limit enforcement | `docker info` reports `MemoryLimit`, `SwapLimit`, `PidsLimit`, `CPUCfsQuota` and `CPUShares` as `true`. The `memory`, `cpu`, `cpuset` and `pids` controllers were available and enabled |
 | Container limits | None configured |
 | PIDs | Root cgroup `pids.max=max`; container cgroups `pids.max=287749`; root `pids.current=161` and `pids.peak=208`; `pids.events` `max 0` |
@@ -97,21 +97,30 @@ VPS, 2026-11-10.
 
 ### After the upgrade
 
-The VPS was upgraded [USER-REPORTED]. The values visible after the upgrade [VPS]:
+The VPS was upgraded [USER-REPORTED]. Readings after the upgrade [VPS]:
 
 | Item | Before the upgrade | After the upgrade |
 |---|---|---|
 | RAM visible in the VPS | about 2.25 GiB (2304 MiB) | 4.25 GiB (4352 MiB) |
 | Disk | 30 GB | 45 GB |
 | Free disk space | about 26 GB | about 40 GB |
+| Kernel | `7.0.14-26-pve` | `5.15.158-2-pve`. Why it changed is not determined |
+| Root cgroup memory | `memory.max=max` | `memory.max=max`, `memory.high=max`; `memory.current` about 1.15 GiB, which includes page cache; every `memory.events` counter 0 |
+| CPU | One CPU; cpuset CPU ID 17 | `nproc` 1, `cpuset.cpus.effective` 0; `cpu.max` `max 100000`, so no CFS quota at this level; `nr_throttled` 0 |
+| PIDs | Root `pids.max=max`, `pids.current=161`, `pids.peak=208` | Root `pids.max=max`, `pids.current=159`; `pids.events` `max 0` |
+| Swap | None reported | `SwapTotal` 0, but `/proc/swaps` and `swapon --show` list a virtual entry, `none virtual 4G` |
 
-- The visible RAM grew by 2 GiB. The effective outer LXC limit is still [UNKNOWN]: the rest of the
-  [post-upgrade verification](#post-upgrade-verification), with the cgroup files and `docker info`,
-  has not run yet.
-- The upgrade does not change the CPU: one CPU remains the production constraint.
-- There is no swap, and swap is not a substitute for memory in this budget.
-- PID limits and counts after the upgrade are re-read by the
-  [post-upgrade verification](#post-upgrade-verification).
+- **Memory:** the visible RAM grew by 2 GiB. The effective outer LXC limit is still [UNKNOWN],
+  because `memory.max=max` at the visible root does not settle it.
+- **CPU:** the upgrade did not add a CPU. One CPU remains the production constraint.
+- **Swap:**
+  - the guest reports `SwapTotal` 0, while `/proc/swaps` shows the virtual 4G entry;
+  - the swap configuration and its availability on the host side are [UNKNOWN];
+  - this budget does not count on swap: swap is not a substitute for memory.
+- **Kernel memory:** the filtered `memory.stat` output had no `kernel` field. Kernel memory on the VPS
+  is not computed until the fields this kernel provides have been checked [UNKNOWN].
+- **Docker:** the `docker info` values (NCPU, MemTotal, limit support) are not recorded here
+  [UNKNOWN].
 
 ## Measured VPS usage
 
@@ -136,6 +145,20 @@ stack was not on the VPS.
   observed.
 - PIDs: typically 163, briefly 178 during the active session; an earlier system-level peak of 208
   (root `pids.peak`). No task creation hit a PID limit (`pids.events` `max 0`).
+
+After the upgrade, one `docker stats` sample [VPS]:
+
+| Container | `docker stats` MEM USAGE |
+|---|---|
+| backend | 696.8 MiB |
+| postgres | 58.73 MiB |
+| cloudflared | 18.2 MiB |
+| frontend | 3.15 MiB |
+
+- All four containers had `RestartCount` 0 and `OOMKilled` false.
+- This is a single sample, not peak demand.
+- The backend's value is below its pre-upgrade range. The reason is not determined: the sample
+  alone shows neither the backend's uptime nor how its JVM sized itself after the upgrade.
 
 ## Local measurements
 
@@ -223,7 +246,7 @@ run the difference stayed within 2.5 MiB [LOCAL]. The fields are described in th
 
 | Component | `memory.stat` fields | Reclaimable | Term |
 |---|---|---|---|
-| Anonymous and shared memory | `anon`, and `shmem`, which is part of `file` | No: there is no swap | H, P, O |
+| Anonymous and shared memory | `anon`, and `shmem`, which is part of `file` | No: the budget does not count on swap | H, P, O |
 | Kernel memory | `kernel`, which already includes `kernel_stack`, `pagetables`, `percpu`, `vmalloc` and the slab (`slab_reclaimable`, `slab_unreclaimable`). `sock` (network buffers) is charged separately | Only the reclaimable slab, under memory pressure. Budget it as not reclaimable | H, P, O |
 | File working set | The part of `file` other than `shmem` that is in active use | Yes, but reclaiming it causes refaults and thrashing | K |
 | Cold file cache | The rest of `file`, mostly `inactive_file` | Yes | None |
@@ -240,7 +263,8 @@ run the difference stayed within 2.5 MiB [LOCAL]. The fields are described in th
 | K | The file working set needed to run without thrashing: binaries, memory-mapped TSDB, chunks and blocks. It excludes `shmem`, which H, P and O count | Not directly. Mapped files show in the processes' `RssFile`; a growing `workingset_refault_file` or major-fault count shows that the working set does not fit | [UNKNOWN]. Indication only: Alloy and Grafana mapped about 179 and 175 MiB of files [LOCAL, 2026-11-02] |
 | R | Safety reserve for spikes between samples, JVM growth with uptime, growth of series and ingest, and query bursts | A policy, not a measurement | Proposed: 20–25 % of T. A recommendation that requires confirmation |
 
-If the post-upgrade check confirms the visible 4352 MiB as T, a 20–25 % reserve is 870–1088 MiB.
+If the visible 4352 MiB is the effective limit, which the guest's readings do not confirm, a 20–25 %
+reserve is 870–1088 MiB.
 That leaves 3264–3482 MiB for H + P + O + K [ESTIMATE].
 
 ### What must not be added together
@@ -314,7 +338,7 @@ The gap between them is what the reserve has to cover.
 
 | Area | Risk | Status |
 |---|---|---|
-| CPU | One CPU runs everything. Not tested: host contention (steal time is not observable inside the LXC), simultaneous startup with WAL replay, and a deploy (a 90 s start period with a probe JVM every 3 s, inside a 180 s wait) | No throttling in the short sample [VPS]; the rest [UNKNOWN] |
+| CPU | One CPU runs everything. Not tested: host contention (steal time is not observable inside the LXC), simultaneous startup with WAL replay, and a deploy (a 90 s start period with a probe JVM every 3 s, inside a 180 s wait) | No throttling in the short sample before the upgrade, and `nr_throttled` 0 after it [VPS]; the rest [UNKNOWN] |
 | Memory: Tempo | Grew through the whole local window | [LOCAL]; not levelled off |
 | Memory: Java agent | Its overhead on the VPS | [UNKNOWN] |
 | Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects: about 576 MiB at 2.25 GiB, about 1088 MiB if it sees 4.25 GiB. A backend started after the upgrade can therefore use more memory than before, and an S4.4 container limit becomes the JVM's sizing base | [ESTIMATE]; the GC chosen on one CPU [UNKNOWN] |
@@ -322,7 +346,7 @@ The gap between them is what the reserve has to cover.
 | Disk: telemetry | Retention is by time only (Prometheus 15 days, Loki and Tempo 168 h); nothing caps size | Growth [UNKNOWN] until S7 |
 | Disk: images | The deploy prunes only images built from this repository. The stack's images are never pruned, so each version bump leaves the old one | About 3.2 GB [LOCAL, 2026-11-02]; VPS [UNKNOWN] |
 | Disk: backups | 14 days of local dumps | Dump size [UNKNOWN] |
-| PIDs | Not a bottleneck today. Thread counts grow with the CPUs each process sees, and S6 adds the stack's | Before the upgrade [VPS]: typically 163–178, peak 208; root `pids.max=max`, containers `pids.max=287749`, `pids.events` `max 0`. After the upgrade: re-read by the post-upgrade check |
+| PIDs | Not a bottleneck today. Thread counts grow with the CPUs each process sees, and S6 adds the stack's | Before the upgrade [VPS]: typically 163–178, peak 208; root `pids.max=max`, containers `pids.max=287749`, `pids.events` `max 0`. After the upgrade [VPS]: root `pids.max=max`, `pids.current=159`, `pids.events` `max 0` |
 
 ## Post-upgrade verification
 
@@ -377,8 +401,10 @@ They show the CPU count, the memory limit, the heap and the GC that a JVM starti
 
 | What | How | When |
 |---|---|---|
-| T: the effective LXC limit (the VPS now shows 4.25 GiB) | [Post-upgrade verification](#post-upgrade-verification) | Before S4.4 |
-| CPU count and quota after the upgrade | The same | Before S4.4 |
+| T: the effective LXC limit (the VPS shows 4.25 GiB) | Not settled by the readings so far: `memory.max=max` at the visible root | Before S4.4 |
+| CPU count and quota after the upgrade | Read after the upgrade [VPS]: one CPU, no CFS quota at the visible root | Done |
+| The `memory.stat` fields the VPS kernel provides (the filtered output had no `kernel`) | `cat /sys/fs/cgroup/memory.stat` | Before kernel memory is computed for H, P and O |
+| Swap on the host side, behind the virtual `/proc/swaps` entry | Not visible from the guest | Open; this budget does not count on swap |
 | The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before S4.4, and again after S7 |
 | H | The LXC's and every container's `anon + shmem + kernel + sock`, read at the same moment | Optional follow-up; not required before S4.4 |
 | The backup and apt peaks | The same values sampled over 24 h, across the 03:30 backup and the apt windows | Optional follow-up; until then [UNKNOWN] |
