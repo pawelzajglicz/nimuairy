@@ -138,6 +138,13 @@ observability stack.
   - when a stream ends, Alloy drops the container's saved position. A restart before the stream
     reopens reads that container's log from the start again: duplicates, or lines Loki rejects as
     too old.
+- From S4.4, Alloy runs on the VPS with a memory limit (384 MiB in
+  `observability/compose.prod.yaml`; see [Resource limits](OBSERVABILITY.md#resource-limits)).
+  - If the kernel OOM-kills its process, the restart policy starts Alloy again. That is one more
+    way for Alloy to restart, besides a daemon restart or a reboot.
+  - The proxy normally keeps running then, so such a restart is an ordinary start, not this
+    scenario, unless both happen together.
+  - What an OOM kill does to the saved positions and to duplicates is not tested.
 
 **Reason for deferral:** it breaks the S3.3 check's rule that Alloy must not restart, and it runs
 other code. It needs its own expectations for Alloy's refusals and for duplicates. Mixing those
@@ -148,7 +155,9 @@ into the S3.3 check would make that check harder to read and to trust.
 - before Alloy collects logs on the VPS (S6, S7), if the start order after a daemon restart or a
   reboot matters there;
 - an Alloy upgrade changes how its Docker client negotiates the API version;
-- logs go missing or arrive twice after a daemon restart or a reboot.
+- logs go missing or arrive twice after a daemon restart or a reboot;
+- Alloy is OOM-killed on the VPS (`OOMKilled` in `docker inspect`, or `oom_kill` in its cgroup's
+  `memory.events`).
 
 **Potential scope when resumed:**
 
@@ -164,3 +173,52 @@ into the S3.3 check would make that check harder to read and to trust.
 - keep this scenario apart from the S3.3 check, and do not weaken that check's rule that Alloy
   must not restart;
 - do not widen the proxy's allowlist to unversioned paths to make the scenario pass.
+
+## S4.4 — CPU weights
+
+**Status:** Deferred
+
+**Origin:** Observability production rollout, S4.4 (container resource limits).
+
+**Current state:**
+
+- No explicit CPU quota or non-default CPU weight is configured. Every container uses Docker's
+  default CPU weight. S4.4 gives each one only a memory and a PID limit:
+  `observability/compose.prod.yaml` for the stack, and the app's production overlay from S4.4.3.
+- The VPS has one CPU, with no CFS quota at the visible root and `nr_throttled` 0. `docker info`
+  reports support for `CPUShares` [VPS] (see
+  [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#after-the-upgrade)).
+- The measured use is small:
+  - about 0.07 cores for the app and the stack together, in a short local run [LOCAL];
+  - one `cpu.pressure` reading on the VPS: `some` about 2.7 % and `full` about 1.1 % [VPS].
+
+**Reason for deferral:**
+
+- A CPU quota (`cpus`) is not work-conserving: it withholds CPU time even from an idle CPU. On one
+  CPU it would stretch:
+  - the backend JVM's start, against the health check's 90 s start period and the deploy's 180 s
+    `up --wait`;
+  - the WAL replays of Prometheus, Loki and Tempo after a restart.
+- Weights (`cpu_shares`) are work-conserving, but there is no measured contention yet to size them
+  from.
+
+**Reconsider when**, from S6 and S7:
+
+- the backend starts more slowly, or the deploy's `up --wait` comes closer to its 180 s, with the
+  stack present;
+- a container shows sustained `cpu.pressure`;
+- the app's latency degrades with the stack present.
+
+**Potential scope when resumed:**
+
+- First lever: a lower `cpu_shares` for the stack's services, so that the app wins under
+  contention.
+- Read the effective `cpu.weight` of each container afterwards. How runc converts shares to a
+  weight depends on its version: older versions turn 1024 into 39, newer ones into 100.
+- Measure the backend's start and the deploy's `up --wait` with and without the weights.
+
+**Constraints:**
+
+- do not add a CPU quota (`cpus`) to a service on the one-CPU VPS without measuring its start and
+  WAL replay under that quota;
+- keep CPU settings in the production overlays; development and CI stay without them.

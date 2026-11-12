@@ -38,14 +38,16 @@ repository files named next to them.
 | `grafana` | `grafana/grafana-oss:13.0.2` | volume `grafana-data` | Idle unless someone queries it |
 
 - The first four run on the VPS today, from `compose.yaml` and `compose.prod.yaml`. The other six come
-  from `observability/compose.yaml` and are not on the VPS yet. `observability/compose.prod.yaml`
-  does not exist yet.
+  from `observability/compose.yaml`, plus `observability/compose.prod.yaml` on the VPS, and are not
+  on the VPS yet.
 - The rollout stages named here:
   - **S4.4** sets per-container resource limits;
   - **S6** starts the stack on the VPS;
   - **S7** attaches the app to it with `compose.observability.yaml`: the Java agent, metrics on
     `:9464`, traces to Tempo, JSON logs and the log labels.
-- No Compose file sets `mem_limit`, `memswap_limit`, `cpus`, `pids_limit`, `ulimits` or `logging`.
+- Only `observability/compose.prod.yaml` sets resource keys: `mem_limit`, `memswap_limit`,
+  `pids_limit` and `oom_score_adj` for the six stack services ([Container limits](#container-limits)).
+  The app's files set none until S4.4.3. No Compose file sets `cpus`, `ulimits` or `logging`.
   Every service uses `restart: unless-stopped`.
 
 ### Recurring load
@@ -108,12 +110,20 @@ The VPS was upgraded [USER-REPORTED]. Readings after the upgrade [VPS]:
 | Root cgroup memory | `memory.max=max` | `memory.max=max`, `memory.high=max`; `memory.current` about 1.15 GiB, which includes page cache; every `memory.events` counter 0 |
 | CPU | One CPU; cpuset CPU ID 17 | `nproc` 1, `cpuset.cpus.effective` 0; `cpu.max` `max 100000`, so no CFS quota at this level; `nr_throttled` 0 |
 | CPU pressure (`cpu.pressure`, one reading) | Low; no values recorded | `some` avg10 2.64, avg60 2.70, avg300 2.71; `full` avg10 1.00, avg60 1.11, avg300 1.15 |
-| `docker info` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; 2.25 GiB; limit support `true` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; NCPU 1; MemTotal 4563402752 bytes (4352 MiB, the same as the visible RAM); `MemoryLimit`, `SwapLimit`, `PidsLimit` and `CPUCfsQuota` `true`; no warnings |
+| `docker info` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; 2.25 GiB; limit support `true` | Engine 29.8.2; cgroup v2 with `systemd`; `overlayfs`; `json-file`; NCPU 1; MemTotal 4563402752 bytes (4352 MiB, the same as the visible RAM); `MemoryLimit`, `SwapLimit`, `PidsLimit`, `CPUCfsQuota` and `CPUShares` `true`; no warnings |
+| `/proc/meminfo` | From LXCFS: 2.25 GiB (2304 MiB) | An LXCFS mount; `MemTotal` 4 456 448 kB = 4352 MiB, exactly the plan's size |
 | PIDs | Root `pids.max=max`, `pids.current=161`, `pids.peak=208` | Root `pids.max=max`, `pids.current=159`; `pids.events` `max 0` |
 | Swap | None reported | `SwapTotal` 0, but `/proc/swaps` and `swapon --show` list a virtual entry, `none virtual 4G` |
 
 - **Memory:** the visible RAM grew by 2 GiB. The effective outer LXC limit is still [UNKNOWN],
   because `memory.max=max` at the visible root does not settle it.
+  - LXCFS runs on the host. It computes the guest's `MemTotal` from the memory limit it finds for
+    the container there, and falls back to the host's RAM when it finds none.
+  - 4352 MiB is exactly the plan's size, not a plausible host RAM. So a configured limit of
+    4352 MiB for this LXC is the most likely reading [ESTIMATE, an inference].
+  - It does not show which level or file holds that limit, whether it is enforced as a hard limit,
+    or whether pressure can arrive below it. Docker's `MemTotal` comes from the same
+    `/proc/meminfo`, so it is no independent confirmation.
 - **CPU:** the upgrade did not add a CPU. One CPU remains the production constraint.
 - **Swap:**
   - the guest reports `SwapTotal` 0, while `/proc/swaps` shows the virtual 4G entry;
@@ -263,7 +273,7 @@ run the difference stayed within 2.5 MiB [LOCAL]. The fields are described in th
 
 | Term | Meaning | How to measure it on the VPS | Current evidence |
 |---|---|---|---|
-| T | Memory available to the VPS: the effective outer LXC limit | Root cgroup `memory.max`; `MemTotal` only if LXCFS provides `/proc/meminfo` | Visible RAM: 2304 MiB before the upgrade, 4352 MiB (4.25 GiB) after it [VPS]. The effective outer limit is not confirmed [UNKNOWN] |
+| T | Memory available to the VPS: the effective outer LXC limit | Root cgroup `memory.max`; `MemTotal` only if LXCFS provides `/proc/meminfo` | Visible RAM: 2304 MiB before the upgrade, 4352 MiB (4.25 GiB) after it [VPS]. After the upgrade LXCFS provides `/proc/meminfo`, with `MemTotal` exactly the plan's 4352 MiB [VPS], so a configured limit of 4352 MiB is the most likely reading [ESTIMATE]. S4.4 uses T = 4352 MiB as the best-supported value. Its enforcement is [UNKNOWN] ([After the upgrade](#after-the-upgrade)) |
 | H | OS, Docker and other host overhead: systemd, journald, sshd, Fail2ban, cron and rclone, dockerd, containerd and the shims | The LXC's `anon + shmem + kernel + sock` minus the containers' at the same moment. Its peak during the 03:30 backup and the apt runs needs a day-long sampling, which is an optional follow-up | [UNKNOWN]; the backup and apt peaks [UNKNOWN] |
 | P | The application: backend (with the Java agent from S7 and the health check's probe JVM), postgres (with the backup tools), frontend, cloudflared | Per-container `anon + shmem + kernel + sock` peaks | `docker stats` without the agent: an estimated 909–986 MiB, a sum of separately observed ranges, not a simultaneous measurement [ESTIMATE from VPS ranges]. `anon + shmem + kernel + sock` and the agent's overhead [UNKNOWN] |
 | O | The observability stack | Per-container `anon + shmem + kernel + sock` peaks after S6 (idle) and S7 (ingest) | Phase maxima of 446–555 MiB `anon + shmem`, 469–579 MiB with `kernel` [LOCAL], still rising; VPS [UNKNOWN] |
@@ -330,13 +340,128 @@ Record two values:
 
 The gap between them is what the reserve has to cover.
 
+## Container limits
+
+S4.4 gives every container:
+- a memory limit without swap (`memswap_limit` = `mem_limit`);
+- a PID limit;
+- for the six stack services, `oom_score_adj: 500`.
+
+It sets no CPU limit or weight and no reservation ([CPU weights](DEFERRED_WORK.md#s44--cpu-weights)).
+The design, its rules and the backend's measurement method are in
+[S4.4_DESIGN_CONTRACT.md](S4.4_DESIGN_CONTRACT.md); how the stack's overlay applies is in
+[OBSERVABILITY.md](OBSERVABILITY.md#resource-limits).
+
+**The rules behind the values:**
+- **Memory:**
+  - at least 2× the highest observed working set (`memory.current − inactive_file`);
+  - for a service that maps large files, at least 1.5× `anon` plus the mapped files;
+  - always above the configured in-memory components;
+  - raised where a phase was not observed;
+  - in steps of 64 MiB below 128 MiB and 128 MiB above, with one step more for the request-path
+    services (frontend, cloudflared);
+  - the backend's by measurement ([below](#backend-measurement)).
+- **PIDs:** the smallest power of two that is at least:
+  - 4× the highest observed count;
+  - 2× the upper end of the configured worst case, where there is one;
+  - 128 for Go services, whose runtime aborts when it cannot create a thread.
+
+  One power of two more only as a named exception, where an unobserved phase plausibly creates
+  threads or processes.
+
+| Container | Memory | PIDs | `oom_score_adj` | In | Status |
+|---|---|---|---|---|---|
+| backend | 1792 MiB | 1024 | 0 (default) | `compose.prod.yaml`, from S4.4.3 | **Accepted** on 2026-11-12, after two local runs ([below](#backend-measurement)). PIDs: 2 × 280, the configured worst case (Tomcat's default 200 threads, the JVM's and the agent's threads, the probe JVM) |
+| postgres | 512 MiB | 256 | 0 (default) | `compose.prod.yaml`, from S4.4.3 | Conditional: `shared_buffers` 128 MiB + 3 autovacuum workers × 64 MiB + the backup + connections ≈ 410 MiB [ESTIMATE] |
+| frontend | 128 MiB | 128 | 0 (default) | `compose.prod.yaml`, from S4.4.3 | Conditional: low concurrency; the worker count comes from the image [UNKNOWN] |
+| cloudflared | 256 MiB | 128 | 0 (default) | `compose.prod.yaml`, from S4.4.3 | Conditional: traffic close to the sampled level |
+| prometheus | 512 MiB | 128 | 500 | `observability/compose.prod.yaml` | Provisional (below) |
+| loki | 512 MiB | 256 | 500 | `observability/compose.prod.yaml` | Provisional (below). PIDs one step up: compaction and query I/O were not observed |
+| tempo | 1024 MiB | 256 | 500 | `observability/compose.prod.yaml` | A provisional ceiling (below) |
+| alloy | 384 MiB | 128 | 500 | `observability/compose.prod.yaml` | Conditional: two labelled containers, as today |
+| docker-socket-proxy | 64 MiB | 128 | 500 | `observability/compose.prod.yaml` | Conditional: Alloy's API traffic, as today |
+| grafana | 512 MiB | 256 | 500 | `observability/compose.prod.yaml` | Conditional: occasional use over an SSH tunnel; no query session measured. PIDs one step up: query sessions and plugin processes were not observed |
+
+**Sums:** the stack 3008 MiB, the app 2688 MiB, all ten 5696 MiB; PIDs 1152 + 1536 = 2688.
+
+- **Σ limits is not the memory requirement.** 5696 MiB is a deliberate overcommit against
+  T = 4352 MiB. The requirement is the simultaneous peak H + P + O + K + R
+  ([Budget model](#budget-model)).
+- **If the effective outer limit is lower than 4352 MiB:**
+  - each container's own limit still holds;
+  - neither the combined fit nor OOM safety is guaranteed: an OOM of the whole LXC can come while
+    every container is below its own limit.
+- **In an OOM of the whole LXC**, `oom_score_adj: 500` makes the kernel prefer the stack's
+  processes over the app's. It ranks processes, not containers, and protects nothing.
+
+**Provisional values:**
+
+| | Prometheus 512 MiB | Loki 512 MiB | Tempo 1024 MiB |
+|---|---|---|---|
+| Conditional on | Queries well below `--query.max-samples` (50 M by default, which needs about 760 MiB or more at 16 B per sample [ESTIMATE], so a large range query is OOM-killed rather than refused): by estimate, under about 25–30 M samples. Head compaction and WAL replay fitting in the margin. Series near 1.3k | The 100 MB results cache counted in full, which leaves about 335 MiB for queries, ingestion, the compactor and page cache. 7-day queries staying within that. Low log volume (backend and frontend only) | Its block cycle levelling off |
+| At the limit [LOCAL] | 4-h run on fresh volumes (2026-11-11): one head compaction, into a level-1 block; `memory.peak` 70.8 MiB. Started at the limit, it derived a `GOMEMLIMIT` of 460.8 MiB (2026-11-12) | Not run at its limit | 4-h block-cycle check on fresh volumes (2026-11-11): 425 blocks flushed; 197 compaction jobs completed, levels 1–5, with every output confirmed on the volume; the Go heap in use levelling off (the last hour's maximum 0.878 of the hour before); `memory.peak` 326.4 MiB. **Not a retention test** |
+| Not tested | Long range queries, WAL replay, 15-day retention, the VPS | 7-day queries, compactor load, a full cache, retention deletion, the VPS | The steady state at 168 h, retention deletion, the VPS, the S7 trace volume, long TraceQL searches, WAL replay, bursts |
+
+### Backend measurement
+
+**Why a measurement.**
+- With a limit L, Java 25 sizes its maximum heap to L/4. On one CPU it chooses Serial GC.
+- The pre-upgrade working set of 872 MiB was taken without a limit and without the agent, so it does
+  not describe the limited backend.
+- The limit is chosen from a model instead: WS_est(L) = L/4 + C [ESTIMATE].
+  - C is the working set outside the Java heap: non-heap memory, the native memory of the JVM and
+    the agent, the health check's probe JVM, and kernel memory.
+  - The model assumes that the heap grows to L/4 and that C does not depend on L.
+  - The memory rule L ≥ 2·WS_est(L) then becomes L ≥ 4·C.
+
+**Method** [LOCAL]:
+- the backend image with the Java agent (S7's configuration), one emulated CPU, and one sequential
+  request per second for about 4 h;
+- 5-s samples of the backend's cgroup and of the JVM's heap metrics, aligned on `/proc/uptime`;
+  in the confirming run also the main JVM's `smaps_rollup`;
+- C is estimated from the sampled data, not bounded:
+  - C_high = max(WS − heap_used) + the overshoot of `memory.peak` over the highest sample;
+  - C_high' also counts the main JVM's resident file-backed pages (F = `Rss − Anonymous`). They
+    were charged to other cgroups here, but a cold page cache, for example after a reboot, would
+    charge them to the backend.
+
+| | Measurement run, 2026-11-11 | Confirming run, 2026-11-12 |
+|---|---|---|
+| Limit | 1536 MiB | 1792 MiB |
+| VM time | 14 170 s; one 227-s Docker Desktop freeze excluded | 4.00 h; no freeze |
+| `MaxHeapSize`, GC | 384 MiB, Serial | 448 MiB, Serial |
+| `oom`, `oom_kill`, `max` events | 0 | 0 |
+| WS max; WS_eff (with the overshoot) | 396.8 MiB; 419.4 MiB | 412.3 MiB; 419.6 MiB |
+| Heap committed; heap used, max | 115.8 MiB; 98.5 MiB | 115.8 MiB; 98.5 MiB |
+| C_high [ESTIMATE] | 351.5 MiB | 351.3 MiB |
+| C_high' [ESTIMATE] | ≈ 386.7 MiB, illustrative: F was read only after the window | 386.7 MiB, with F = 35.4 MiB sampled every 5 s |
+| L ≥ 4·C_high' | 1536 < ≈ 1547: fails | 1792 ≥ 1546.8: passes, margin 61.3 MiB |
+
+- **Accepted on 2026-11-12: 1792 MiB.** By the model, WS_est(1792) = 834.7 MiB, against
+  L/2 = 896 MiB.
+- **What the runs do not show:**
+  - **a full heap.** In both runs the heap stayed at its first commitment of 115.8 MiB, so the
+    model's L/4 term is extrapolated, not observed;
+  - **a plateau of the off-heap memory.**
+    - In the confirming run's second half, the main JVM's anonymous memory still rose by about
+      1.6 MiB/h, mostly its non-heap committed memory (+0.8 MiB/h).
+    - At that slope the 61.3 MiB margin would last about 39 h. That is an indicator against the
+      L/2 rule, not a prediction, and not the distance to the limit itself;
+  - **production conditions**: hours, not days, on development data, and one emulated CPU on a
+    16-CPU host;
+  - page cache filled by `read()`, and files mapped only by the probe JVM.
+- The limit therefore rests on the model's estimate, not on an observed long uptime. The checks on
+  the VPS after the app rollout (S4.4.4) confirm it.
+
 ## Conclusions
 
 - The VPS was upgraded [USER-REPORTED] and now shows 4.25 GiB of RAM [VPS]. Use this configuration
   as the target for the application plus the observability stack in their current scope.
 - The visible 4.25 GiB is not yet verified as the effective LXC limit, and the combined workload is
   not yet shown to fit. The terms marked UNKNOWN decide that.
-- S4.4 assigns per-container resource limits from this budget.
+- S4.4 assigns per-container resource limits from this budget ([Container limits](#container-limits)).
+  The stack's are in `observability/compose.prod.yaml`. The app's, with the backend's accepted
+  1792 MiB, follow in S4.4.3.
 - Measurements after S6 and S7 validate the budget under real VPS ingestion and retention.
 - The upgrade adds memory and disk space, not CPU. The CPU risk below remains, and so do the disk
   risks: nothing bounds the growth of logs and telemetry.
@@ -346,9 +471,11 @@ The gap between them is what the reserve has to cover.
 | Area | Risk | Status |
 |---|---|---|
 | CPU | One CPU runs everything. Not tested: host contention (steal time is not observable inside the LXC), simultaneous startup with WAL replay, and a deploy (a 90 s start period with a probe JVM every 3 s, inside a 180 s wait) | No throttling in the short sample before the upgrade, and `nr_throttled` 0 after it [VPS]; the rest [UNKNOWN] |
-| Memory: Tempo | Grew through the whole local window | [LOCAL]; not levelled off |
+| Memory: Tempo | Grew through the whole 38-minute local window. In a 4-h block-cycle check at 1024 MiB its Go heap levelled off ([Container limits](#container-limits)) | [LOCAL]; the steady state at full retention [UNKNOWN] |
 | Memory: Java agent | Its overhead on the VPS | [UNKNOWN] |
-| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects: about 576 MiB at 2.25 GiB, about 1088 MiB if it sees 4.25 GiB. A backend started after the upgrade can therefore use more memory than before, and an S4.4 container limit becomes the JVM's sizing base | [ESTIMATE]; the GC chosen on one CPU [UNKNOWN] |
+| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects: about 576 MiB at 2.25 GiB, about 1088 MiB if it sees 4.25 GiB. A backend started after the upgrade can therefore use more memory than before. The accepted 1792 MiB limit (S4.4.3) becomes the JVM's sizing base: a 448 MiB heap and Serial GC on one CPU | Without a limit [ESTIMATE]; at 1792 MiB [LOCAL]; on the VPS [UNKNOWN] until S4.4.3 |
+| Memory: backend growth | The backend's limit rests on a model. No run filled the heap, and in the 4-h confirming run the main JVM's memory outside the heap still rose by about 1.6 MiB/h at the end ([Backend measurement](#backend-measurement)) | [LOCAL]; a long uptime [UNKNOWN] until the VPS checks after S4.4.4 |
+| Memory: OOM of the whole LXC | The ten limits add up to 5696 MiB, more than T = 4352 MiB. An OOM of the whole LXC can come while every container is below its own limit; `oom_score_adj` only ranks the victims | By design; whether pressure can arrive below 4352 MiB [UNKNOWN] |
 | Disk: container logs | `json-file` with no rotation, so logs grow without bound | Growth [UNKNOWN] |
 | Disk: telemetry | Retention is by time only (Prometheus 15 days, Loki and Tempo 168 h); nothing caps size | Growth [UNKNOWN] until S7 |
 | Disk: images | The deploy prunes only images built from this repository. The stack's images are never pruned, so each version bump leaves the old one | About 3.2 GB [LOCAL, 2026-11-02]; VPS [UNKNOWN] |
@@ -408,11 +535,11 @@ They show the CPU count, the memory limit, the heap and the GC that a JVM starti
 
 | What | How | When |
 |---|---|---|
-| T: the effective LXC limit (the VPS shows 4.25 GiB) | Not settled by the readings so far: `memory.max=max` at the visible root | Before S4.4 |
+| T: the effective LXC limit (the VPS shows 4.25 GiB) | Read after the upgrade [VPS]: `/proc/meminfo` from LXCFS with `MemTotal` 4352 MiB, so a configured limit of 4352 MiB is the most likely reading. Where it sits and whether it is enforced are not visible from the guest (`memory.max=max` at the visible root) | Open. S4.4 uses T = 4352 MiB and makes no safety claim below it |
 | CPU count and quota after the upgrade | Read after the upgrade [VPS]: one CPU, no CFS quota at the visible root | Done |
 | The `memory.stat` fields the VPS kernel provides (the filtered output had no `kernel`) | `cat /sys/fs/cgroup/memory.stat` | Before kernel memory is computed for H, P and O |
 | Swap on the host side, behind the virtual `/proc/swaps` entry | Not visible from the guest | Open; this budget does not count on swap |
-| The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before S4.4, and again after S7 |
+| The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before the app's limits (S4.4.3), after their rollout, and again after S7 |
 | H | The LXC's and every container's `anon + shmem + kernel + sock`, read at the same moment | Optional follow-up; not required before S4.4 |
 | The backup and apt peaks | The same values sampled over 24 h, across the 03:30 backup and the apt windows | Optional follow-up; until then [UNKNOWN] |
 | P: `anon + shmem + kernel + sock` and the agent's overhead | Per-container cgroup values before and after S7 | S7 |
