@@ -118,11 +118,13 @@ latency graph opens the trace of a request it counts
 | File | Role |
 |---|---|
 | `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)) |
+| `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, and nothing else ([Resource limits](#resource-limits)) |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
+| `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -572,6 +574,106 @@ To find out why logs are missing:
   `is_running` and `last_error`.
 - To see every request the proxy lets through, add `-loglevel=debug` to its `command` for a while.
 
+### Resource limits
+
+`observability/compose.prod.yaml` is the stack's production overlay. It gives each of the six
+services:
+
+- a memory limit (`mem_limit`), with `memswap_limit` equal to it, so the service uses no swap;
+- a PID limit (`pids_limit`);
+- `oom_score_adj: 500`.
+
+It sets nothing else: no CPU limit or weight, no reservation and no `deploy.resources`
+([deferred](DEFERRED_WORK.md#s44--cpu-weights)). The values, their evidence and the conditions they
+depend on are in [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limits).
+
+**Where the overlay applies.**
+
+- **Local and development runs use the base file, `observability/compose.yaml`, without the
+  overlay.**
+  - Every command in this document that passes only `observability/compose.yaml`, such as those
+    under [Run](#run-1) and [Verify](#verify-1), is for such a run.
+  - The app joins the local stack with its development overlays, as [Run](#run-1) shows.
+  - A value sized for the VPS's one CPU and 4.25 GiB never changes such a run.
+- **The production stack on the VPS needs `observability/compose.prod.yaml`**, from S6. Every
+  command there that creates or recreates the stack's containers passes both files, for example:
+
+  ```bash
+  docker compose -f observability/compose.yaml -f observability/compose.prod.yaml up -d --wait
+  ```
+
+  - Leaving the overlay out of such a command can start the containers without their limits:
+    Compose finds a changed configuration and recreates them from the base file alone.
+  - `stop`, `start` and `restart` keep a container, and its limits with it.
+  - This includes the `up` of [Alloy volumes written by root](#alloy-volumes-written-by-root) when
+    it runs on the VPS.
+- **CI's `observability` job** starts the stack with both files too (see Checks below).
+
+**What the settings do** (cgroup v2):
+
+- **At its memory limit**, the kernel reclaims the container's page cache first. If that is not
+  enough, its OOM killer kills one process of that container, normally the largest.
+  - **If that is PID 1**, the container's main process (the service itself), the container exits
+    and `restart: unless-stopped` starts it again.
+  - **If it is a child process**, such as a health check's `wget`, a Grafana plugin process or a
+    `docker exec`, PID 1 keeps running. The container does not stop, its restart policy does not
+    run, and `RestartCount` stays the same.
+  - **Either way, look at both records**:
+    - `oom` and `oom_kill` in the container cgroup's `memory.events` and `memory.events.local`;
+    - `State.OOMKilled` in `docker inspect`.
+
+    The contract's [§8](S4.4_DESIGN_CONTRACT.md#8-oom-behaviour-and-oom_score_adj-h2) has the
+    counters' meaning on the VPS's kernel and what they cannot show.
+- **At its PID limit**, creating a process or a thread fails. A Go runtime that cannot create a
+  thread aborts.
+- **`oom_score_adj: 500` matters only when the whole VPS runs out of memory.**
+  - The kernel then prefers the stack's processes as victims over the app's, which keep the default
+    0.
+  - It ranks processes, not containers. It protects nothing: the VPS can stall under memory pressure
+    before any kill, and a restarted service can grow again.
+- **Go memory limits.** Prometheus and Alloy derive a soft Go memory limit (`GOMEMLIMIT`) of 90 % of
+  their container's limit: 460.8 MiB and 345.6 MiB, as both logged in a local run [LOCAL,
+  2026-11-12]. Loki, Tempo and Grafana logged none, and the stack sets none.
+
+**Checks.** `scripts/observability-limits-check.sh` is a CI and local check with two modes. It
+needs `jq`.
+
+- **`static`** renders the stack with and without the overlay, and the app's development files.
+  - Every service of the stack gets a memory limit, an equal `memswap_limit`, a PID limit and
+    `oom_score_adj` 500 from the overlay.
+  - Nothing else changes: no other key, no service added or removed.
+  - No render has a CPU setting, a reservation or `deploy.resources`.
+  - The base and development renders have no limits.
+- **`runtime`** checks the running stack against its render.
+  - It reads each container's `HostConfig`.
+  - It also starts one short-lived probe per container: the Prometheus image, as `nobody`, with no
+    network or capabilities. The probe shares only that container's PID namespace and the host's
+    cgroup namespace. It reads the cgroup files of the container's PID 1 (`memory.max`,
+    `memory.swap.max`, `pids.max`, `cpu.max`, `memory.events`, `memory.events.local`) and
+    `/proc/1/oom_score_adj`.
+  - Each run labels its probes with its own ID and on exit removes only those, so parallel runs and
+    other containers are left alone.
+  - Each must match the render. `oom` and `oom_kill` must be 0 and `State.OOMKilled` false, and no
+    service except the proxy may have restarted.
+  - `memory.peak` and `pids.peak` are printed as info.
+  - A stack started without the overlay fails it.
+
+  ```bash
+  bash scripts/observability-limits-check.sh runtime
+  ```
+
+- **Not on the VPS.**
+  - The VPS's kernel 5.15 probably has no `memory.peak`, which `runtime` reads, so it would fail
+    there for that reason alone.
+  - `jq` is not guaranteed there.
+  - On the VPS, the limits are checked with the read-only commands of the contract's
+    [§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only); the stack's at S6.
+- **CI's `observability` job** runs `static` before it starts the stack with the overlay, and
+  `runtime` after the smoke test and the outage check.
+  - Its run is short and nearly idle, so `memory.peak` is a lower bound, never a production peak.
+  - The checks verify configuration only. They do not show that a limit is large enough, or that
+    anything is protected.
+
 ### Verify
 
 Check the stack on its own first:
@@ -762,10 +864,12 @@ tested. A killed script (`SIGKILL`) cannot restore anything. The proxy then stay
 next run of either script stops at its first check, and `docker start docker-socket-proxy` repairs
 it. The script changes nothing else: it starts and removes only its own probe containers.
 
-CI's `observability` job starts the stack and runs the smoke test, then the outage check, on every
-PR that touches the stack, the overlay files or either script, and on pushes to master, nightly and
-manual runs. Afterwards it checks that no probe container is left and that the proxy is running
-and `healthy`. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
+CI's `observability` job starts the stack with its production overlay and runs the smoke test, then
+the outage check, on every PR that touches the stack, the overlay files or one of the three scripts,
+and on pushes to master, nightly and manual runs. The limits check runs before the start and after
+the two tests ([Resource limits](#resource-limits)). Afterwards the job checks that no probe
+container is left and that the proxy is running and `healthy`. Set `GRAFANA_AUTH` (default
+`admin:admin`) if you changed Grafana's password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
@@ -836,6 +940,13 @@ collected since the last scrape, so Prometheus never stores them
   change what the app sees (Tempo's OTLP intake, Prometheus scraping, Loki or Grafana queries) also
   run the backend checks above and `scripts/observability-exemplar-check.sh` before merging.
   Take one bump at a time: a major version can need config changes, as Tempo 3 did.
+- **Resource limits**: a new version can use more memory or threads.
+  - CI runs the stack within its production limits, but briefly and nearly idle, so a pass does not
+    show that a limit still fits under load.
+  - After a bump that changes how a service uses memory, compare the `memory.peak` info lines of
+    the limits check with earlier runs.
+  - Change a value in `observability/compose.prod.yaml` and its row in
+    [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limits) together.
 - **Alloy and the socket proxy**: a new Alloy version may make a Docker API call the proxy refuses.
   - The smoke test fails on any refusal of Alloy's own requests during its run, so CI catches that
     on the bump's PR.
@@ -892,7 +1003,8 @@ collected since the last scrape, so Prometheus never stores them
   ([Docker API access](#docker-api-access)). Alloy ships the logs of the labelled containers,
   including nginx access logs with client IPs. Server spans record `client.address` and
   `user_agent.original`. Grafana uses `admin`/`admin`, and the other services publish their ports on
-  `127.0.0.1`. Running it on the VPS needs further hardening, which later stages add.
+  `127.0.0.1`. Running it on the VPS needs further hardening, which later stages add. The resource
+  limits of the production overlay are one part of it ([Resource limits](#resource-limits)).
 
 ## Stage 3: from a metric to its trace (exemplars)
 

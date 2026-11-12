@@ -1,0 +1,51 @@
+# Production overlay for the stack in this directory. On the VPS, every command that creates or
+# recreates the stack's containers must pass both files:
+#   docker compose -f observability/compose.yaml -f observability/compose.prod.yaml up -d --wait
+# Compose otherwise recreates them without these limits. CI's observability job also runs the stack
+# with both files, so its tests run within these limits. Development uses compose.yaml alone, so
+# values sized for the VPS (one CPU, 4.25 GiB) never change a development run.
+#
+# Only resource keys and oom_score_adj belong here. docs/OBSERVABILITY.md, Resource limits, says
+# how they apply; docs/VPS_RESOURCE_BUDGET.md, Container limits, has the values' evidence and
+# conditions; scripts/observability-limits-check.sh checks them.
+# - memswap_limit equals mem_limit, so no container uses swap.
+# - oom_score_adj 500 makes the kernel prefer these processes over the app's when the whole VPS runs
+#   out of memory. It ranks processes; it protects nothing.
+# - No CPU limits or reservations (docs/DEFERRED_WORK.md, CPU weights).
+services:
+  prometheus:
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+    oom_score_adj: 500
+
+  loki:
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 256
+    oom_score_adj: 500
+
+  # A provisional ceiling: Tempo's steady state over its full 168 h retention is not known yet.
+  tempo:
+    mem_limit: 1024m
+    memswap_limit: 1024m
+    pids_limit: 256
+    oom_score_adj: 500
+
+  alloy:
+    mem_limit: 384m
+    memswap_limit: 384m
+    pids_limit: 128
+    oom_score_adj: 500
+
+  docker-socket-proxy:
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 128
+    oom_score_adj: 500
+
+  grafana:
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 256
+    oom_score_adj: 500

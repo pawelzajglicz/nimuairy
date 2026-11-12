@@ -55,7 +55,8 @@ jobs:
                 frontend/*) frontend=true ;;
                 nimuairy-api/*) backend=true ;;
                 observability/* | compose.yaml | compose.override.yaml | compose.observability*.yaml | \
-                  scripts/observability-smoke-test.sh | scripts/observability-proxy-resilience-check.sh)
+                  scripts/observability-smoke-test.sh | scripts/observability-proxy-resilience-check.sh | \
+                  scripts/observability-limits-check.sh)
                   observability=true ;;
               esac
             # --no-renames lists both paths of a move, so moving a file out of an area still
@@ -128,6 +129,9 @@ jobs:
   # started, only its overlay validated; docs/OBSERVABILITY.md lists the checks that need it.
   # After the smoke test, a second script stops the Docker socket proxy for a while and checks
   # that Alloy resumes log collection without a restart.
+  # The stack runs with its production overlay, observability/compose.prod.yaml, so both tests run
+  # within its memory and PID limits. The limits check verifies the render before the start and the
+  # running containers after the tests.
   observability:
     needs: changes
     if: needs.changes.outputs.observability == 'true'
@@ -143,20 +147,33 @@ jobs:
       - name: Validate the Compose files
         run: |
           docker compose -f observability/compose.yaml config -q
+          docker compose -f observability/compose.yaml -f observability/compose.prod.yaml config -q
           docker compose -f compose.yaml -f compose.override.yaml \
             -f compose.observability.yaml -f compose.observability.dev.yaml config -q
-      - run: docker compose -f observability/compose.yaml up -d --wait --wait-timeout 180
+      # Every stack service gets its limits from the overlay, and the base and development renders
+      # get none.
+      - name: Production limits in the render
+        run: bash scripts/observability-limits-check.sh static
+      - id: up
+        run: docker compose -f observability/compose.yaml -f observability/compose.prod.yaml up -d --wait --wait-timeout 180
       - run: bash scripts/observability-smoke-test.sh
       # Only after a green smoke test: an outage means something only on a stack whose boundary
       # passed. Its own limit leaves the job time for the checks below if the script hangs.
       - name: Socket proxy outage
         run: bash scripts/observability-proxy-resilience-check.sh
         timeout-minutes: 6
+      # After the tests, so that an OOM kill or a restart during them shows; also when one of them
+      # failed. Without a started stack there is nothing to check.
+      - name: Production limits on the running stack
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: bash scripts/observability-limits-check.sh runtime
       # The tests remove their probe containers when they exit; one left over means that failed.
-      # docker ps ORs two name filters.
+      # docker ps ORs the name filters.
       - name: No probe containers left
         if: always()
-        run: test -z "$(docker ps -aq --filter name=observability-smoke-test --filter name=observability-proxy-resilience)"
+        run: |
+          test -z "$(docker ps -aq --filter name=observability-smoke-test --filter name=observability-proxy-resilience \
+            --filter name=observability-limits-check)"
       # The outage check restores the proxy on exit, but a killed script cannot, and a proxy
       # stopped by hand stays stopped (restart: unless-stopped).
       - name: Socket proxy running again
@@ -165,8 +182,8 @@ jobs:
       - name: Stack status and logs
         if: failure()
         run: |
-          docker compose -f observability/compose.yaml ps -a
-          docker compose -f observability/compose.yaml logs --no-color
+          docker compose -f observability/compose.yaml -f observability/compose.prod.yaml ps -a
+          docker compose -f observability/compose.yaml -f observability/compose.prod.yaml logs --no-color
 
   # Nightly-only: catches advisories published after the last PR. Only high/critical fail the
   # run; lower ones are left to the weekly Dependabot updates. Unlike the Trivy SCA scan, it also
