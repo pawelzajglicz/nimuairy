@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# Checks the production resource limits of the stack in observability/ (docs/OBSERVABILITY.md,
-# Resource limits). The limits live only in observability/compose.prod.yaml.
+# Checks the production resource limits (docs/OBSERVABILITY.md, Resource limits). The stack's
+# limits live only in observability/compose.prod.yaml, the app's only in compose.prod.yaml.
 #
-#   static   Renders the stack with and without the overlay, and the app's development files, and
-#            checks the renders: every service of the stack gets mem_limit = memswap_limit, a
-#            pids_limit and oom_score_adj 500, and nothing else changes; no render has a CPU setting,
-#            a reservation or deploy.resources; the base and development renders have no limits.
+#   static   Renders the stack with and without its overlay, the app with its production overlay,
+#            and the app's development files, and checks the renders:
+#            - every service of the stack gets mem_limit = memswap_limit, a pids_limit and
+#              oom_score_adj 500, and nothing else changes;
+#            - every service of the app gets its pinned mem_limit (APP_MEM_LIMITS_MIB) =
+#              memswap_limit, a pids_limit and no oom_score_adj;
+#            - no render has a CPU setting, a reservation or deploy.resources; the base and
+#              development renders have no limits.
 #   runtime  Checks the running stack against its render: the containers' HostConfig, the cgroup
 #            files of their PID 1 (memory.max, memory.swap.max, pids.max, cpu.max, memory.events
 #            and memory.events.local) and /proc/1/oom_score_adj. It reports memory.peak and
-#            pids.peak, and the cgroup2 mount options, as info.
+#            pids.peak, and the cgroup2 mount options, as info. It does not cover the app, which
+#            is checked on the VPS (docs/S4.4_DESIGN_CONTRACT.md, Appendix A.3).
 #
-# The values come from the render, so a changed limit needs no change here. The one number named
-# here is oom_score_adj 500, a decision rather than a sized value. OBSERVABILITY_COMPOSE_FILES
-# (space-separated, from the repository root) replaces the stack's two files, for example to check
-# a copy of the stack started under another project name.
+# The stack's values come from the render, so a changed limit needs no change here; the one number
+# named for it is oom_score_adj 500, a decision rather than a sized value. The app's memory limits
+# are pinned on purpose, to catch drift: a changed value in compose.prod.yaml fails here until
+# APP_MEM_LIMITS_MIB changes with it. OBSERVABILITY_COMPOSE_FILES (space-separated, from the
+# repository root) replaces the stack's two files, for example to check a copy of the stack started
+# under another project name.
 #
 # runtime starts one short-lived probe per container. It shares only that container's PID
 # namespace and the host's cgroup namespace, runs as nobody without capabilities or network, and
@@ -35,6 +42,13 @@ RUN_LABEL=$PROBE.run
 # weights). deploy.resources is checked on its own.
 CPU_AND_RESERVATION_KEYS='["cpus","cpu_shares","cpu_quota","cpu_period","cpu_count","cpu_percent","cpuset","cpu_rt_runtime","cpu_rt_period","mem_reservation"]'
 OOM_SCORE_ADJ=500
+# The app's selected memory limits in MiB (docs/VPS_RESOURCE_BUDGET.md, Container limits). Its PID
+# limits are not pinned.
+APP_MEM_LIMITS_MIB='{"backend": 1792, "postgres": 512, "frontend": 128, "cloudflared": 256}'
+# compose.prod.yaml does not render without these (${VAR:?}). Dummy values: only resource keys are
+# read.
+APP_PROD_ENV=(APP_SHA=limits-check POSTGRES_PASSWORD=limits-check JWT_SECRET=limits-check
+  CLOUDFLARED_TOKEN=limits-check)
 failures=()
 
 fatal() {
@@ -82,9 +96,12 @@ check_unlimited() {
 }
 
 run_static() {
-  local base prod dev dev_obs
+  local base prod app_prod dev dev_obs
   base=$(render "${FILES[0]}") || fatal "${FILES[0]} does not render"
   prod=$(render "${FILES[@]}") || fatal "${FILES[*]} do not render"
+  # The exports end with the command substitution's subshell.
+  app_prod=$(export "${APP_PROD_ENV[@]}" && render compose.yaml compose.prod.yaml) ||
+    fatal "the app's production files do not render"
   dev=$(render compose.yaml compose.override.yaml) || fatal "the app's development files do not render"
   dev_obs=$(render compose.yaml compose.override.yaml compose.observability.yaml compose.observability.dev.yaml) ||
     fatal "the app's development files with the observability overlays do not render"
@@ -123,6 +140,35 @@ run_static() {
        | if ($problems | length) == 0
          then "ok   \($s): mem_limit = memswap_limit = \($p.mem_limit | mib) MiB, pids_limit \($p.pids_limit), oom_score_adj \($p.oom_score_adj)"
          else "FAIL \($s): \($problems | join("; "))" end)' <<<"$base"$'\n'"$prod"
+
+  # Unlike the stack's overlay, this one also sets images, secrets and cloudflared, so only the
+  # resource keys are checked. The services must match the pinned ones, so a service added without
+  # a pinned limit fails.
+  echo "== the app with its production overlay: compose.yaml compose.prod.yaml"
+  judge --argjson cpu "$CPU_AND_RESERVATION_KEYS" --argjson pinned "$APP_MEM_LIMITS_MIB" '
+    def mib: tonumber / 1048576;
+    (.services | keys) as $rk | ($pinned | keys) as $pk
+    | (if $rk == $pk then "ok   the services match the pinned ones (\($rk | length): \($rk | join(", ")))"
+       else "FAIL the render has the services \($rk | join(", ")), the pinned ones are \($pk | join(", "))" end),
+      ($pk[] as $s | .services[$s] as $p
+       | if $p == null then "FAIL \($s): not in the render"
+         else [ if ($p | has("mem_limit") | not) then "no mem_limit"
+                elif ($p.mem_limit | tonumber) != ($pinned[$s] * 1048576)
+                then "mem_limit is \($p.mem_limit | mib) MiB, pinned \($pinned[$s]) MiB"
+                else empty end,
+                if ($p | has("memswap_limit") | not) then "no memswap_limit"
+                elif ($p | has("mem_limit")) and ($p.memswap_limit | tonumber) != ($p.mem_limit | tonumber)
+                then "memswap_limit \($p.memswap_limit | mib) MiB differs from mem_limit \($p.mem_limit | mib) MiB"
+                else empty end,
+                if (($p.pids_limit // 0) | tonumber) <= 0 then "no positive pids_limit" else empty end,
+                if ($p | has("oom_score_adj")) then "sets oom_score_adj \($p.oom_score_adj)" else empty end,
+                ($cpu[] as $k | select($p | has($k)) | "sets \($k)"),
+                if ($p.deploy.resources // null) != null then "sets deploy.resources" else empty end
+              ] as $problems
+           | if ($problems | length) == 0
+             then "ok   \($s): mem_limit = memswap_limit = \($p.mem_limit | mib) MiB as pinned, pids_limit \($p.pids_limit), no oom_score_adj"
+             else "FAIL \($s): \($problems | join("; "))" end
+         end)' <<<"$app_prod"
 
   echo "== renders that must stay without limits"
   check_unlimited "the stack without the overlay (${FILES[0]})" "$base"

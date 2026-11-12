@@ -9,10 +9,21 @@
 #
 # Secrets have no defaults here: a missing .env must stop the stack rather
 # than start it with the dev placeholders from compose.yaml.
+#
+# Resource limits live here, not in compose.yaml, so development runs without
+# values sized for the VPS. Each service gets mem_limit, an equal memswap_limit
+# (no swap) and pids_limit. No oom_score_adj: the app keeps the default 0,
+# below the observability stack's 500. No CPU limits or reservations.
+# docs/VPS_RESOURCE_BUDGET.md, Container limits, has the evidence for each value.
+# scripts/observability-limits-check.sh pins the memory limits, so change a
+# value there in the same commit.
 services:
   postgres:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 256
 
   # Images built and pushed by .github/workflows/build-and-push.yml. APP_SHA is the deployed
   # commit; the deploy workflow writes it into the VPS .env and rolls it back on failure.
@@ -21,9 +32,17 @@ services:
     environment:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    # No JVM flag sets the heap, so the JVM sizes it from this limit: a quarter
+    # of it.
+    mem_limit: 1792m
+    memswap_limit: 1792m
+    pids_limit: 1024
 
   frontend:
     image: ghcr.io/pawelzajglicz/nimuairy-frontend:${APP_SHA:?set APP_SHA in .env}
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 128
 
   cloudflared:
     container_name: cloudflared-nimuairy
@@ -40,3 +59,6 @@ services:
     networks:
       - frontend
     restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 128
