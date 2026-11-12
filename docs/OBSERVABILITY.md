@@ -611,8 +611,9 @@ depend on are in [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limit
 
 **What the settings do** (cgroup v2):
 
-- **At its memory limit**, the kernel reclaims the container's page cache first. If that is not
-  enough, its OOM killer kills one process of that container, normally the largest.
+- **At its memory limit**, the kernel reclaims the container's page cache first. If reclaim is not
+  sufficient, the OOM killer kills one process of that container, selected by its badness score,
+  which accounts for memory usage and `oom_score_adj`.
   - **If that is PID 1**, the container's main process (the service itself), the container exits
     and `restart: unless-stopped` starts it again.
   - **If it is a child process**, such as a health check's `wget`, a Grafana plugin process or a
