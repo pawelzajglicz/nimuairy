@@ -5,7 +5,8 @@
 #   static   Renders the stack with and without its overlay, the app with its production overlay,
 #            and the app's development files, and checks the renders:
 #            - every service of the stack gets mem_limit = memswap_limit, a pids_limit and
-#              oom_score_adj 500, and nothing else changes except the keys OVERLAY_KEYS admits;
+#              oom_score_adj 500, and nothing else changes except the keys OVERLAY_KEYS admits,
+#              and at the top level OVERLAY_TOP_LEVEL_KEYS;
 #            - every service of the app gets its pinned mem_limit (APP_MEM_LIMITS_MIB) =
 #              memswap_limit, a pids_limit and no oom_score_adj;
 #            - no render has a CPU setting, a reservation or deploy.resources; the base and
@@ -43,9 +44,11 @@ RUN_LABEL=$PROBE.run
 CPU_AND_RESERVATION_KEYS='["cpus","cpu_shares","cpu_quota","cpu_period","cpu_count","cpu_percent","cpuset","cpu_rt_runtime","cpu_rt_period","mem_reservation"]'
 OOM_SCORE_ADJ=500
 # The keys besides the resource keys that the stack's overlay may change, each only on the services
-# listed (docs/S4b_DESIGN_CONTRACT.md, section 8.6). It admits a key, not a value:
-# observability-prod-check.sh static checks the values.
-OVERLAY_KEYS='{"prometheus": ["ports"], "loki": ["ports"], "tempo": ["ports"], "alloy": ["ports"]}'
+# listed, and the keys it may change at the top level (docs/S4b_DESIGN_CONTRACT.md, section 8.6).
+# They admit a key, not a value: observability-prod-check.sh static checks the values.
+OVERLAY_KEYS='{"prometheus": ["ports"], "loki": ["ports"], "tempo": ["ports"], "alloy": ["ports"],
+  "grafana": ["environment", "secrets", "entrypoint"]}'
+OVERLAY_TOP_LEVEL_KEYS='["secrets"]'
 # The app's selected memory limits in MiB (docs/VPS_RESOURCE_BUDGET.md, Container limits). Its PID
 # limits are not pinned.
 APP_MEM_LIMITS_MIB='{"backend": 1792, "postgres": 512, "frontend": 128, "cloudflared": 256}'
@@ -112,7 +115,8 @@ run_static() {
 
   echo "== the stack with its production overlay: ${FILES[*]}"
   # Both renders go in on stdin: as arguments they could exceed a command-line limit.
-  judge -n --argjson cpu "$CPU_AND_RESERVATION_KEYS" --argjson adj "$OOM_SCORE_ADJ" --argjson keys "$OVERLAY_KEYS" '
+  judge -n --argjson cpu "$CPU_AND_RESERVATION_KEYS" --argjson adj "$OOM_SCORE_ADJ" --argjson keys "$OVERLAY_KEYS" \
+    --argjson top_keys "$OVERLAY_TOP_LEVEL_KEYS" '
     def mib: tonumber / 1048576;
     input as $base | input as $prod
     | ($base.services | keys) as $bk
@@ -121,8 +125,10 @@ run_static() {
        elif $pk == $bk then "ok   the overlay adds and removes no service (\($pk | length): \($pk | join(", ")))"
        else "FAIL the overlay changes the services: base \($bk | join(", ")), with the overlay \($pk | join(", "))" end),
       ([($prod | keys[]), ($base | keys[])] | unique | map(select(. != "services" and $prod[.] != $base[.]))) as $top
-      | (if ($top | length) == 0 then "ok   the overlay changes nothing outside services"
-         else "FAIL the overlay changes \($top | join(", ")) outside services" end),
+      | ($top - $top_keys) as $other_top
+      | (if ($other_top | length) > 0 then "FAIL the overlay changes \($other_top | join(", ")) outside services"
+         elif ($top | length) == 0 then "ok   the overlay changes nothing outside services"
+         else "ok   outside services the overlay changes only \($top | join(", ")), admitted at the top level" end),
       ($pk[] as $s | $prod.services[$s] as $p | ($base.services[$s] // {}) as $b
        | ([($p | keys[]), ($b | keys[])] | unique
           | map(select(IN("mem_limit", "memswap_limit", "pids_limit", "oom_score_adj") | not)

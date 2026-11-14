@@ -15,5 +15,9 @@
 .env.*
 !.env.example
 
+### Observability ###
+# The production Grafana password file (observability/compose.prod.yaml).
+observability/secrets/
+
 # Playwright MCP session output (snapshots, console logs, screenshots)
 .playwright-mcp/

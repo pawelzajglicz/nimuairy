@@ -118,15 +118,16 @@ latency graph opens the trace of a request it counts
 | File | Role |
 |---|---|
 | `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)) |
-| `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, and the removal of every host port except Grafana's `127.0.0.1:3000` ([Resource limits](#resource-limits)) |
+| `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, the removal of every host port except Grafana's `127.0.0.1:3000`, and Grafana's admin password from a secret file ([Resource limits](#resource-limits)) |
 | `observability/compose.test.yaml` | The test overlay, for CI's `observability` job and local test runs only, never on the VPS: on top of the production overlay, it publishes again the five loopback ports the test scripts use ([Resource limits](#resource-limits), Where the overlay applies) |
+| `observability/secrets/grafana_admin_password` | Not in the repository: Git ignores `observability/secrets/`. Production Grafana's admin password, which only the production overlay reads. CI's `observability` job writes a disposable one for each run; on the VPS the operator creates it at S6. Development needs none ([Resource limits](#resource-limits)) |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
 | `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack, and the app's limits in its production render; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
-| `scripts/observability-prod-check.sh` | Checks the production port policy in the Compose renders: the exact host port mappings of the development, production and test renders, and that none uses the host network; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
+| `scripts/observability-prod-check.sh` | Checks the production port policy and Grafana's production password in the Compose renders: the exact host port mappings of the development, production and test renders, that none uses the host network, production Grafana's environment, secret and start guard, and that development needs no secret file and keeps `admin`/`admin`; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -204,6 +205,9 @@ agent. Without the overlay no app container is labelled, so Alloy ships none of 
 | Loki API | <http://127.0.0.1:3100> |
 | Alloy UI | <http://127.0.0.1:12345> |
 | Backend metrics | <http://127.0.0.1:9464/metrics> (dev variant only) |
+
+Grafana's `admin`/`admin` comes from the base file. Development needs no password file: only the
+production overlay reads one ([Resource limits](#resource-limits)).
 
 Stop the stack with `docker compose -f observability/compose.yaml down`. Add `-v` to also
 delete the stored metrics, traces, logs and Grafana state.
@@ -601,6 +605,45 @@ removes the host ports of Prometheus, Loki, Tempo and Alloy with `ports: !reset 
 - `scripts/observability-prod-check.sh static` pins the exact mappings of each render (see Checks
   below).
 
+**The overlay also sets Grafana's production password**
+([S4b contract, §6](S4b_DESIGN_CONTRACT.md#6-grafana-authentication-and-secret-handling)).
+- **The secret.**
+  - `GF_SECURITY_ADMIN_PASSWORD: !reset null` removes the base file's `admin`.
+  - `GF_SECURITY_ADMIN_PASSWORD__FILE` points Grafana at `/run/secrets/grafana_admin_password`.
+  - That is a Compose file secret, read from `observability/secrets/grafana_admin_password`, which Git
+    ignores. The image's `/run.sh` reads the file and hands its content to Grafana.
+  - Compose bind-mounts the file read-only with the host file's owner and mode, so Grafana's user,
+    UID 472, must be able to read it.
+- **The start guard.** The overlay's entrypoint runs a guard before `/run.sh`. Grafana does not
+  start when the path:
+  - is missing, or is not a regular file, such as a directory;
+  - cannot be read by UID 472;
+  - is empty;
+  - or holds `admin`.
+
+  In each of these cases `/run.sh` would otherwise leave Grafana on `admin` without an error, and a
+  new database would store it.
+- **What the guard rests on**:
+  - **A missing file does not stop `up` on every engine.** On Docker Desktop, Compose only warns
+    `secret file … does not exist`. The engine then creates a directory at the path and mounts it,
+    which is why the guard requires a regular file.
+    - That directory stays on the host. Remove it before you create the file.
+    - Whether a Linux engine refuses the container instead is not verified.
+  - **How it was tested.** Each of the five cases was tested once on a real container with a fresh
+    volume [LOCAL, Docker Desktop, S4b.2]:
+    - Grafana exited with the guard's `FATAL` line before `/run.sh` ran, and wrote no `grafana.db`;
+    - `restart: unless-stopped` restarted it in a loop;
+    - `up --wait` failed with `container … is unhealthy`.
+  - **It depends on the image's `/run.sh` and `/bin/bash`.** An image update that moves them stops
+    Grafana, and CI's smoke test fails.
+- **The password applies only when Grafana creates its database**, `grafana.db`, on a new
+  `grafana-data` volume. Changing the file later does not change an existing database.
+- **Where the password is visible.**
+  - It is not in a tracked file, an image or `Config.Env`: `docker inspect` shows only the path.
+  - `/run.sh` exports the value to Grafana's main process. Never print Grafana's `/proc/1/environ`.
+- **The checks.** `scripts/observability-prod-check.sh static` pins Grafana's environment, secret
+  and guard (see Checks below).
+
 The app's four services get their limits from its own production overlay, `compose.prod.yaml`
 (S4.4.3): `mem_limit`, an equal `memswap_limit` and `pids_limit`. They get no `oom_score_adj`, so
 they keep the default 0. The deploy already passes that file, so the limits need no new command.
@@ -616,6 +659,7 @@ They reach the VPS only with the app rollout
   - The app joins the local stack with its development overlays, as [Run](#run-1) shows.
   - A value sized for the VPS's one CPU and 4.25 GiB never changes such a run.
   - Such a run keeps all seven loopback port mappings.
+  - Such a run needs no password file: Grafana keeps the base file's `admin`/`admin`.
 - **The production stack on the VPS needs `observability/compose.prod.yaml`**, from S6. Every
   command there that creates or recreates the stack's containers passes exactly two files, the base
   file and the production overlay, for example:
@@ -632,6 +676,10 @@ They reach the VPS only with the app rollout
     it runs on the VPS.
   - `observability/compose.test.yaml` reaches the VPS with the directory, but never joins a command
     there.
+  - It also needs the password file, `observability/secrets/grafana_admin_password`: a regular,
+    non-empty file that UID 472 can read. The operator creates it at S6, before the first `up`.
+    Nothing has been created on the VPS yet. Without a valid file, the guard keeps Grafana from
+    starting.
 - **CI's `observability` job** starts the stack with three files: the base file, the production
   overlay and the test overlay, `observability/compose.test.yaml`.
   - The test scripts reach the services through loopback ports, which the production overlay
@@ -640,6 +688,13 @@ They reach the VPS only with the app rollout
     Tempo's `4317`, which no test uses, stays removed.
   - So the tests run within the production limits, with host ports that production does not have.
     The test overlay is part of no production configuration: it is for CI and local test runs only.
+  - **The password.** Before it validates the renders, the job generates a new random password
+    (`openssl rand -hex 32`).
+    - It writes the password to `observability/secrets/grafana_admin_password` with mode 0644, so
+      UID 472 can read it.
+    - It masks the password in the log with `::add-mask::`, before exporting
+      `GRAFANA_AUTH=admin:<password>`, so the smoke test logs in with it.
+    - The value is disposable, lives only as long as the job, and is never a repository secret.
   - See Checks below.
 
 **What the settings do** (cgroup v2):
@@ -676,11 +731,14 @@ needs `jq`.
   and the app's development files.
   - Every service of the stack gets a memory limit, an equal `memswap_limit`, a PID limit and
     `oom_score_adj` 500 from the overlay.
-  - Nothing else changes: no service is added or removed, nothing changes outside `services`, and no
-    other key changes except those the script's strict allowlist (`OVERLAY_KEYS`) admits, each only
-    on the services it lists: today `ports` on `prometheus`, `loki`, `tempo` and `alloy`.
-    - So `ports` on `grafana` or `docker-socket-proxy` fails it.
-    - The allowlist admits a key, not a value: the production check below pins the mappings.
+  - Nothing else changes: no service is added or removed, and no other key changes except those the
+    script's strict allowlist admits, each only where it lists it:
+    - `OVERLAY_KEYS`: `ports` on `prometheus`, `loki`, `tempo` and `alloy`; `environment`,
+      `secrets` and `entrypoint` on `grafana`;
+    - `OVERLAY_TOP_LEVEL_KEYS`: the top-level `secrets`. Nothing else changes outside `services`.
+    - So `ports` on `grafana` or `docker-socket-proxy`, or `environment` on `tempo`, fails it.
+    - The allowlist admits a key, not a value: the production check below pins the mappings and
+      Grafana's values.
   - **The stack's values come from the render**, so the script duplicates none of them.
   - **The app's memory limits are pinned in the script** (`APP_MEM_LIMITS_MIB`), to catch drift.
     - Each of the four services must have its pinned value, an equal `memswap_limit`, a positive
@@ -726,8 +784,8 @@ needs `jq`.
   - The checks verify configuration only. They do not show that a limit is large enough, or that
     anything is protected.
 
-**Port checks.** `scripts/observability-prod-check.sh static` is a CI and local check. It needs
-`jq` and only renders the files.
+**Production checks.** `scripts/observability-prod-check.sh static` is a CI and local check. It
+needs `jq` and only renders the files.
 
 - It compares the host port mappings of three renders with exact sets that it pins, never with a
   count. A mapping is the service, host IP, host port, container port and protocol, so an extra or
@@ -737,10 +795,21 @@ needs `jq`.
     `grafana 127.0.0.1:3000->3000/tcp`;
   - **P-S2**, development, the base file: the seven development mappings;
   - **P-S3**, test runs, with the test overlay too: Grafana's and the test overlay's five.
+- **P-S4**, production Grafana:
+  - its environment is the base render's, except that `GF_SECURITY_ADMIN_PASSWORD` is removed and
+    `GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password` added;
+  - `GF_AUTH_ANONYMOUS_ENABLED` and `GF_USERS_ALLOW_SIGN_UP` are `"false"`;
+  - it mounts exactly the one secret, at `/run/secrets/grafana_admin_password`;
+  - the top-level `secrets` hold exactly that one, from `observability/secrets/grafana_admin_password`;
+  - its entrypoint is exactly the start guard, as the container receives it. The render shows each
+    `$` as `$$`, and the check unescapes it first.
+- **P-S5**, development: no secret, no `__FILE` variable and no entrypoint, so it needs no password
+  file; and `GF_SECURITY_ADMIN_USER` and `GF_SECURITY_ADMIN_PASSWORD` are `admin`.
+- The Grafana checks name variables, never their values.
 - **P-S6**: no service of the three renders uses `network_mode: host`, which would bypass port
   publishing.
 - A mapping changed in a Compose file fails the check until its pinned set changes too, in the same
-  commit.
+  commit. The same holds for Grafana's secret and guard.
 - CI's `observability` job runs it after the limits check's `static`, before it starts the stack.
 
 ```bash
@@ -942,11 +1011,13 @@ CI's `observability` job starts the stack with its production overlay and the te
 touches the stack, the overlay files, the app's `compose.prod.yaml` or one of the four check
 scripts, and on pushes to master, nightly and manual runs. The production overlay removes the
 loopback ports the two tests use, and the test overlay publishes them again; it is for test runs
-only and never part of a VPS command. Before the start, the limits check and the production port
-check verify the renders; the limits check also runs after the two tests
+only and never part of a VPS command. The production overlay also reads Grafana's password from a
+file. The job writes a disposable random one for each run, masks it in the log, and exports it as
+`GRAFANA_AUTH`, which the smoke test logs in with. Before the start, the limits check and the
+production check verify the renders; the limits check also runs after the two tests
 ([Resource limits](#resource-limits)).
 Afterwards the job checks that no probe container is left and that the proxy is running and
-`healthy`. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
+`healthy`. Locally, set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
@@ -1079,9 +1150,11 @@ collected since the last scrape, so Prometheus never stores them
   through it Alloy can still read the environment and logs of every container
   ([Docker API access](#docker-api-access)). Alloy ships the logs of the labelled containers,
   including nginx access logs with client IPs. Server spans record `client.address` and
-  `user_agent.original`. Grafana uses `admin`/`admin`, and the other services publish their ports on
-  `127.0.0.1`. Running it on the VPS needs further hardening, which later stages add. The resource
-  limits of the production overlay are one part of it ([Resource limits](#resource-limits)).
+  `user_agent.original`. Grafana uses `admin`/`admin` in development (the production overlay reads
+  its password from a secret file instead, [Resource limits](#resource-limits)), and the other
+  services publish their ports on `127.0.0.1`. Running it on the VPS needs further hardening, which
+  later stages add. The resource limits of the production overlay are one part of it
+  ([Resource limits](#resource-limits)).
 
 ## Stage 3: from a metric to its trace (exemplars)
 
