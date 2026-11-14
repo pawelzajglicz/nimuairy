@@ -134,11 +134,13 @@ jobs:
   # within its memory and PID limits. That overlay also removes every host port but Grafana's, which
   # the tests need, so the test overlay, observability/compose.test.yaml, publishes again the
   # loopback ports they use. The test overlay is for test runs only: a VPS command passes exactly
-  # compose.yaml and compose.prod.yaml. Before the start, the limits check and the production check
-  # verify the renders, the latter the exact host port mappings of the development, production and
-  # test renders. The limits check also verifies the running containers after the tests, and the
-  # app's production render (compose.yaml + compose.prod.yaml) for its limits; the app itself is not
-  # started here.
+  # compose.yaml and compose.prod.yaml. The production overlay also reads Grafana's admin password
+  # from a file; the job writes a disposable one for each run, and the smoke test logs in with it.
+  # Before the start, the limits check and the production check verify the renders, the latter the
+  # exact host port mappings of the development, production and test renders and Grafana's
+  # production password settings. The limits check also verifies the running containers after the
+  # tests, and the app's production render (compose.yaml + compose.prod.yaml) for its limits; the
+  # app itself is not started here.
   observability:
     needs: changes
     if: needs.changes.outputs.observability == 'true'
@@ -151,6 +153,18 @@ jobs:
       # The Docker socket proxy runs with the socket's group (observability/compose.yaml).
       - name: Set Docker socket GID
         run: echo "DOCKER_SOCKET_GID=$(stat -c %g /var/run/docker.sock)" >> "$GITHUB_ENV"
+      # A new, disposable Grafana admin password for each run: the production overlay reads it from
+      # this file, which Git ignores, and the smoke test logs in with GRAFANA_AUTH. The mask comes
+      # first, because later steps' logs show the values in GITHUB_ENV. Mode 0644: Grafana (472)
+      # reads the bind-mounted file with the host file's owner and mode.
+      - name: Disposable Grafana password
+        run: |
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          mkdir -p observability/secrets
+          printf '%s' "$password" > observability/secrets/grafana_admin_password
+          chmod 0644 observability/secrets/grafana_admin_password
+          echo "GRAFANA_AUTH=admin:$password" >> "$GITHUB_ENV"
       - name: Validate the Compose files
         run: |
           docker compose -f observability/compose.yaml config -q
@@ -164,14 +178,16 @@ jobs:
       - name: Production limits in the render
         run: bash scripts/observability-limits-check.sh static
       # Production publishes only Grafana's 127.0.0.1:3000; the development and test renders keep
-      # exactly their pinned mappings, and no render uses the host network.
-      - name: Production ports in the render
+      # exactly their pinned mappings, and no render uses the host network. Production Grafana reads
+      # its password only from the secret file and has the start guard; development needs neither.
+      - name: Production ports and Grafana secret in the render
         run: bash scripts/observability-prod-check.sh static
       # With the test overlay, which never joins a VPS command.
       - id: up
         run: |
           docker compose -f observability/compose.yaml -f observability/compose.prod.yaml \
             -f observability/compose.test.yaml up -d --wait --wait-timeout 180
+      # Logs in to Grafana with GRAFANA_AUTH, the disposable password.
       - run: bash scripts/observability-smoke-test.sh
       # Only after a green smoke test: an outage means something only on a stack whose boundary
       # passed. Its own limit leaves the job time for the checks below if the script hangs.

@@ -6,9 +6,9 @@
 # tests use, so the tests run within these limits. Development uses compose.yaml alone, so values
 # sized for the VPS (one CPU, 4.25 GiB) never change a development run, and it keeps its ports.
 #
-# It holds two kinds of settings; docs/OBSERVABILITY.md, Resource limits, says how they apply.
+# It holds three kinds of settings; docs/OBSERVABILITY.md, Resource limits, says how they apply.
 # scripts/observability-limits-check.sh admits only these keys, each only on the services that
-# carry it here.
+# carry it here, and the top-level secrets.
 # - Resource limits and oom_score_adj, on every service. docs/VPS_RESOURCE_BUDGET.md, Container
 #   limits, has the values' evidence and conditions; scripts/observability-limits-check.sh checks
 #   them.
@@ -20,6 +20,10 @@
 #   endpoint, is the only host port (docs/S4b_DESIGN_CONTRACT.md, section 5). The services still
 #   reach one another over the Docker networks. Compose merges ports across files, so only !reset
 #   removes them. scripts/observability-prod-check.sh pins the exact mappings of each render.
+# - Grafana's admin password, from the file secret ./secrets/grafana_admin_password, which Git
+#   ignores, in place of the base file's admin (docs/S4b_DESIGN_CONTRACT.md, section 6). CI writes
+#   a disposable one for each run. scripts/observability-prod-check.sh pins Grafana's environment,
+#   secret and entrypoint, and the top-level secret.
 services:
   prometheus:
     mem_limit: 512m
@@ -61,3 +65,25 @@ services:
     memswap_limit: 512m
     pids_limit: 256
     oom_score_adj: 500
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: !reset null
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+    secrets: [grafana_admin_password]
+    # The start guard (docs/S4b_DESIGN_CONTRACT.md, section 6.3). With an empty or unreadable file,
+    # or a directory in its place, the image's /run.sh would leave Grafana on the base file's admin,
+    # and a new database would store it; so Grafana does not start. Docker Desktop mounts a
+    # directory it creates when the file is missing, and a directory passes -r and -s, hence -f.
+    # $$ escapes Compose's interpolation.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        f=/run/secrets/grafana_admin_password
+        if [ ! -f "$$f" ] || [ ! -r "$$f" ] || [ ! -s "$$f" ]; then echo "FATAL: $$f is missing, not a regular file, unreadable or empty" >&2; exit 1; fi
+        if [ "$$(< "$$f")" = admin ]; then echo "FATAL: $$f holds the development password" >&2; exit 1; fi
+        exec /run.sh "$$@"
+      - run.sh
+
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
