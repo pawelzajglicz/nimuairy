@@ -49,7 +49,7 @@ repository files named next to them.
   - `observability/compose.prod.yaml`: `mem_limit`, `memswap_limit`, `pids_limit` and
     `oom_score_adj` for the six stack services;
   - `compose.prod.yaml`, from S4.4.3: `mem_limit`, `memswap_limit` and `pids_limit` for the four
-    app services. The VPS runs the app without them until the app rollout
+    app services. The VPS runs the app with them since the app rollout of 2026-11-12
     ([App limits](#app-limits)).
 - No Compose file sets `cpus`, `ulimits` or `logging`. Every service uses `restart: unless-stopped`.
 
@@ -179,6 +179,44 @@ After the upgrade, one `docker stats` sample [VPS]:
 - This is a single sample, not peak demand.
 - The backend's value is below its pre-upgrade range. The reason is not determined: the sample
   alone shows neither the backend's uptime nor how its JVM sized itself after the upgrade.
+
+### With the app's limits (S4.4.4)
+
+VPS, after the app rollout. A sampler (the contract's
+[Appendix A.3](S4.4_DESIGN_CONTRACT.md#a3-after-the-app-rollout-s444)) read the four app
+containers' cgroups every 10 s:
+- from 2026-11-12T21:31:26Z to 2026-11-14T08:48:16Z, about 35 h 17 min;
+- 12 668 samples per container, 50 672 in all, at most 11 s apart;
+- the backend without the Java agent, and the observability stack not on the VPS.
+
+The highest samples:
+
+| Container | Limits: memory, PIDs | Working set | `memory.current` | `anon` | `file` | `pids.current` |
+|---|---|---:|---:|---:|---:|---:|
+| backend | 1792 MiB, 1024 | 351.35 MiB | 382.05 MiB | 317.62 MiB | 83.51 MiB | 46 |
+| postgres | 512 MiB, 256 | 62.48 MiB | 75.20 MiB | 22.81 MiB | 48.95 MiB | 27 |
+| frontend | 128 MiB, 128 | 3.72 MiB | 4.42 MiB | 2.18 MiB | 1.72 MiB | 2 |
+| cloudflared | 256 MiB, 128 | 17.07 MiB | 17.27 MiB | 16.26 MiB | 1.24 MiB | 7 |
+
+- **Each value is a lower bound of the peak, not the peak.** A peak between two samples is missed,
+  and the kernel has no `memory.peak` or `pids.peak`.
+- The working set is `memory.current − inactive_file`.
+- Each column is its own maximum, not necessarily from the same sample. For example, the backend's
+  `anon` and `file` maxima add up to more than its `memory.current` maximum.
+- Both 03:30 backups, on 2026-11-13 and 2026-11-14, ran inside the window. `pg_dump` runs in the
+  postgres container, but sampling every 10 s does not guarantee that any sample fell within its
+  short run.
+- Before the rollout (A.2) [VPS]: `MemAvailable` 3384 MiB, 40 GiB of disk available, and every
+  counter in `memory.events` and `memory.events.local` 0, at the visible root and in the four
+  containers (the contract's §13, Rollout record).
+- After the window, in all four:
+  - every counter in `memory.events` and `memory.events.local` was 0, and `pids.events` `max` 0;
+  - `RestartCount` was 0 and `OOMKilled` false.
+- Every maximum is far below its limit: at most 21.3 % of the memory limit (the backend's
+  `memory.current`) and 10.5 % of the PID limit (postgres). This holds for the load of the window
+  only, its traffic and two backups. It does not show that the limits hold under any load.
+- The cloudflared container before the rollout ran `2026.10.0`; this one runs `2026.10.1`, the
+  configured image (the contract's §13, Rollout record).
 
 ## Local measurements
 
@@ -411,19 +449,19 @@ The design, its rules and the backend's measurement method are in
 ### App limits
 
 `compose.prod.yaml` holds the four app services' limits from S4.4.3.
-- **They are not on the VPS yet.** The app rollout applies them by hand
-  ([S4.4_DESIGN_CONTRACT.md §13](S4.4_DESIGN_CONTRACT.md#13-app-rollout-and-rollback-h11-option-b1)),
-  and the checks after it (Appendix A.3 there, S4.4.4) verify them. Until then the app runs there
-  without limits.
+- **They are on the VPS since the app rollout of 2026-11-12**, applied by hand
+  ([S4.4_DESIGN_CONTRACT.md §13](S4.4_DESIGN_CONTRACT.md#13-app-rollout-and-rollback-h11-option-b1)).
+  The checks after it (Appendix A.3 there, S4.4.4) verified them, and a sampler observed them for
+  about 35 h ([With the app's limits](#with-the-apps-limits-s444)).
 - `scripts/observability-limits-check.sh` pins their memory values, so changing one means changing
   the script in the same commit ([OBSERVABILITY.md](OBSERVABILITY.md#resource-limits)).
 
 | Service | Memory | PIDs | Basis |
 |---|---|---|---|
-| backend | 1792 MiB, measurement-backed [LOCAL] | 1024, a conservative operational cap | Memory: two 4-h local runs ([Backend measurement](#backend-measurement)), not yet confirmed on the VPS. PIDs: derived from no measured peak and no formula. The evidence is a `pids.peak` of 56 in the local confirming run, with the agent and the health check's probe JVM [LOCAL], and 31 tasks in one `docker stats` reading on the VPS, without the agent, not a peak [VPS] |
-| postgres | 512 MiB, conditional [ESTIMATE] | 256, a conservative candidate | PIDs: from the configuration (below), not a measured peak |
-| frontend | 128 MiB, conditional | 128, intentionally conservative | One nginx worker on one CPU (below). One `docker stats` reading showed 2 tasks, not a peak [VPS] |
-| cloudflared | 256 MiB, conditional | 128, conditional | Initial production candidates. `docker stats` MEM USAGE was 23–38 MiB before the upgrade and 18.2 MiB in one sample after it [VPS]. One `docker stats` reading showed 7 tasks, not a peak [VPS]. One reading shows neither its peak memory nor its peak task count. 128 is the floor for Go services, whose runtime aborts when it cannot create a thread |
+| backend | 1792 MiB, measurement-backed [LOCAL] | 1024, a conservative operational cap | Memory: two 4-h local runs with the agent ([Backend measurement](#backend-measurement)). On the VPS, without the agent, the highest working-set sample in 35 h was 351.35 MiB ([With the app's limits](#with-the-apps-limits-s444)). PIDs: derived from no measured peak and no formula. The evidence is a `pids.peak` of 56 in the local confirming run, with the agent and the health check's probe JVM [LOCAL], and 31 tasks in one `docker stats` reading on the VPS, without the agent, not a peak [VPS]. With the limits, the highest `pids.current` in 35 h of sampling every 10 s on the VPS was 46, a lower bound of the peak [VPS] ([With the app's limits](#with-the-apps-limits-s444)) |
+| postgres | 512 MiB, conditional [ESTIMATE] | 256, a conservative candidate | PIDs: from the configuration (below), not a measured peak. One `docker stats` reading showed 19 tasks, not a peak [VPS]. With the limits, the highest `pids.current` in 35 h of sampling every 10 s on the VPS was 27, a lower bound of the peak [VPS] |
+| frontend | 128 MiB, conditional | 128, intentionally conservative | One nginx worker on one CPU (below). One `docker stats` reading showed 2 tasks, not a peak [VPS]. With the limits, the highest `pids.current` in 35 h of sampling every 10 s on the VPS was 2, a lower bound of the peak [VPS] |
+| cloudflared | 256 MiB, conditional | 128, conditional | Initial production candidates. `docker stats` MEM USAGE was 23–38 MiB before the upgrade and 18.2 MiB in one sample after it [VPS]. One `docker stats` reading showed 7 tasks, not a peak [VPS]. One reading shows neither its peak memory nor its peak task count. With the limits and image `2026.10.1`, the highest `pids.current` in 35 h of sampling every 10 s on the VPS was 7, a lower bound of the peak [VPS]. 128 is the floor for Go services, whose runtime aborts when it cannot create a thread |
 
 **PostgreSQL processes.** Settings of the VPS instance, read with its own database user [VPS]:
 `max_connections` 100, `max_wal_senders` 10, `max_worker_processes` 8, `max_parallel_workers` 8,
@@ -467,7 +505,7 @@ The design, its rules and the backend's measurement method are in
   - So a LIMIT of 4.25 GiB is no proof of a finite `memory.max`.
 - **No peak files.** The VPS's kernel (5.15) provides neither `memory.peak` nor `pids.peak` [VPS],
   so no check can read a peak there.
-- **The planned method:**
+- **The method**, used after the rollout ([With the app's limits](#with-the-apps-limits-s444)):
   - the cumulative counters need no sampling: `max`, `oom` and `oom_kill` in `memory.events` and
     `memory.events.local`, and `max` in `pids.events`, which counts the process or thread creations
     refused at `pids.max`;
@@ -524,8 +562,10 @@ The design, its rules and the backend's measurement method are in
   - **production conditions**: hours, not days, on development data, and one emulated CPU on a
     16-CPU host;
   - page cache filled by `read()`, and files mapped only by the probe JVM.
-- The limit therefore rests on the model's estimate, not on an observed long uptime. The checks on
-  the VPS after the app rollout (S4.4.4) confirm it.
+- The limit therefore rests on the model's estimate, not on an observed long uptime. The VPS
+  observation after the app rollout (S4.4.4) does not change that. It ran without the agent, and
+  in no sample did the backend's `anon` reach the 448 MiB heap ceiling
+  ([With the app's limits](#with-the-apps-limits-s444)).
 
 **JVM sizing.**
 - **The measured JVM** was Java 25.0.4.1. With one effective CPU it chose Serial GC and a
@@ -535,6 +575,12 @@ The design, its rules and the backend's measurement method are in
   - Both runs measured Serial only, so their C estimate may not carry over to G1.
   - S4.4 adds no JVM flag to fix the collector. The JVM check of the contract's Appendix A.3 shows
     which one a JVM chooses.
+- **Under the 1792 MiB limit on the VPS** (S4.4.4), a short-lived diagnostic JVM, Temurin
+  25.0.4.1, started in the backend container, reported [VPS]:
+  - `MaxHeapSize` 469 762 048 B (448 MiB) and `MaxRAMPercentage` 25;
+  - Serial GC (`UseSerialGC` true, `UseG1GC` false), and `UseContainerSupport` true.
+
+  These flags come from that diagnostic process, not from the running Spring Boot JVM.
 - **A separate diagnostic JVM**, started on the VPS without a finite cgroup memory limit, reported
   [VPS]:
   - `Memory Limit: Unlimited`;
@@ -554,7 +600,9 @@ The design, its rules and the backend's measurement method are in
   not yet shown to fit. The terms marked UNKNOWN decide that.
 - S4.4 assigns per-container resource limits from this budget ([Container limits](#container-limits)).
   The stack's are in `observability/compose.prod.yaml`, the app's in `compose.prod.yaml` (S4.4.3),
-  with the backend's accepted 1792 MiB. Neither is on the VPS yet.
+  with the backend's accepted 1792 MiB. The app's have been on the VPS since 2026-11-12 and ran
+  about 35 h without a memory or PID event ([With the app's limits](#with-the-apps-limits-s444)).
+  The stack's are not on the VPS yet.
 - Measurements after S6 and S7 validate the budget under real VPS ingestion and retention.
 - The upgrade adds memory and disk space, not CPU. The CPU risk below remains, and so do the disk
   risks: nothing bounds the growth of logs and telemetry.
@@ -566,8 +614,8 @@ The design, its rules and the backend's measurement method are in
 | CPU | One CPU runs everything. Not tested: host contention (steal time is not observable inside the LXC), simultaneous startup with WAL replay, and a deploy (a 90 s start period with a probe JVM every 3 s, inside a 180 s wait) | No throttling in the short sample before the upgrade, and `nr_throttled` 0 after it [VPS]; the rest [UNKNOWN] |
 | Memory: Tempo | Grew through the whole 38-minute local window. In a 4-h block-cycle check at 1024 MiB its Go heap levelled off ([Container limits](#container-limits)) | [LOCAL]; the steady state at full retention [UNKNOWN] |
 | Memory: Java agent | Its overhead on the VPS | [UNKNOWN] |
-| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects. On the VPS that is not the visible 4.25 GiB, as estimated here before: a diagnostic JVM without a finite limit chose a 30 GiB maximum heap ([Backend measurement, JVM sizing](#backend-measurement)). The accepted 1792 MiB limit (S4.4.3) becomes the JVM's sizing base: a 448 MiB heap and Serial GC on one CPU. With two or more CPUs the JVM may choose G1, which the runs did not measure | Without a limit [VPS, one diagnostic JVM]; at 1792 MiB [LOCAL]; on the VPS [UNKNOWN] until the app rollout (S4.4.4) |
-| Memory: backend growth | The backend's limit rests on a model. No run filled the heap, and in the 4-h confirming run the main JVM's memory outside the heap still rose by about 1.6 MiB/h at the end ([Backend measurement](#backend-measurement)) | [LOCAL]; a long uptime [UNKNOWN] until the VPS checks after S4.4.4 |
+| Memory: JVM sizing | Without `-Xmx` or a container limit, the default maximum heap is 25 % of the memory the JVM detects. On the VPS that is not the visible 4.25 GiB, as estimated here before: a diagnostic JVM without a finite limit chose a 30 GiB maximum heap ([Backend measurement, JVM sizing](#backend-measurement)). The accepted 1792 MiB limit (S4.4.3) becomes the JVM's sizing base: a 448 MiB heap and Serial GC on one CPU. With two or more CPUs the JVM may choose G1, which the runs did not measure | Without a limit [VPS, one diagnostic JVM]; at 1792 MiB [LOCAL], and on the VPS after the app rollout: 448 MiB and Serial GC [VPS, one diagnostic JVM] |
+| Memory: backend growth | The backend's limit rests on a model. No run filled the heap, and in the 4-h confirming run the main JVM's memory outside the heap still rose by about 1.6 MiB/h at the end ([Backend measurement](#backend-measurement)) | [LOCAL]. On the VPS without the agent: 35 h with no memory event and a highest working-set sample of 351.35 MiB, with no sample showing a full heap [VPS]. A longer uptime and S7's agent [UNKNOWN] |
 | Memory: OOM of the whole LXC | The ten limits add up to 5696 MiB, more than T = 4352 MiB. An OOM of the whole LXC can come while every container is below its own limit; `oom_score_adj` only ranks the victims | By design; whether pressure can arrive below 4352 MiB [UNKNOWN] |
 | Disk: container logs | `json-file` with no rotation, so logs grow without bound | Growth [UNKNOWN] |
 | Disk: telemetry | Retention is by time only (Prometheus 15 days, Loki and Tempo 168 h); nothing caps size | Growth [UNKNOWN] until S7 |
@@ -632,7 +680,7 @@ They show the CPU count, the memory limit, the heap and the GC that a JVM starti
 | CPU count and quota after the upgrade | Read after the upgrade [VPS]: one CPU, no CFS quota at the visible root | Done |
 | The `memory.stat` fields the VPS kernel provides (the filtered output had no `kernel`) | `cat /sys/fs/cgroup/memory.stat` | Before kernel memory is computed for H, P and O |
 | Swap on the host side, behind the virtual `/proc/swaps` entry | Not visible from the guest | Open; this budget does not count on swap |
-| The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before the app's limits: done, a diagnostic JVM without a limit ([Backend measurement, JVM sizing](#backend-measurement)). Open: after their rollout (S4.4.4), and again after S7 |
+| The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before the app's limits: done, a diagnostic JVM without a limit. After their rollout (S4.4.4): done, a diagnostic JVM in the limited container ([Backend measurement, JVM sizing](#backend-measurement)). Open: after S7 |
 | H | The LXC's and every container's `anon + shmem + kernel + sock`, read at the same moment | Optional follow-up; not required before S4.4 |
 | The backup and apt peaks | The same values sampled over 24 h, across the 03:30 backup and the apt windows | Optional follow-up; until then [UNKNOWN] |
 | P: `anon + shmem + kernel + sock` and the agent's overhead | Per-container cgroup values before and after S7 | S7 |
