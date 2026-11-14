@@ -27,6 +27,12 @@ Revisions:
   - S4b.2's acceptance tells N5, N9 (a) and N9 (b) apart (§9);
   - §9's order states which steps share which files;
   - smaller wording fixes in §2.3, §5.3 and P-R4.
+- **5** (2026-11-14), B3 amended by the operator after S4b.2's first N3 run:
+  - on Docker Desktop, a missing secret file did not stop `up`. A directory appeared at its path, the
+    guard let it pass, and Grafana accepted `admin:admin` (§6.1);
+  - the guard now also requires a regular file (`-f`), and N3 no longer expects the engine to refuse
+    a missing path (§6.3, §8.7, U1);
+  - P-S5 also pins the development credentials `admin`/`admin` (§8.4).
 
 ## 1. Purpose and scope
 
@@ -410,8 +416,14 @@ for `ports` (§8.6), and the negative experiments N1, N2, N8 and N9 (a) (§8.4, 
   `pkg/compose/create.go`, lines 1257–1297].
   - The mount has `CreateHostPath: false`, so Compose uses the Mount API.
   - When the file does not exist, Compose only warns: `secret file … does not exist`.
-  - The engine should then refuse to create a container whose bind source does not exist. That is
-    [UNVERIFIED]: neither read nor run (U1).
+  - **Docker Desktop does not refuse the container** [LOCAL, S4b.2 N3, Docker 29.9.2, Compose
+    v5.6.1]:
+    - `up --wait` exited 0;
+    - the engine created a directory at the file's path on the host and mounted it;
+    - the original guard let the directory pass, `run.sh` read no password, and Grafana became
+      healthy and accepted `admin:admin` on a new volume.
+  - Whether a Linux engine refuses a missing bind source is [UNVERIFIED] (U1). The guard no longer
+    depends on it (§6.3).
 - **`docker compose config -q` succeeds while the secret file is missing** [LOCAL, Compose v5.6.1].
   A render check cannot enforce the secret.
 - **A Compose secret with an `environment:` source** [S, Compose v5.6.0,
@@ -426,7 +438,7 @@ for `ports` (§8.6), and the negative experiments N1, N2, N8 and N9 (a) (§8.4, 
 
 | | **G-A**: file secret + `__FILE` (accepted, B2) | **G-B**: Compose secret from an environment variable + `__FILE` | **G-C**: `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?…}` |
 |---|---|---|---|
-| Secret missing | `up` fails at Grafana's create, after a warning [the engine part is UNVERIFIED] | `up` fails: the variable is not set [S] | `config` and `up` fail [CONFIG: `:?`, as in the app's `compose.prod.yaml`] |
+| Secret missing | After a warning, Docker Desktop mounts a directory it creates at the path [LOCAL]; a Linux engine may refuse the create [UNVERIFIED]. The guard of §6.3 stops Grafana either way | `up` fails: the variable is not set [S] | `config` and `up` fail [CONFIG: `:?`, as in the app's `compose.prod.yaml`] |
 | Secret empty | Grafana starts with `admin` [S], unless the guard of §6.3 stops it | Grafana starts with `admin` [S, inference] | `config` fails: `:?` rejects an empty value |
 | Value in `Config.Env`, so in `docker inspect` and readable by Alloy through the proxy | No; only the path | No | **Yes** |
 | Value in `docker compose config` output | No; only the path | No | **Yes** |
@@ -441,19 +453,22 @@ for `ports` (§8.6), and the negative experiments N1, N2, N8 and N9 (a) (§8.4, 
 
 ### 6.3 The empty-file trap and a start guard
 
-**The trap.** With G-A alone, a missing file fails clearly. But Grafana starts with `admin` when the
-file is empty, unreadable, or holds `admin`. On a new volume, that password then goes into
-`grafana.db`.
+**The trap.** With G-A alone, Grafana starts with `admin` when the file is empty, unreadable, holds
+`admin`, or is a directory. Docker Desktop turns a missing file into a directory (§6.1). On a new
+volume, that password then goes into `grafana.db`.
 
-**The start guard (accepted, B3).** Detecting the problem after Grafana has started is not enough.
-The production overlay wraps the image's entrypoint, and Grafana refuses to start when the file:
-- does not exist;
+**The start guard (accepted, B3; amended in revision 5).** Detecting the problem after Grafana has
+started is not enough. The production overlay wraps the image's entrypoint, and Grafana refuses to
+start when the path:
+- does not exist, or is not a regular file, for example a directory;
 - cannot be read by Grafana's user;
 - is empty;
 - or holds `admin`.
 
-A file missing on the host should already stop `up` before the container is created (§6.1, U1).
-The guard covers the same case inside the container too.
+**The guard does not rely on the engine.**
+- Whether a missing host file stops `up` before the container is created depends on the engine
+  (§6.1, U1). If it does, Grafana does not start either.
+- `-f` matters: a directory passes `-r` and `-s`.
 
 ```yaml
 grafana:
@@ -462,7 +477,7 @@ grafana:
     - -c
     - |
       f=/run/secrets/grafana_admin_password
-      if [ ! -r "$$f" ] || [ ! -s "$$f" ]; then echo "FATAL: $$f is missing, unreadable or empty" >&2; exit 1; fi
+      if [ ! -f "$$f" ] || [ ! -r "$$f" ] || [ ! -s "$$f" ]; then echo "FATAL: $$f is missing, not a regular file, unreadable or empty" >&2; exit 1; fi
       if [ "$$(< "$$f")" = admin ]; then echo "FATAL: $$f holds the development password" >&2; exit 1; fi
       exec /run.sh "$$@"
     - run.sh
@@ -475,7 +490,7 @@ grafana:
   - the candidate renders [LOCAL, Compose v5.6.1].
 - Still [UNVERIFIED] (U2, U3; tested by N3 and N4 on real containers in S4b.2):
   - what the container actually receives;
-  - that each of the four cases stops Grafana before `run.sh` runs;
+  - that each of these cases, the directory included, stops Grafana before `run.sh` runs;
   - how `up --wait` reports a container that exits and is restarted under `unless-stopped`.
 - **A render is no evidence that the guard works.** `docker compose config` only shows that Compose
   accepts the text. Only N3 and N4 show the behaviour.
@@ -846,7 +861,8 @@ Four modes:
     `<project directory>/secrets/grafana_admin_password`;
   - its `entrypoint` is the start guard of §6.3 (B3).
 - **P-S5**: the base render has no top-level secret, its Grafana has no `__FILE` variable, and it
-  has no guard. So development needs no secret file.
+  has no guard. So development needs no secret file. Its Grafana keeps the development credentials:
+  `GF_SECURITY_ADMIN_USER` and `GF_SECURITY_ADMIN_PASSWORD` are `admin` (revision 5).
 - **P-S6**: no service in the three renders uses `network_mode: host`, which would bypass port
   publishing.
 
@@ -950,7 +966,7 @@ goal, commands, result and conclusion, and how the setup was restored.
 |---|---|---|
 | N1 | An extra published port in a scratch overlay, such as Prometheus on `127.0.0.1:9090` | `prod-check static` fails |
 | N2 | Grafana's binding widened to `3000:3000`, on all interfaces | `prod-check static` fails |
-| N3 | The secret file is missing | `up` fails before Grafana runs. The message is recorded, and nothing was created at the file's path (U1) |
+| N3 | The secret file is missing; separately, a directory exists at its path | Grafana does not run, whatever the engine does. Either Compose or the engine refuses the missing path before the container is created, or the container is created and the guard stops Grafana before `run.sh` runs. Grafana never becomes healthy, never accepts `admin:admin`, and `run.sh` creates no database. The actual behaviour of `up --wait`, the container and the path is recorded (U1) |
 | N4 | The secret file is empty; or unreadable for 472; or holds `admin` | Grafana exits with the guard's message before `run.sh` runs, and `up --wait` fails. The way `up --wait` reports each case under `unless-stopped` is recorded (U2, U3) |
 | N5 | `GF_SECURITY_ADMIN_PASSWORD` left in the production render | `prod-check static` fails. At runtime, `run.sh` would exit [S] |
 | N6 | Tempo with `user: "0"` | The smoke test fails (T-1, T-2) |
@@ -1061,7 +1077,7 @@ Rules for every step:
       overlay change still fails it;
     - `prod-check static`: P-S4 holds. The production render has no `GF_SECURITY_ADMIN_PASSWORD`,
       and has the `__FILE` variable, exactly the one secret and the guard;
-    - P-S5 holds: the base render has neither a secret nor the guard.
+    - P-S5 holds: the base render has neither a secret nor the guard, and keeps `admin`/`admin`.
   - **Phase A (CI)**: the smoke test passes with `GRAFANA_AUTH` set to the disposable password. So
     Grafana accepts that password, and its datasources answer `OK`.
   - **Once, locally, in an isolated project (§8.8)**, reported in the PR:
@@ -1072,8 +1088,9 @@ Rules for every step:
 
     These are the properties P-R3 and P-R4 check. Their permanent CI form comes with S4b.4, in
     phase B.
-  - **N3 and N4, on real containers**: Grafana does not start when the file is missing,
-    unreadable, empty or `admin`. The way `up --wait` reports each case is recorded (U1 to U3).
+  - **N3 and N4, on real containers**: Grafana does not start when the file is missing, not a
+    regular file (a directory at its path included), unreadable, empty or `admin`. The way
+    `up --wait` reports each case is recorded (U1 to U3).
   - **N5**: with `GF_SECURITY_ADMIN_PASSWORD` left in the production render, `prod-check static`
     fails.
   - **N9 (a)**: with an S4b key where the allowlist does not admit it, such as `environment` on
@@ -1174,9 +1191,10 @@ Rules for every step:
   - so anonymous access and sign-up stay off;
   - its `secrets` and the top-level `secrets` hold exactly the one secret, and its `entrypoint` is
     the start guard;
-  - the base render has neither a secret nor the guard.
-- [ ] N3 and N4 on real containers: Grafana does not start when its password file is missing,
-      unreadable, empty or `admin`. A render alone does not count.
+  - the base render has neither a secret nor the guard, and keeps `admin`/`admin`.
+- [ ] N3 and N4 on real containers: Grafana does not start when its password file is missing, not
+      a regular file (a directory at its path included), unreadable, empty or `admin`. A render
+      alone does not count.
 - [ ] T-1 to T-5: Tempo is configured as, and runs as, `10001:10001`. Its storage belongs entirely
       to `10001:10001`, was written during the run, and shows no permission error.
 - [ ] A one-time run sees a block flushed and compacted as 10001.
@@ -1232,7 +1250,7 @@ Rules for every step:
 
 | # | Assumption | Resolved by |
 |---|---|---|
-| U1 | The engine refuses a bind source that does not exist for a file secret (Mount API) | N3, S4b.2 |
+| U1 | The engine refuses a bind source that does not exist for a file secret (Mount API) | N3, S4b.2: **refuted for Docker Desktop**, which creates a directory at the path (§6.1). Unverified for a Linux engine; the guard does not depend on it (§6.3) |
 | U2 | The guard's text reaches the container as written (the `$$` escapes), and `up --wait` fails clearly when Grafana exits under `unless-stopped` | N4, S4b.2 |
 | U3 | An unreadable secret file leaves the password empty (bash's `export` semantics) | N4 |
 | U4 | A new volume is seeded as `10001:10001` for Tempo | S4b.3's CI run |
@@ -1272,8 +1290,8 @@ None of the items below has been done. S4b runs nothing on the VPS. Each operati
 there needs the operator's separate consent within S6.
 
 S6 needs these, besides its own design:
-- **the secret file**, created and checked before the first `up` (§6.5): non-empty, readable by 472,
-  in a 0700 directory. The guard also stops a wrong file (§6.3);
+- **the secret file**, created and checked before the first `up` (§6.5): a regular file, non-empty,
+  readable by 472, in a 0700 directory. The guard also stops a wrong file (§6.3);
 - **a list of the existing `nimuairy-observability_*` volumes**, and of any listener on `:3000`:
   - an existing `grafana-data` volume would ignore the secret;
   - an existing `tempo-data` volume written by root would need a migration that S6 designs (§7.3);
@@ -1307,7 +1325,7 @@ collects logs on the VPS.
 |---|---|---|---|
 | B1 | How CI runs the tests once production publishes no test ports | **A2**, in the existing `observability` job, with no second job. Phase A: the base file + the production overlay + `compose.test.yaml`, for the tests that need host ports, and the seed of a known trace. Phase B: a recreate on exactly `compose.yaml` + `compose.prod.yaml`, then `prod-check runtime`, `limits-check runtime` again on the recreated containers, and `prod-check verify` | §8.3 |
 | B2 | The mechanism for the Grafana secret | **G-A**: a file outside the repository, read through `GF_SECURITY_ADMIN_PASSWORD__FILE`. The production overlay removes the inherited `admin` with `!reset null`. `.gitignore` excludes `observability/secrets/`, and CI generates a disposable password per run. Its limitations are in §6.7 | §6.2, §6.4, §6.5, §6.7 |
-| B3 | A password file that is missing, unreadable, empty or `admin` | **The start guard**: Grafana does not start. Detection after the start is not enough. Its behaviour in a real container, and how `up --wait` reports it, are still to be verified (U1 to U3) | §6.3 |
+| B3 | A password file that is missing, not a regular file, unreadable, empty or `admin` | **The start guard**: Grafana does not start. Detection after the start is not enough. Amended in revision 5: the guard also requires a regular file, because Docker Desktop mounts a directory in place of a missing file. Its behaviour in a real container, and how `up --wait` reports it, are still to be verified (U1 to U3) | §6.3 |
 | B4 | Where Tempo's user is set | **The base file**, `observability/compose.yaml`: development, CI and production run the same identity | §7.2 |
 | B5 | How Tempo's user is set | **Explicitly**: `user: "10001:10001"`, so CI detects a change of the image's UID | §7.2 |
 | B6 | Migrating an existing development volume | **A one-time, manual `chown`, without a backup**. It covers development volumes only. It does not change the decision to take no regular backups of telemetry data in production | §7.4 |
