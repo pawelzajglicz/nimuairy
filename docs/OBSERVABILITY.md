@@ -124,7 +124,7 @@ latency graph opens the trace of a request it counts
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
-| `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
+| `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack, and the app's limits in its production render; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -587,6 +587,12 @@ It sets nothing else: no CPU limit or weight, no reservation and no `deploy.reso
 ([deferred](DEFERRED_WORK.md#s44--cpu-weights)). The values, their evidence and the conditions they
 depend on are in [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limits).
 
+The app's four services get their limits from its own production overlay, `compose.prod.yaml`
+(S4.4.3): `mem_limit`, an equal `memswap_limit` and `pids_limit`. They get no `oom_score_adj`, so
+they keep the default 0. The deploy already passes that file, so the limits need no new command.
+They reach the VPS only with the app rollout
+([App limits](VPS_RESOURCE_BUDGET.md#app-limits)).
+
 **Where the overlay applies.**
 
 - **Local and development runs use the base file, `observability/compose.yaml`, without the
@@ -639,10 +645,20 @@ depend on are in [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limit
 **Checks.** `scripts/observability-limits-check.sh` is a CI and local check with two modes. It
 needs `jq`.
 
-- **`static`** renders the stack with and without the overlay, and the app's development files.
+- **`static`** renders the stack with and without the overlay, the app with `compose.prod.yaml`,
+  and the app's development files.
   - Every service of the stack gets a memory limit, an equal `memswap_limit`, a PID limit and
     `oom_score_adj` 500 from the overlay.
   - Nothing else changes: no other key, no service added or removed.
+  - **The stack's values come from the render**, so the script duplicates none of them.
+  - **The app's memory limits are pinned in the script** (`APP_MEM_LIMITS_MIB`), to catch drift.
+    - Each of the four services must have its pinned value, an equal `memswap_limit`, a positive
+      PID limit and no `oom_score_adj`.
+    - The services must be exactly the pinned ones, so a new service without a pinned limit fails.
+    - Its PID limits are not pinned. Changing a memory limit means changing `compose.prod.yaml`
+      and the script in the same commit.
+    - The app's overlay also sets images and secrets, so only its resource keys are checked. Dummy
+      values stand in for its required variables.
   - No render has a CPU setting, a reservation or `deploy.resources`.
   - The base and development renders have no limits.
 - **`runtime`** checks the running stack against its render.
@@ -658,6 +674,7 @@ needs `jq`.
     service except the proxy may have restarted.
   - `memory.peak` and `pids.peak` are printed as info.
   - A stack started without the overlay fails it.
+  - It covers the stack only. CI does not start the app.
 
   ```bash
   bash scripts/observability-limits-check.sh runtime
@@ -866,11 +883,11 @@ next run of either script stops at its first check, and `docker start docker-soc
 it. The script changes nothing else: it starts and removes only its own probe containers.
 
 CI's `observability` job starts the stack with its production overlay and runs the smoke test, then
-the outage check, on every PR that touches the stack, the overlay files or one of the three scripts,
-and on pushes to master, nightly and manual runs. The limits check runs before the start and after
-the two tests ([Resource limits](#resource-limits)). Afterwards the job checks that no probe
-container is left and that the proxy is running and `healthy`. Set `GRAFANA_AUTH` (default
-`admin:admin`) if you changed Grafana's password.
+the outage check, on every PR that touches the stack, the overlay files, the app's
+`compose.prod.yaml` or one of the three scripts, and on pushes to master, nightly and manual runs.
+The limits check runs before the start and after the two tests ([Resource limits](#resource-limits)).
+Afterwards the job checks that no probe container is left and that the proxy is running and
+`healthy`. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
 
 The checks with the backend below stay manual. The commands use Git Bash. Set `MSYS_NO_PATHCONV=1` for commands whose arguments contain
 paths such as `/api/v1/...`: Git Bash otherwise rewrites them (`C:/Program Files/Git/api/...`)
