@@ -222,3 +222,56 @@ into the S3.3 check would make that check harder to read and to trust.
 - do not add a CPU quota (`cpus`) to a service on the one-CPU VPS without measuring its start and
   WAL replay under that quota;
 - keep CPU settings in the production overlays; development and CI stay without them.
+
+## S4b — Capability drops and no-new-privileges for Tempo, Prometheus, Loki and Grafana
+
+**Status:** Deferred
+
+**Origin:** Observability production rollout, S4b (decision B7, 2026-11-14; see
+[S4b_DESIGN_CONTRACT.md](S4b_DESIGN_CONTRACT.md#76-further-hardening-b7-deferred)).
+
+**Current state:**
+
+- Alloy and the socket proxy run with `cap_drop: [ALL]` and `no-new-privileges`
+  (`observability/compose.yaml`).
+- Prometheus, Loki and Grafana have neither setting.
+  - They run as their images' non-root users: `nobody`, `10001` and `472`.
+  - They keep Docker's default capability set.
+- Tempo has neither setting either.
+  - It runs as root (`user: "0"`) until S4b.3 changes that to `10001:10001`.
+- All four listen on unprivileged ports. None is known to need a capability.
+- Two things have not been checked:
+  - whether their images contain setuid or file-capability binaries;
+  - whether each service runs with every capability dropped.
+
+**Reason for deferral:**
+
+- S4b's scope from D1 does not name these settings: the port policy, the Grafana secret, a non-root
+  Tempo and the production checks.
+- Each service would need its own runtime checks, as S4.2 added for Alloy. That would widen S4b.
+- For a process that does not run as root, the default capabilities stay only in the bounding set:
+  - a setuid or file-capability binary could regain them;
+  - these settings would rule that out.
+
+**Reconsider when:**
+
+- the stack's security is reviewed again, for example before more people or services get access to
+  the VPS;
+- an image update adds setuid or file-capability binaries;
+- a service needs a capability.
+
+**Potential scope when resumed:**
+
+- `cap_drop: [ALL]` and `security_opt: ["no-new-privileges:true"]` per service, like Alloy's.
+- For each service, check that it starts and works with them. That includes Grafana's child
+  processes (plugins, the health check's `wget`).
+- A check of the running process, like the smoke test's for Alloy: `CapEff`, `CapBnd` and
+  `NoNewPrivs` in `/proc/1/status`. It reads them through a `--pid container:` probe for the images
+  without a shell.
+- A list of each image's setuid and file-capability binaries.
+
+**Constraints:**
+
+- do not assume that every service runs with these settings; verify each one before enabling it;
+- do not change Alloy's or the proxy's existing settings;
+- change no port, network, resource limit or proxy allowlist along with them.
