@@ -118,13 +118,15 @@ latency graph opens the trace of a request it counts
 | File | Role |
 |---|---|
 | `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)) |
-| `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, and nothing else ([Resource limits](#resource-limits)) |
+| `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, and the removal of every host port except Grafana's `127.0.0.1:3000` ([Resource limits](#resource-limits)) |
+| `observability/compose.test.yaml` | The test overlay, for CI's `observability` job and local test runs only, never on the VPS: on top of the production overlay, it publishes again the five loopback ports the test scripts use ([Resource limits](#resource-limits), Where the overlay applies) |
 | `observability/{prometheus,tempo,loki,alloy,grafana}/` | Configuration of each service |
 | `compose.observability.yaml` | Overlay for the app: attaches the agent, joins the `nimuairy-observability` network, and labels the backend and frontend for log collection |
 | `compose.observability.dev.yaml` | Development variant: `deployment.environment.name=development`, metrics port on `127.0.0.1:9464` |
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
 | `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack, and the app's limits in its production render; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
+| `scripts/observability-prod-check.sh` | Checks the production port policy in the Compose renders: the exact host port mappings of the development, production and test renders, and that none uses the host network; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -583,9 +585,21 @@ services:
 - a PID limit (`pids_limit`);
 - `oom_score_adj: 500`.
 
-It sets nothing else: no CPU limit or weight, no reservation and no `deploy.resources`
+It sets no CPU limit or weight, no reservation and no `deploy.resources`
 ([deferred](DEFERRED_WORK.md#s44--cpu-weights)). The values, their evidence and the conditions they
 depend on are in [VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#container-limits).
+
+**The overlay also resets host ports.** The limits stay as they are. Besides them, the overlay
+removes the host ports of Prometheus, Loki, Tempo and Alloy with `ports: !reset []`: Compose merges
+`ports` across files, so a shorter list would remove none.
+- In production, Grafana's `127.0.0.1:3000`, the SSH tunnel's endpoint, is the only host port. The
+  socket proxy publishes none in any render.
+- The services still reach one another, and the backend still reaches Tempo and Prometheus, over the
+  Docker networks ([Networks](#networks)).
+- The reset is no access boundary: a process on the VPS host can still reach a container's address
+  ([S4b contract, §4.4](S4b_DESIGN_CONTRACT.md#44-what-the-port-policy-protects-and-what-it-does-not)).
+- `scripts/observability-prod-check.sh static` pins the exact mappings of each render (see Checks
+  below).
 
 The app's four services get their limits from its own production overlay, `compose.prod.yaml`
 (S4.4.3): `mem_limit`, an equal `memswap_limit` and `pids_limit`. They get no `oom_score_adj`, so
@@ -601,19 +615,32 @@ They reach the VPS only with the app rollout
     under [Run](#run-1) and [Verify](#verify-1), is for such a run.
   - The app joins the local stack with its development overlays, as [Run](#run-1) shows.
   - A value sized for the VPS's one CPU and 4.25 GiB never changes such a run.
+  - Such a run keeps all seven loopback port mappings.
 - **The production stack on the VPS needs `observability/compose.prod.yaml`**, from S6. Every
-  command there that creates or recreates the stack's containers passes both files, for example:
+  command there that creates or recreates the stack's containers passes exactly two files, the base
+  file and the production overlay, for example:
 
   ```bash
   docker compose -f observability/compose.yaml -f observability/compose.prod.yaml up -d --wait
   ```
 
-  - Leaving the overlay out of such a command can start the containers without their limits:
-    Compose finds a changed configuration and recreates them from the base file alone.
-  - `stop`, `start` and `restart` keep a container, and its limits with it.
+  - Leaving the overlay out of such a command can start the containers without their limits, and
+    with the seven loopback ports published again: Compose finds a changed configuration and
+    recreates them from the base file alone.
+  - `stop`, `start` and `restart` keep a container, and its settings with it.
   - This includes the `up` of [Alloy volumes written by root](#alloy-volumes-written-by-root) when
     it runs on the VPS.
-- **CI's `observability` job** starts the stack with both files too (see Checks below).
+  - `observability/compose.test.yaml` reaches the VPS with the directory, but never joins a command
+    there.
+- **CI's `observability` job** starts the stack with three files: the base file, the production
+  overlay and the test overlay, `observability/compose.test.yaml`.
+  - The test scripts reach the services through loopback ports, which the production overlay
+    removes. The test overlay publishes again only the five they use: Prometheus `9090`, Loki
+    `3100`, Tempo `3200` and `4318`, Alloy `12345`. Grafana's `3000` comes from the base file, and
+    Tempo's `4317`, which no test uses, stays removed.
+  - So the tests run within the production limits, with host ports that production does not have.
+    The test overlay is part of no production configuration: it is for CI and local test runs only.
+  - See Checks below.
 
 **What the settings do** (cgroup v2):
 
@@ -649,7 +676,11 @@ needs `jq`.
   and the app's development files.
   - Every service of the stack gets a memory limit, an equal `memswap_limit`, a PID limit and
     `oom_score_adj` 500 from the overlay.
-  - Nothing else changes: no other key, no service added or removed.
+  - Nothing else changes: no service is added or removed, nothing changes outside `services`, and no
+    other key changes except those the script's strict allowlist (`OVERLAY_KEYS`) admits, each only
+    on the services it lists: today `ports` on `prometheus`, `loki`, `tempo` and `alloy`.
+    - So `ports` on `grafana` or `docker-socket-proxy` fails it.
+    - The allowlist admits a key, not a value: the production check below pins the mappings.
   - **The stack's values come from the render**, so the script duplicates none of them.
   - **The app's memory limits are pinned in the script** (`APP_MEM_LIMITS_MIB`), to catch drift.
     - Each of the four services must have its pinned value, an equal `memswap_limit`, a positive
@@ -686,11 +717,35 @@ needs `jq`.
   - `jq` is not guaranteed there.
   - On the VPS, the limits are checked with the read-only commands of the contract's
     [§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only); the stack's at S6.
-- **CI's `observability` job** runs `static` before it starts the stack with the overlay, and
-  `runtime` after the smoke test and the outage check.
+- **CI's `observability` job** runs `static` before it starts the stack, and `runtime` after the
+  smoke test and the outage check.
+  - `runtime` renders its default files, the base file and the production overlay. The containers
+    came from three files, but the test overlay changes only `ports`, which the limits check does
+    not read.
   - Its run is short and nearly idle, so `memory.peak` is a lower bound, never a production peak.
   - The checks verify configuration only. They do not show that a limit is large enough, or that
     anything is protected.
+
+**Port checks.** `scripts/observability-prod-check.sh static` is a CI and local check. It needs
+`jq` and only renders the files.
+
+- It compares the host port mappings of three renders with exact sets that it pins, never with a
+  count. A mapping is the service, host IP, host port, container port and protocol, so an extra or
+  missing mapping, one on another service, a host IP other than `127.0.0.1` (none means every
+  interface), a port range, an ephemeral host port or another protocol fails:
+  - **P-S1**, production, the base file and the production overlay: only
+    `grafana 127.0.0.1:3000->3000/tcp`;
+  - **P-S2**, development, the base file: the seven development mappings;
+  - **P-S3**, test runs, with the test overlay too: Grafana's and the test overlay's five.
+- **P-S6**: no service of the three renders uses `network_mode: host`, which would bypass port
+  publishing.
+- A mapping changed in a Compose file fails the check until its pinned set changes too, in the same
+  commit.
+- CI's `observability` job runs it after the limits check's `static`, before it starts the stack.
+
+```bash
+bash scripts/observability-prod-check.sh static
+```
 
 ### Verify
 
@@ -882,10 +937,14 @@ tested. A killed script (`SIGKILL`) cannot restore anything. The proxy then stay
 next run of either script stops at its first check, and `docker start docker-socket-proxy` repairs
 it. The script changes nothing else: it starts and removes only its own probe containers.
 
-CI's `observability` job starts the stack with its production overlay and runs the smoke test, then
-the outage check, on every PR that touches the stack, the overlay files, the app's
-`compose.prod.yaml` or one of the three scripts, and on pushes to master, nightly and manual runs.
-The limits check runs before the start and after the two tests ([Resource limits](#resource-limits)).
+CI's `observability` job starts the stack with its production overlay and the test overlay,
+`observability/compose.test.yaml`, and runs the smoke test, then the outage check, on every PR that
+touches the stack, the overlay files, the app's `compose.prod.yaml` or one of the four check
+scripts, and on pushes to master, nightly and manual runs. The production overlay removes the
+loopback ports the two tests use, and the test overlay publishes them again; it is for test runs
+only and never part of a VPS command. Before the start, the limits check and the production port
+check verify the renders; the limits check also runs after the two tests
+([Resource limits](#resource-limits)).
 Afterwards the job checks that no probe container is left and that the proxy is running and
 `healthy`. Set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
 

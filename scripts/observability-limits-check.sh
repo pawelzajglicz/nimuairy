@@ -5,7 +5,7 @@
 #   static   Renders the stack with and without its overlay, the app with its production overlay,
 #            and the app's development files, and checks the renders:
 #            - every service of the stack gets mem_limit = memswap_limit, a pids_limit and
-#              oom_score_adj 500, and nothing else changes;
+#              oom_score_adj 500, and nothing else changes except the keys OVERLAY_KEYS admits;
 #            - every service of the app gets its pinned mem_limit (APP_MEM_LIMITS_MIB) =
 #              memswap_limit, a pids_limit and no oom_score_adj;
 #            - no render has a CPU setting, a reservation or deploy.resources; the base and
@@ -42,6 +42,10 @@ RUN_LABEL=$PROBE.run
 # weights). deploy.resources is checked on its own.
 CPU_AND_RESERVATION_KEYS='["cpus","cpu_shares","cpu_quota","cpu_period","cpu_count","cpu_percent","cpuset","cpu_rt_runtime","cpu_rt_period","mem_reservation"]'
 OOM_SCORE_ADJ=500
+# The keys besides the resource keys that the stack's overlay may change, each only on the services
+# listed (docs/S4b_DESIGN_CONTRACT.md, section 8.6). It admits a key, not a value:
+# observability-prod-check.sh static checks the values.
+OVERLAY_KEYS='{"prometheus": ["ports"], "loki": ["ports"], "tempo": ["ports"], "alloy": ["ports"]}'
 # The app's selected memory limits in MiB (docs/VPS_RESOURCE_BUDGET.md, Container limits). Its PID
 # limits are not pinned.
 APP_MEM_LIMITS_MIB='{"backend": 1792, "postgres": 512, "frontend": 128, "cloudflared": 256}'
@@ -108,7 +112,7 @@ run_static() {
 
   echo "== the stack with its production overlay: ${FILES[*]}"
   # Both renders go in on stdin: as arguments they could exceed a command-line limit.
-  judge -n --argjson cpu "$CPU_AND_RESERVATION_KEYS" --argjson adj "$OOM_SCORE_ADJ" '
+  judge -n --argjson cpu "$CPU_AND_RESERVATION_KEYS" --argjson adj "$OOM_SCORE_ADJ" --argjson keys "$OVERLAY_KEYS" '
     def mib: tonumber / 1048576;
     input as $base | input as $prod
     | ($base.services | keys) as $bk
@@ -120,6 +124,10 @@ run_static() {
       | (if ($top | length) == 0 then "ok   the overlay changes nothing outside services"
          else "FAIL the overlay changes \($top | join(", ")) outside services" end),
       ($pk[] as $s | $prod.services[$s] as $p | ($base.services[$s] // {}) as $b
+       | ([($p | keys[]), ($b | keys[])] | unique
+          | map(select(IN("mem_limit", "memswap_limit", "pids_limit", "oom_score_adj") | not)
+                | select($p[.] != $b[.]))) as $changed
+       | ($keys[$s] // []) as $admitted
        | [ if ($p | has("mem_limit") | not) then "no mem_limit"
            elif ($p.mem_limit | tonumber) <= 0 then "mem_limit is not positive"
            else empty end,
@@ -132,13 +140,13 @@ run_static() {
            then "oom_score_adj is \($p.oom_score_adj // "unset"), not \($adj)" else empty end,
            ($cpu[] as $k | select($p | has($k)) | "sets \($k)"),
            if ($p.deploy.resources // null) != null then "sets deploy.resources" else empty end,
-           ([($p | keys[]), ($b | keys[])] | unique
-             | map(select(IN("mem_limit", "memswap_limit", "pids_limit", "oom_score_adj") | not)
-                   | select($p[.] != $b[.]))) as $changed
-           | if ($changed | length) > 0 then "also changes \($changed | join(", "))" else empty end
+           ($changed - $admitted) as $other
+           | if ($other | length) > 0 then "also changes \($other | join(", "))" else empty end
          ] as $problems
+       | ($changed - ($changed - $admitted)) as $admitted_changes
        | if ($problems | length) == 0
          then "ok   \($s): mem_limit = memswap_limit = \($p.mem_limit | mib) MiB, pids_limit \($p.pids_limit), oom_score_adj \($p.oom_score_adj)"
+              + (if ($admitted_changes | length) > 0 then "; also changes \($admitted_changes | join(", ")), admitted here" else "" end)
          else "FAIL \($s): \($problems | join("; "))" end)' <<<"$base"$'\n'"$prod"
 
   # Unlike the stack's overlay, this one also sets images, secrets and cloudflared, so only the

@@ -57,7 +57,7 @@ jobs:
                 observability/* | compose.yaml | compose.override.yaml | compose.prod.yaml | \
                   compose.observability*.yaml | \
                   scripts/observability-smoke-test.sh | scripts/observability-proxy-resilience-check.sh | \
-                  scripts/observability-limits-check.sh)
+                  scripts/observability-limits-check.sh | scripts/observability-prod-check.sh)
                   observability=true ;;
               esac
             # --no-renames lists both paths of a move, so moving a file out of an area still
@@ -131,9 +131,14 @@ jobs:
   # After the smoke test, a second script stops the Docker socket proxy for a while and checks
   # that Alloy resumes log collection without a restart.
   # The stack runs with its production overlay, observability/compose.prod.yaml, so both tests run
-  # within its memory and PID limits. The limits check verifies the render before the start and the
-  # running containers after the tests. It also checks the app's production render (compose.yaml +
-  # compose.prod.yaml) for its limits; the app itself is not started here.
+  # within its memory and PID limits. That overlay also removes every host port but Grafana's, which
+  # the tests need, so the test overlay, observability/compose.test.yaml, publishes again the
+  # loopback ports they use. The test overlay is for test runs only: a VPS command passes exactly
+  # compose.yaml and compose.prod.yaml. Before the start, the limits check and the production check
+  # verify the renders, the latter the exact host port mappings of the development, production and
+  # test renders. The limits check also verifies the running containers after the tests, and the
+  # app's production render (compose.yaml + compose.prod.yaml) for its limits; the app itself is not
+  # started here.
   observability:
     needs: changes
     if: needs.changes.outputs.observability == 'true'
@@ -150,14 +155,23 @@ jobs:
         run: |
           docker compose -f observability/compose.yaml config -q
           docker compose -f observability/compose.yaml -f observability/compose.prod.yaml config -q
+          docker compose -f observability/compose.yaml -f observability/compose.prod.yaml \
+            -f observability/compose.test.yaml config -q
           docker compose -f compose.yaml -f compose.override.yaml \
             -f compose.observability.yaml -f compose.observability.dev.yaml config -q
       # Every stack service gets its limits from the overlay, every app service gets its pinned
       # memory limit from compose.prod.yaml, and the base and development renders get none.
       - name: Production limits in the render
         run: bash scripts/observability-limits-check.sh static
+      # Production publishes only Grafana's 127.0.0.1:3000; the development and test renders keep
+      # exactly their pinned mappings, and no render uses the host network.
+      - name: Production ports in the render
+        run: bash scripts/observability-prod-check.sh static
+      # With the test overlay, which never joins a VPS command.
       - id: up
-        run: docker compose -f observability/compose.yaml -f observability/compose.prod.yaml up -d --wait --wait-timeout 180
+        run: |
+          docker compose -f observability/compose.yaml -f observability/compose.prod.yaml \
+            -f observability/compose.test.yaml up -d --wait --wait-timeout 180
       - run: bash scripts/observability-smoke-test.sh
       # Only after a green smoke test: an outage means something only on a stack whose boundary
       # passed. Its own limit leaves the job time for the checks below if the script hangs.
@@ -165,7 +179,9 @@ jobs:
         run: bash scripts/observability-proxy-resilience-check.sh
         timeout-minutes: 6
       # After the tests, so that an OOM kill or a restart during them shows; also when one of them
-      # failed. Without a started stack there is nothing to check.
+      # failed. Without a started stack there is nothing to check. It compares the containers with
+      # the render of compose.yaml + compose.prod.yaml: the test overlay changes only ports, which it
+      # does not read.
       - name: Production limits on the running stack
         if: ${{ !cancelled() && steps.up.outcome == 'success' }}
         run: bash scripts/observability-limits-check.sh runtime
