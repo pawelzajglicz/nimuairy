@@ -1,0 +1,18 @@
+# For test runs only (CI and local): publishes again the loopback ports the test scripts use.
+# Never part of a VPS command: the VPS passes exactly compose.yaml and compose.prod.yaml.
+#
+# It goes on top of the production overlay, which removes these ports:
+#   docker compose -f observability/compose.yaml -f observability/compose.prod.yaml \
+#     -f observability/compose.test.yaml up -d --wait
+# Only the mappings a test script uses: none uses Tempo's 4317 (OTLP gRPC). Grafana's
+# 127.0.0.1:3000 comes from compose.yaml. scripts/observability-prod-check.sh pins the mappings of
+# this render, so a port a test script starts using goes into this file and the check together.
+services:
+  prometheus:
+    ports: ["127.0.0.1:9090:9090"]
+  loki:
+    ports: ["127.0.0.1:3100:3100"]
+  tempo:
+    ports: ["127.0.0.1:3200:3200", "127.0.0.1:4318:4318"]
+  alloy:
+    ports: ["127.0.0.1:12345:12345"]
