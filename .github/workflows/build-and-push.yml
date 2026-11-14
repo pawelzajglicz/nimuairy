@@ -41,14 +41,14 @@ jobs:
 
       # The Dockerfiles build on Docker Hardened Images, which need a login even to pull.
       - name: Log in to dhi.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: dhi.io
           username: ${{ secrets.DHI_USERNAME }}
           password: ${{ secrets.DHI_TOKEN }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
