@@ -3,6 +3,9 @@
 OpenTelemetry is being introduced in small stages. Each section below covers one stage that
 is already in place.
 
+Operating the stack on the VPS (delivery, access, checks, updates and recovery) is in
+[OBSERVABILITY_PRODUCTION.md](OBSERVABILITY_PRODUCTION.md).
+
 ## Stage 1: backend traces on stdout
 
 The backend runs locally with the [OpenTelemetry Java agent](https://opentelemetry.io/docs/zero-code/java/agent/),
