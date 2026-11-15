@@ -166,22 +166,28 @@ else
 fi
 ```
 
-- **The archive is created only after all four checks pass:**
+- **`git archive` runs only after all four checks pass:**
   - the SHA is 40 lowercase hex characters;
   - `git fetch origin` succeeds;
   - the SHA is a commit in this clone;
   - that commit is on `origin/master`.
-- **A failed check prints `STOP` and its reason, and runs no `git archive`.** The block then ends
-  with a non-zero status.
-  - It is an `if`/`elif` chain, so it stops without relying on `set -e`.
-  - As with the extraction block below, a shell with errexit (`set -e`) enabled can be terminated
-    by the failure.
-- **Success prints `OK: <sha> validated`**, followed by the listing and the checksum. Anything else
-  means no usable archive.
 - **The commit ID check is automatic:** `git get-tar-commit-id` reads the commit that `git archive`
   stored in the archive, and the block compares it with `$sha`.
-- **Check the listing:** `tar -tf` must list only `observability/…` and
-  `scripts/observability-prod-check.sh`.
+- **Every failure prints `STOP` and its reason, and ends the block with a non-zero status.** What
+  it leaves behind depends on the step that failed:
+  - **One of the four checks:** `git archive` does not run, so no archive is written.
+  - **`git archive` itself:** it may leave a partial or empty `$a`. Delete it.
+  - **The commit ID check:** the archive was written, but it is not confirmed to hold `$sha`.
+    Delete `$a`.
+- **No failure produces a usable archive.** The block is an `if`/`elif` chain, so it stops without
+  relying on `set -e`. As with the extraction block below, a shell with errexit (`set -e`) enabled
+  can be terminated by the failure.
+- **Only success prints `OK: <sha> validated`**, followed by the listing and the checksum. Without
+  that line, do not copy the archive.
+- **Check the listing.** `tar -tf` must list these entries and no other path:
+  - the directory `observability/` and everything under it (`observability/…`);
+  - the directory entry `scripts/`;
+  - `scripts/observability-prod-check.sh`, the only file under `scripts/`.
 - **Note the `sha256sum` value** for the check on the VPS.
 
 **What the archive contains:**

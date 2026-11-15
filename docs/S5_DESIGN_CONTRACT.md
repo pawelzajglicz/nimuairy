@@ -1,6 +1,11 @@
 # S5 Design Contract — Production Observability Operations Guide
 
-**Status:** Accepted by the operator on 2026-11-15; S5.1 not started  
+**Status, 2026-11-15: S5.1 to S5.3 complete; S5.2 merged in PR #125. S5.4 closes S5 in the
+repository (§8).**
+- The operator accepted this contract on 2026-11-15.
+- No VPS operation, deployment or application integration was performed during S5.
+- **S5 does not authorize S6 or S7** (§8.4).
+
 **Base:** `master` at `0099beb017b40114ed1189fc48460aeb216fcec6`  
 **Deliverable:** `docs/OBSERVABILITY_PRODUCTION.md`
 
@@ -494,3 +499,216 @@ S5 is complete when:
 15. No VPS operation or deployment is performed.
 
 **S5 does not authorize S6 or S7.** Each remains a separate stage with its own design, acceptance criteria and explicit operator approval.
+
+## 8. Stage results and close-out
+
+### 8.1 S5.1 — Repository fact audit
+
+Completed on 2026-11-15. The audit was read-only and changed nothing in the repository. Its report
+is not part of the repository.
+
+It inspected the Compose files, scripts and documentation behind each procedure. It found four
+discrepancies between the documentation and the implementation:
+
+| ID | Discrepancy | Where |
+|---|---|---|
+| C1 | The smoke test's header says that CI runs it after a base-file-only `docker compose -f observability/compose.yaml up -d --wait`. CI starts the stack with three Compose files | `scripts/observability-smoke-test.sh`, header |
+| C2 | The repair hints that the smoke test and the proxy outage check print use only the base Compose file | `scripts/observability-smoke-test.sh`, `scripts/observability-proxy-resilience-check.sh` |
+| C3 | An outdated statement that `.gitignore` does not cover `observability/secrets/`. S4b.2 added that entry | `docs/S4b_DESIGN_CONTRACT.md`, §3.2 |
+| C4 | The list of changes that run CI's `observability` job is incomplete compared with the path filter in `.github/workflows/ci.yml` | `docs/OBSERVABILITY.md`, Verify |
+
+C1 to C4 were deliberately not fixed in S5, and they remain open:
+- none of them prevents the production guide from being accurate;
+- fixing them would expand the agreed scope (§3).
+
+For C2, the guide warns not to reuse those repair hints on the VPS (its Conventions section).
+
+S5.1 left four operator decisions open: Q1, Q3, Q9 and Q11. The operator settled them before S5.2
+(§8.2).
+
+### 8.2 S5.2 — Production guide
+
+Completed and merged in PR #125:
+- squash merge `9d42d45a4264baa96cf0f3ff48700f43b1d655ec`;
+- final PR commit before the merge: `64a1db8cfacac33b407dd8bb213f40d9bbc72b00`.
+
+`docs/OBSERVABILITY_PRODUCTION.md` is the operator guide for the stack on the VPS. It covers how to
+deliver the stack, reach Grafana, and inspect, update and troubleshoot the stack, and what the
+stack does and does not cover. It complements `docs/OBSERVABILITY.md` and links to it instead of
+repeating it.
+- Facts about the VPS that S5 could not confirm are marked **Verify at S6**. They are collected in
+  the guide's "Open items for S6 and later" table.
+- The Grafana password rotation is a candidate procedure marked **Not validated**.
+
+S5.2 also added a one-sentence cross-reference to the guide at the top of `docs/OBSERVABILITY.md`.
+
+The guide documents manual delivery:
+- a `git archive` of `observability/` and `scripts/observability-prod-check.sh`, from an explicit
+  commit SHA;
+- extracted into `/var/nimuairy-observability`;
+- with a `REVISION` marker.
+
+S5 introduced no automated deployment workflow.
+
+The operator decisions from S5.1, as applied:
+- **Q1, delivery:** the archive above, built from a verified SHA.
+- **Q3, account:** `deploy` owns and operates `/var/nimuairy-observability`.
+- **Q9, tunnel:** Grafana is reached through `ssh -N -o ExitOnForwardFailure=yes` on local port
+  `13000`. A PuTTY equivalent is given.
+- **Q11, resources:** general read-only checks only. The verification of the stack's resources
+  belongs to S6.
+
+No VPS operation was performed.
+
+### 8.3 S5.3 — Operational and documentation review
+
+Completed on 2026-11-15. It was an independent review of the guide against:
+- `docs/S4b_DESIGN_CONTRACT.md`;
+- `docs/OBSERVABILITY.md`;
+- `docs/VPS_RESOURCE_BUDGET.md`;
+- `docs/DEFERRED_WORK.md`;
+- the Compose files in `observability/`, the observability scripts in `scripts/` and
+  `.github/workflows/ci.yml`.
+
+**Outcome:** no architectural or operational blocker, and one wording correction.
+
+**Correction.** The guide's "Build the archive" section said that a failed check prints `STOP` and
+runs no `git archive`.
+- That holds for the four checks before the archive:
+  - the SHA format;
+  - `git fetch origin`;
+  - the commit lookup;
+  - the ancestry on `origin/master`.
+- It does not hold when `git archive` itself fails, or when the commit ID comparison after it
+  fails.
+
+The section now separates the three cases:
+- a failed check runs no `git archive`;
+- a failed `git archive` may leave a partial or empty file, to be deleted;
+- a commit ID mismatch leaves an archive, to be deleted.
+
+No failure produces a usable archive, and only the `OK` line marks success. The correction was
+made together with this close-out. The shell block is unchanged.
+
+S5.4's verification found a second inaccuracy in the same section, in its listing check. It is
+corrected too (§8.4).
+
+**Verified results.** They come from the S5.2 verification: PR #125's description and the test
+runs behind it. S5.4 re-ran the Compose, shell syntax and link checks on the final text (§8.4).
+- **Compose.**
+  - All 18 occurrences of `docker compose` in the guide pass exactly
+    `observability/compose.yaml` and then `observability/compose.prod.yaml`.
+  - The count covers code blocks, inline code and tables, including the template under
+    Conventions.
+  - None of them uses `observability/compose.test.yaml`, `-p` or `COMPOSE_PROJECT_NAME`.
+- **Shell syntax.** All 26 `bash` code blocks pass `bash -n`, with the placeholders substituted.
+- **Archive build.** The block was tested in an isolated Git setup with a local bare origin:
+  - failing checks: each ended with a non-zero status and no archive;
+  - a commit on `origin/master`: the block ended with status 0, and the stored commit ID
+    matched.
+- **Extraction and `REVISION`, and the Grafana secret check.** Each block was tested verbatim, with
+  and without `set -e`.
+- **Links**, from PR #125's verification.
+  - 140 relative links were checked, and 0 failed. A control that contained a broken link failed
+    as expected.
+  - The checker counts every Markdown link outside a code block whose target is not a URL, once per
+    occurrence: 67 in the guide and 73 in `docs/OBSERVABILITY.md`.
+  - It checks that the file exists and, for an anchor, that a matching GitHub heading slug exists.
+
+**Sequencing deviation.** §6 places the cross-reference in `docs/OBSERVABILITY.md` in S5.3. It was
+added in S5.2 instead, in PR #125. S5.3 reviewed it and added no further link.
+
+### 8.4 S5.4 — Close-out
+
+S5.1, S5.2 and S5.3 are complete. S5.4 records them, in the status and in this section. It also
+makes the S5.3 correction and a second one that its own verification found.
+
+**Second correction: the listing check.** The guide said that `tar -tf` must list only
+`observability/…` and `scripts/observability-prod-check.sh`. The archive also holds the directory
+entry `scripts/`. `git archive` of the merge commit `9d42d45a4264baa96cf0f3ff48700f43b1d655ec`
+lists 18 entries:
+- the directory `observability/`, with 7 directories and 8 files under it;
+- `scripts/`;
+- `scripts/observability-prod-check.sh`.
+
+An operator following the old wording strictly would have stopped on a valid archive. The check
+now allows those entries and no other path, and it names `scripts/observability-prod-check.sh` as
+the only file under `scripts/`. The shell block is unchanged.
+
+**Files changed across S5:**
+- `docs/OBSERVABILITY_PRODUCTION.md`: new in S5.2; its archive explanation and listing check
+  corrected in S5.4;
+- `docs/OBSERVABILITY.md`: the cross-reference, in S5.2;
+- `docs/S5_DESIGN_CONTRACT.md`: this close-out.
+
+No Compose file, script, application code or CI workflow changed in S5, and neither did
+`README.md` or `docs/VPS_FIREWALL.md`.
+
+**Verification in S5.4**, local only, without Docker, SSH or the VPS:
+- **The archive explanation.** The block from the guide ran verbatim in an isolated Git setup.
+  - First with a commit that passes the four checks but lacks
+    `scripts/observability-prod-check.sh`. `git archive` failed. The block printed
+    `STOP: git archive failed…`, ended with status 1 and left an empty archive file (0 bytes).
+  - Then with the script added. The block printed `OK`, ended with status 0 and listed the
+    archive and its checksum. The stored commit ID matched.
+  - The commit ID mismatch was not exercised.
+- **The listing check.** The corrected rule was applied to the `tar -tf` output of the
+  `9d42d45` archive and passed for all 18 entries. Three controls failed it, as expected:
+  - an extra `scripts/other.sh`;
+  - an extra `README.md`;
+  - the listing without `scripts/`.
+- **Links.** The same checker ran on the guide, `docs/OBSERVABILITY.md` and this contract: 140
+  checked, 0 failed. This contract has no links. The broken-link control failed as expected. The
+  headings added here have unique anchors.
+- **Shell syntax.** The 26 `bash` blocks pass `bash -n` again. A control with a syntax error fails.
+- **Compose.** The 18 occurrences are unchanged.
+- **Diff.** The S5.4 change touches only `docs/OBSERVABILITY_PRODUCTION.md` and this contract.
+  `git diff --check` reports nothing.
+- **SHAs.** The PR #125 merge and head commits above match GitHub's merge record
+  (`gh pr view 125`).
+
+**Remaining S6 prerequisites and unverified assumptions.** The guide's "Open items for S6 and
+later" table remains the operator's list. It includes:
+- the Compose render on the VPS, which must publish only Grafana's port, and the
+  `DOCKER_SOCKET_GID` in `observability/.env`;
+- `deploy`'s ownership of `/var/nimuairy-observability`, its Docker access, its shell (Bash), and
+  the modes that extraction leaves;
+- the account that copies the archive to `deploy`'s home;
+- the Grafana secret:
+  - its owner and mode;
+  - whether UID 472 can read it through the bind mount;
+  - the LXC mapping of UIDs 472, 473 and 10001;
+  - the production check's access to the file;
+- before the first start: no existing `nimuairy-observability_*` volumes, and no host listener on
+  `127.0.0.1:3000` or on the removed ports;
+- SSH forwarding for the tunnel account, and the Alloy UI tunnel to a container address;
+- the tools and permissions the production checks need:
+  - `bash`, `docker`, `curl`, `timeout` and `od` for the production check, with the operator's
+    consent per run;
+  - `sudo` for the optional container-log size check;
+- the Grafana password reset with `grafana cli admin reset-admin-password --password-from-stdin`,
+  still **Not validated**;
+- Grafana's failed-login threshold and lockout time, not determined;
+- Docker's JSON log rotation, and the disk growth of logs, volumes and images;
+- the stack's real resource consumption and limits on the VPS;
+- whether a restart picks up a bind-mounted configuration file that extraction replaced;
+- no untrusted users or services on the host (U8), and a public IPv6 address and its firewall
+  (U12).
+
+**Remaining S7 work**, the application integration:
+- a production variant of the application's observability overlay;
+- a change to the application's deployment;
+- a backend image that contains the OpenTelemetry agent;
+- the address that nginx logs behind the Cloudflare Tunnel, and the application's telemetry in
+  general.
+
+**Still deferred** (`docs/DEFERRED_WORK.md`):
+- S3: the application's secrets in container environment variables;
+- S3.3b: Alloy starting while the socket proxy is down;
+- B7: `cap_drop` and `no-new-privileges` for Prometheus, Loki, Tempo and Grafana.
+
+**No VPS operation, deployment or application integration was performed during S5.** The stack is
+still not deployed to the VPS, and the application is not connected to it.
+
+**S5 does not authorize S6 or S7.** Neither has started. Each remains a separate stage with its own
+design, acceptance criteria and explicit operator approval.
