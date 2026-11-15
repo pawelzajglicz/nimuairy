@@ -207,8 +207,9 @@ else
 fi
 ```
 
-- **Each failure is reported on its own and ends with a non-zero status.** The block ends with
-  `false`, not `exit`, so pasted into an interactive shell it does not close the SSH session.
+- **Each failure is reported on its own and returns a non-zero status.** The block does not call
+  `exit` itself. If the shell has errexit (`set -e`) enabled, a failure can nevertheless terminate
+  that shell, and with it an interactive SSH session.
 - **A failed extraction never touches `REVISION`.** GNU tar exits non-zero when it reports an error,
   for example a target it cannot open or a file it cannot write.
   - It can still have changed some files before the error, so the disk can hold a mixture of both
