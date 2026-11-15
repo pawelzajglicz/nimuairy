@@ -140,20 +140,49 @@ commit on `master` whose CI passed.
 
 ```bash
 sha=<sha>
-[[ $sha =~ ^[0-9a-f]{40}$ ]] && echo "full SHA" || echo "STOP: not a full 40-character SHA"
-git fetch origin
-git cat-file -e "$sha^{commit}" && git merge-base --is-ancestor "$sha" origin/master \
-  && echo "on origin/master" || echo "STOP: unknown commit, or not on origin/master"
-git archive --format=tar -o "nimuairy-observability-$sha.tar" "$sha" observability scripts/observability-prod-check.sh
-git get-tar-commit-id < "nimuairy-observability-$sha.tar"
-tar -tf "nimuairy-observability-$sha.tar"
-sha256sum "nimuairy-observability-$sha.tar"
+a="nimuairy-observability-$sha.tar"
+if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+  echo "STOP: not a full 40-character lowercase SHA; no archive created" >&2
+  false
+elif ! git fetch origin; then
+  echo "STOP: git fetch origin failed; no archive created" >&2
+  false
+elif ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+  echo "STOP: $sha is not a commit in this clone; no archive created" >&2
+  false
+elif ! git merge-base --is-ancestor "$sha" origin/master; then
+  echo "STOP: $sha is not on origin/master, or the check failed; no archive created" >&2
+  false
+elif ! git archive --format=tar -o "$a" "$sha" observability scripts/observability-prod-check.sh; then
+  echo "STOP: git archive failed; delete any partial $a" >&2
+  false
+elif [ "$(git get-tar-commit-id < "$a")" != "$sha" ]; then
+  echo "STOP: the commit ID stored in $a is not $sha; delete $a" >&2
+  false
+else
+  echo "OK: $sha validated; $a created"
+  tar -tf "$a"
+  sha256sum "$a"
+fi
 ```
 
-- `git get-tar-commit-id` prints the commit that `git archive` stored in the archive. It must equal
-  `$sha`.
-- `tar -tf` must list only `observability/…` and `scripts/observability-prod-check.sh`.
-- Note the `sha256sum` value for the check on the VPS.
+- **The archive is created only after all four checks pass:**
+  - the SHA is 40 lowercase hex characters;
+  - `git fetch origin` succeeds;
+  - the SHA is a commit in this clone;
+  - that commit is on `origin/master`.
+- **A failed check prints `STOP` and its reason, and runs no `git archive`.** The block then ends
+  with a non-zero status.
+  - It is an `if`/`elif` chain, so it stops without relying on `set -e`.
+  - As with the extraction block below, a shell with errexit (`set -e`) enabled can be terminated
+    by the failure.
+- **Success prints `OK: <sha> validated`**, followed by the listing and the checksum. Anything else
+  means no usable archive.
+- **The commit ID check is automatic:** `git get-tar-commit-id` reads the commit that `git archive`
+  stored in the archive, and the block compares it with `$sha`.
+- **Check the listing:** `tar -tf` must list only `observability/…` and
+  `scripts/observability-prod-check.sh`.
+- **Note the `sha256sum` value** for the check on the VPS.
 
 **What the archive contains:**
 - **Tracked files only, at that commit.** Ignored files never enter it: `observability/.env` and
