@@ -590,6 +590,9 @@ The section now separates the three cases:
 No failure produces a usable archive, and only the `OK` line marks success. The correction was
 made together with this close-out. The shell block is unchanged.
 
+S5.4's verification found a second inaccuracy in the same section, in its listing check. It is
+corrected too (§8.4).
+
 **Verified results.** They come from the S5.2 verification: PR #125's description and the test
 runs behind it. S5.4 re-ran the Compose, shell syntax and link checks on the final text (§8.4).
 - **Compose.**
@@ -617,11 +620,24 @@ added in S5.2 instead, in PR #125. S5.3 reviewed it and added no further link.
 
 ### 8.4 S5.4 — Close-out
 
-S5.1, S5.2 and S5.3 are complete. S5.4 records them, in the status and in this section, and makes
-the S5.3 correction.
+S5.1, S5.2 and S5.3 are complete. S5.4 records them, in the status and in this section. It also
+makes the S5.3 correction and a second one that its own verification found.
+
+**Second correction: the listing check.** The guide said that `tar -tf` must list only
+`observability/…` and `scripts/observability-prod-check.sh`. The archive also holds the directory
+entry `scripts/`. `git archive` of the merge commit `9d42d45a4264baa96cf0f3ff48700f43b1d655ec`
+lists 18 entries:
+- the directory `observability/`, with 7 directories and 8 files under it;
+- `scripts/`;
+- `scripts/observability-prod-check.sh`.
+
+An operator following the old wording strictly would have stopped on a valid archive. The check
+now allows those entries and no other path, and it names `scripts/observability-prod-check.sh` as
+the only file under `scripts/`. The shell block is unchanged.
 
 **Files changed across S5:**
-- `docs/OBSERVABILITY_PRODUCTION.md`: new in S5.2; its archive explanation corrected in S5.4;
+- `docs/OBSERVABILITY_PRODUCTION.md`: new in S5.2; its archive explanation and listing check
+  corrected in S5.4;
 - `docs/OBSERVABILITY.md`: the cross-reference, in S5.2;
 - `docs/S5_DESIGN_CONTRACT.md`: this close-out.
 
@@ -636,6 +652,11 @@ No Compose file, script, application code or CI workflow changed in S5, and neit
   - Then with the script added. The block printed `OK`, ended with status 0 and listed the
     archive and its checksum. The stored commit ID matched.
   - The commit ID mismatch was not exercised.
+- **The listing check.** The corrected rule was applied to the `tar -tf` output of the
+  `9d42d45` archive and passed for all 18 entries. Three controls failed it, as expected:
+  - an extra `scripts/other.sh`;
+  - an extra `README.md`;
+  - the listing without `scripts/`.
 - **Links.** The same checker ran on the guide, `docs/OBSERVABILITY.md` and this contract: 140
   checked, 0 failed. This contract has no links. The broken-link control failed as expected. The
   headings added here have unique anchors.

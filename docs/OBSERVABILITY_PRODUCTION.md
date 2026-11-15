@@ -184,8 +184,10 @@ fi
   can be terminated by the failure.
 - **Only success prints `OK: <sha> validated`**, followed by the listing and the checksum. Without
   that line, do not copy the archive.
-- **Check the listing:** `tar -tf` must list only `observability/…` and
-  `scripts/observability-prod-check.sh`.
+- **Check the listing.** `tar -tf` must list these entries and no other path:
+  - the directory `observability/` and everything under it (`observability/…`);
+  - the directory entry `scripts/`;
+  - `scripts/observability-prod-check.sh`, the only file under `scripts/`.
 - **Note the `sha256sum` value** for the check on the VPS.
 
 **What the archive contains:**
