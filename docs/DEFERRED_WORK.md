@@ -238,7 +238,7 @@ into the S3.3 check would make that check harder to read and to trust.
   - They run as their images' non-root users: `nobody`, `10001` and `472`.
   - They keep Docker's default capability set.
 - Tempo has neither setting either.
-  - It runs as root (`user: "0"`) until S4b.3 changes that to `10001:10001`.
+  - Since S4b.3 it runs as its image's non-root user, `10001:10001`.
 - All four listen on unprivileged ports. None is known to need a capability.
 - Two things have not been checked:
   - whether their images contain setuid or file-capability binaries;
