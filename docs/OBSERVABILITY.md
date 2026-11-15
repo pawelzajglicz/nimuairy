@@ -127,7 +127,7 @@ latency graph opens the trace of a request it counts
 | `scripts/observability-smoke-test.sh` | Checks the running stack, its network boundaries and the Docker API boundary of the socket proxy without the backend; CI's `observability` job runs it (see [Verify](#verify-1)) |
 | `scripts/observability-proxy-resilience-check.sh` | Stops the socket proxy for 20 to 45 s and checks that Alloy resumes log collection without a restart; CI's `observability` job runs it after the smoke test (see [Verify](#verify-1)) |
 | `scripts/observability-limits-check.sh` | Checks the production overlay's limits in the Compose renders and on the running stack, and the app's limits in its production render; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
-| `scripts/observability-prod-check.sh` | Checks the production port policy and Grafana's production password in the Compose renders: the exact host port mappings of the development, production and test renders, that none uses the host network, production Grafana's environment, secret and start guard, and that development needs no secret file and keeps `admin`/`admin`; CI's `observability` job runs it (see [Resource limits](#resource-limits)) |
+| `scripts/observability-prod-check.sh` | Checks the production port policy and Grafana's production password. `static`, in the Compose renders: the exact host port mappings of the development, production and test renders, that none uses the host network, production Grafana's environment, secret and start guard, and that development needs no secret file and keeps `admin`/`admin`. `runtime`, on a stack started from exactly the production files: the containers' port bindings, refused connections to the removed ports, Grafana's environment and login. `seed` and `verify`: that a trace, Tempo's storage and Grafana's password survive a recreate. CI's `observability` job runs all four (see [Resource limits](#resource-limits)) |
 | `scripts/observability-exemplar-check.sh` | Checks the metric-to-trace path with the backend running; manual (see [stage 3](#stage-3-from-a-metric-to-its-trace-exemplars)) |
 
 The stack is a separate Compose project, so the app can be rebuilt, restarted or wiped
@@ -842,8 +842,8 @@ They reach the VPS only with the app rollout
     non-empty file that UID 472 can read. The operator creates it at S6, before the first `up`.
     Nothing has been created on the VPS yet. Without a valid file, the guard keeps Grafana from
     starting.
-- **CI's `observability` job** starts the stack with three files: the base file, the production
-  overlay and the test overlay, `observability/compose.test.yaml`.
+- **CI's `observability` job** runs in two phases. Phase A starts the stack with three files: the
+  base file, the production overlay and the test overlay, `observability/compose.test.yaml`.
   - The test scripts reach the services through loopback ports, which the production overlay
     removes. The test overlay publishes again only the five they use: Prometheus `9090`, Loki
     `3100`, Tempo `3200` and `4318`, Alloy `12345`. Grafana's `3000` comes from the base file, and
@@ -857,6 +857,14 @@ They reach the VPS only with the app rollout
     - It masks the password in the log with `::add-mask::`, before exporting
       `GRAFANA_AUTH=admin:<password>`, so the smoke test logs in with it.
     - The value is disposable, lives only as long as the job, and is never a repository secret.
+  - **Phase B.** After phase A's tests, the job recreates every container from exactly the two
+    files a VPS command passes, with `up -d --wait --force-recreate` and without the test overlay.
+    The volumes stay, and the five test ports go away.
+    - It then runs the production check's `runtime`, the limits check's `runtime` on the new
+      containers, and the production check's `verify`: a trace sent in phase A, Tempo's storage and
+      Grafana's password must have survived the recreate.
+    - Phase B runs only after a green phase A: the recreate would discard the logs of the
+      containers that failed.
   - See Checks below.
 
 **What the settings do** (cgroup v2):
@@ -937,17 +945,18 @@ needs `jq`.
   - `jq` is not guaranteed there.
   - On the VPS, the limits are checked with the read-only commands of the contract's
     [§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only); the stack's at S6.
-- **CI's `observability` job** runs `static` before it starts the stack, and `runtime` after the
-  smoke test and the outage check.
-  - `runtime` renders its default files, the base file and the production overlay. The containers
-    came from three files, but the test overlay changes only `ports`, which the limits check does
-    not read.
+- **CI's `observability` job** runs `static` before it starts the stack, and `runtime` twice: after
+  the smoke test and the outage check, and again in phase B, on the containers recreated from the
+  two production files.
+  - `runtime` renders its default files, the base file and the production overlay. In phase A the
+    containers came from three files, but the test overlay changes only `ports`, which the limits
+    check does not read.
   - Its run is short and nearly idle, so `memory.peak` is a lower bound, never a production peak.
   - The checks verify configuration only. They do not show that a limit is large enough, or that
     anything is protected.
 
-**Production checks.** `scripts/observability-prod-check.sh static` is a CI and local check. It
-needs `jq` and only renders the files.
+**Production checks.** `scripts/observability-prod-check.sh` has four modes. `static` is a CI and
+local check. It needs `jq` and only renders the files.
 
 - It compares the host port mappings of three renders with exact sets that it pins, never with a
   count. A mapping is the service, host IP, host port, container port and protocol, so an extra or
@@ -977,6 +986,101 @@ needs `jq` and only renders the files.
 ```bash
 bash scripts/observability-prod-check.sh static
 ```
+
+**`runtime`** checks a running stack that was started from exactly the base file and the production
+overlay.
+- It runs in CI in phase B, after the recreate. On the VPS it runs from S6, and each run there needs
+  separate consent.
+- Never run it with the test overlay up: its five mappings fail P-R1 and P-R2 by design.
+
+What it checks:
+- **P-R1**: the host port bindings of every container of the stack's Compose project are exactly
+  P-S1's set, `grafana 127.0.0.1:3000->3000/tcp`, both as `HostConfig.PortBindings` and as
+  `docker port` shows them. No container uses the host network.
+  - First, every service of the render must have exactly one running container, and the project no
+    other. Otherwise a missing or extra container could change the set.
+- **P-R2**: from the host, `127.0.0.1` refuses a connection on 9090, 3100, 3200, 4317, 4318 and
+  12345, the development ports that production removes.
+  - Only `Connection refused` passes. A timeout or another error proves nothing.
+  - Bash opens the connection itself (`/dev/tcp`), so the error is the system's text for the
+    errno. curl's exit code 7 covers every failed connection, and its message differs between
+    versions.
+  - Positive controls: the same method connects to `127.0.0.1:3000`, and
+    `127.0.0.1:3000/api/health` answers `200`.
+  - The listeners that `ss` shows, where it exists, are printed as `info` only: they depend on
+    Docker's userland proxy.
+- **P-R3**: Grafana's `Config.Env` has no `GF_SECURITY_ADMIN_PASSWORD`, and has
+  `GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password` once. The check names
+  variables, never their values.
+- **P-R4**: Grafana's login. The statuses and messages are those Grafana 13.0.2 gave in S4b.2:
+
+  | Request | Expected |
+  |---|---|
+  | `GET /api/user` with the configured login | `200` |
+  | `GET /api/user` with `admin:admin` | `401`, `Invalid username or password` |
+  | Anonymous `GET /api/datasources` | `401`, `Unauthorized` |
+  | Anonymous `POST /api/user/signup` and `POST /api/user/signup/step2` | `401`, `User signup is disabled` |
+
+  - Each run causes one failed `admin` login.
+  - Grafana limits failed logins per user, so do not run the check many times in a row on the VPS.
+
+**`seed` and `verify`** are for CI only.
+- **`seed`** is phase A's last step.
+  - It sends Tempo a trace with a new ID through the test overlay's `127.0.0.1:4318`.
+  - It reads the trace back by ID through Grafana's Tempo datasource
+    (`/api/datasources/proxy/uid/tempo`), the path `verify` uses. So the path is shown to work
+    before the recreate.
+  - It waits until Tempo's WAL has new content. After that, only the WAL's replay, not Tempo's
+    shutdown, decides whether the trace survives.
+  - It writes the trace's ID, the Tempo and Grafana containers and their volumes to a state file.
+    The file holds no secret, has mode 0600, and replaces an earlier one only once it is complete.
+- **`verify`** runs after phase B's recreate (P-V1):
+  - Tempo and Grafana must be new containers, on the same volumes, by name and creation time. A new
+    `grafana-data` volume would get the same password from the secret file. Without this check,
+    the password check would prove nothing about Grafana's existing database;
+  - Grafana's datasources answer `OK` with the configured login;
+  - the seeded trace is found through Grafana's Tempo datasource;
+  - everything in Tempo's storage belongs to `10001:10001`, checked as in the smoke test's T-4.
+    The check reads the volume the new Tempo container mounts. If that is not the volume seed saw,
+    or cannot be read, the check is skipped, and the state file's volume is never checked in its
+    place. The failed volume check above already fails the run.
+
+  It reads the state file strictly, never as a script: each key once, in its only accepted form.
+- **Their probes** run the Prometheus image as `10001:10001`, without network or capabilities, and
+  mount Tempo's volume read-only, as the smoke test's Tempo probes do. Each run labels its probes
+  with its own ID and, on exit, also after `INT` or `TERM`, removes only those.
+
+**What the runtime modes need**:
+- **No `jq`.**
+  - `runtime` needs `bash`, `docker`, `curl` and coreutils' `timeout` and `od`.
+  - `seed` and `verify` also need `date`, `sleep`, `mv` and `rm`.
+- **The Grafana login** is `GRAFANA_AUTH` (`user:password`), as CI exports it. Otherwise it is
+  `admin` with the content of the secret file next to the base file,
+  `observability/secrets/grafana_admin_password`.
+  - There is no default.
+  - The user must be `admin`, the production admin user: P-R4 and P-V1 check the admin's password,
+    not another user's.
+  - A password that is empty, spans more than one line or is `admin` stops the check.
+  - The user that runs the check must be able to read the file. S6 chooses its mode.
+  - curl gets the login on stdin (`curl -K -`), never as an argument, and the check prints no
+    password.
+- **The containers** are found through the stack's Compose project, never by container name.
+  `OBSERVABILITY_COMPOSE_FILES` replaces the two files, as for the limits check, for a copy of the
+  stack under another project name.
+- **Local runs** need an engine where nothing else holds the pinned ports.
+  - The expected mappings stay `127.0.0.1:3000` and the removed ports.
+  - The development stack holds all of them. So a run next to it fails P-R1 and P-R2 by design.
+  - A copy would also have to avoid the development `grafana-data` volume, which stores `admin`
+    ([S4b contract, §8.8](S4b_DESIGN_CONTRACT.md#88-local-runs)).
+  - Such a run needs a separate engine, or the development stack stopped, each with the
+    operator's consent.
+
+```bash
+bash scripts/observability-prod-check.sh runtime
+```
+
+CI's `observability` job runs `seed` at the end of phase A, and `runtime` and `verify` in phase B,
+with the limits check's `runtime` between them.
 
 ### Verify
 
@@ -1203,7 +1307,9 @@ loopback ports the two tests use, and the test overlay publishes them again; it 
 only and never part of a VPS command. The production overlay also reads Grafana's password from a
 file. The job writes a disposable random one for each run, masks it in the log, and exports it as
 `GRAFANA_AUTH`, which the smoke test logs in with. Before the start, the limits check and the
-production check verify the renders; the limits check also runs after the two tests
+production check verify the renders; the limits check also runs after the two tests. Then, in
+phase B, the job recreates the stack from exactly the base file and the production overlay, and
+runs the production check's `runtime` and `verify` and the limits check again
 ([Resource limits](#resource-limits)).
 Afterwards the job checks that no probe container is left and that the proxy is running and
 `healthy`. Locally, set `GRAFANA_AUTH` (default `admin:admin`) if you changed Grafana's password.
@@ -1320,6 +1426,13 @@ collected since the last scrape, so Prometheus never stores them
   - Update `observability/compose.yaml`, the script and this document together.
   - If the UID changes, existing volumes need the
     [migration](#tempo-volumes-written-by-root) again, with the new UID.
+- **Grafana's login checks**: `prod-check runtime` pins Grafana's answers to a wrong login, an
+  anonymous request and sign-up, as Grafana 13.0.2 words them.
+  - A Grafana bump that rewords one fails phase B.
+  - Change the message in the script only once you have confirmed that the request is still
+    refused for the same reason.
+  - `seed` and `verify` read Tempo through Grafana's datasource proxy. A bump that changes it fails
+    phase A's `seed`.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, run
   `docker compose -f observability/compose.yaml restart prometheus`. Prometheus has no HTTP reload
   here: the stack runs it without `--web.enable-lifecycle`, so its reload endpoint answers `403`.
