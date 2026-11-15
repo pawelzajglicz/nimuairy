@@ -8,7 +8,9 @@
 # docker-socket-proxy: the proxy's running configuration, the requests it lets Alloy make, the
 # requests, clients and network positions it refuses, and that every numbered line of a probe reaches
 # Loki in normal operation (docs/OBSERVABILITY.md, Docker API access). It checks that Alloy runs as
-# 473:473 without capabilities, with its HOME, and writes its own storage. CI runs it after
+# 473:473 without capabilities, with its HOME, and writes its own storage, and that Tempo runs as
+# 10001:10001, writes its storage as that user, owns all of it and logs no permission error (T-1 to
+# T-5 in docs/S4b_DESIGN_CONTRACT.md, section 7.5). CI runs it after
 # `docker compose -f observability/compose.yaml up -d --wait`. It does not need the backend; the
 # checks that do stay manual (scripts/observability-exemplar-check.sh covers exemplars). It starts,
 # stops and changes nothing but its own probe containers, which it removes when it exits.
@@ -37,9 +39,16 @@ FOREIGN_PROBE=$PROBE-docker-api
 SHARED_PROBE=$PROBE-shared
 STACK_PROBE=$PROBE-stack
 HOST_PROBE=$PROBE-host
+# Read Tempo's PID 1 and its volume: the Tempo image has no shell for docker exec.
+TEMPO_PID_PROBE=$PROBE-tempo-pid
+TEMPO_STORAGE_PROBE=$PROBE-tempo-storage
 # Fixed names, so a run also removes what an interrupted one left behind.
 PROBES=("$PROBE" "$UNLABELLED" "$APP_PROBE" "$ALLOY_NS_PROBE" "$FOREIGN_PROBE" "$SHARED_PROBE" "$STACK_PROBE"
-  "$HOST_PROBE")
+  "$HOST_PROBE" "$TEMPO_PID_PROBE" "$TEMPO_STORAGE_PROBE")
+# Tempo runs as its image's tempo user (observability/compose.yaml); its storage must belong to it.
+TEMPO_USER=10001:10001
+# The live store's WAL, Tempo 3.1's first write of an accepted trace.
+TEMPO_WAL=/var/tempo/live-store/traces
 failures=()
 # Network checks this engine cannot verify. They are reported, never counted as passed.
 warnings=()
@@ -164,6 +173,63 @@ check "Prometheus refuses POST /-/reload (403, lifecycle API not enabled)" 10 \
 check "Prometheus refuses POST /api/v1/write (404, remote-write receiver not enabled)" 10 \
   prometheus_refuses /api/v1/write 404 'remote write receiver needs to be enabled'
 
+image=$(docker inspect --format '{{.Config.Image}}' prometheus)
+# A short-lived probe without network or capabilities, on a read-only root filesystem. Git Bash would
+# rewrite its container paths without MSYS_NO_PATHCONV.
+probe_run() {
+  local name=$1
+  shift
+  MSYS_NO_PATHCONV=1 docker run --rm --name "$name" --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges:true "$@"
+}
+# Tempo's named volume, from the running container. Only an existing one is used: docker run would
+# create a volume that does not exist.
+tempo_mount=$(MSYS_NO_PATHCONV=1 docker inspect \
+  -f '{{range .Mounts}}{{if eq .Destination "/var/tempo"}}{{.Type}} {{.Name}}{{end}}{{end}}' tempo 2>&1) || true
+tempo_volume=
+if [[ $tempo_mount == "volume "?* ]] && docker volume inspect "${tempo_mount#volume }" >/dev/null 2>&1; then
+  tempo_volume=${tempo_mount#volume }
+fi
+# Runs sh code in a probe that mounts Tempo's volume read-only, as Tempo's user, so it reads only what
+# Tempo can read. Its last line is the exit status of the code's last command; without that line the
+# probe did not run.
+tempo_storage() {
+  probe_run "$TEMPO_STORAGE_PROBE" --user "$TEMPO_USER" \
+    --mount "type=volume,src=$tempo_volume,dst=/var/tempo,readonly,volume-nocopy" \
+    --entrypoint sh "$image" -c "$1"' 2>&1; echo "exit=$?"' 2>&1 || true
+}
+# The hashes of the WAL's non-empty files, sorted. Any other line (an error, or no exit=0) makes the
+# listing incomplete, and the function fails.
+wal_manifest() {
+  local out line hash_line="^[0-9a-f]{64}  $TEMPO_WAL/"
+  out=$(tempo_storage "find $TEMPO_WAL -type f -size +0c -exec sha256sum {} +")
+  [[ ${out##*$'\n'} == exit=0 ]] || return 1
+  while IFS= read -r line; do
+    [[ $line == exit=0 || $line =~ $hash_line ]] || return 1
+  done <<<"$out"
+  grep -v '^exit=0$' <<<"$out" | LC_ALL=C sort || true
+}
+# Content that was not in the WAL before the probe trace: a new file, or a file with new content.
+# Removed files and new empty segments do not count.
+wal_written() {
+  local now
+  now=$(wal_manifest) || return 1
+  [[ -n $(LC_ALL=C comm -13 <(printf '%s\n' "$wal_before") <(printf '%s\n' "$now") | awk NF) ]]
+}
+# The WAL as it is before the probe trace. An idle Tempo 3.1 writes nothing there; a trace reaches it
+# some 10 s after its request, once it has been idle for 5 s (checked every 5 s).
+wal_before=
+wal_baseline=false
+if [[ -n $tempo_volume ]]; then
+  for _ in 1 2 3; do
+    if wal_before=$(wal_manifest); then
+      wal_baseline=true
+      break
+    fi
+    sleep 2
+  done
+fi
+
 # OTLP/JSON takes hex IDs. Tempo returns a trace by ID within seconds; search would take ~30 s.
 trace_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 span_id=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
@@ -173,10 +239,26 @@ resource='{"attributes":[{"key":"service.name","value":{"stringValue":"'$PROBE'"
 if curl -fsS --max-time 10 -o /dev/null -H 'Content-Type: application/json' \
   -d '{"resourceSpans":[{"resource":'"$resource"',"scopeSpans":[{"spans":['"$span"']}]}]}' \
   127.0.0.1:4318/v1/traces; then
+  trace_accepted=true
   check "Tempo stores an OTLP trace" 60 trace_stored "$trace_id"
 else
+  trace_accepted=false
   echo "FAIL Tempo accepts an OTLP trace"
   failures+=("Tempo accepts an OTLP trace")
+fi
+# T-3. Shows that Tempo, as its user, wrote its storage after it accepted the probe trace. Where
+# other traces arrive too, as in development with the backend, the new data need not be the probe's.
+name="Tempo wrote new data to its WAL ($TEMPO_WAL) after accepting the probe trace"
+if ! $trace_accepted; then
+  echo "skip $name (Tempo did not accept the probe trace)"
+elif [[ -z $tempo_volume ]]; then
+  echo "FAIL $name (no existing named volume at /var/tempo: '$tempo_mount')"
+  failures+=("$name")
+elif ! $wal_baseline; then
+  echo "FAIL $name (no complete listing of the WAL before the trace, so a change would prove nothing)"
+  failures+=("$name")
+else
+  check "$name" 60 wal_written
 fi
 
 # A labelled container stands in for the backend: Alloy must ship its stdout and map the
@@ -188,7 +270,6 @@ unlabelled_token="$UNLABELLED-$trace_id"
 # A harmless variable for the accepted-risk check below: through the proxy, Alloy can read the
 # environment of any container, this one included.
 env_marker="SMOKE_ENV_MARKER=$run_id"
-image=$(docker inspect --format '{{.Config.Image}}' prometheus)
 # The unlabelled container starts first, so both are running before any discovery round can find
 # the labelled one. Without the allowlist filter, the round that discovers the labelled container
 # would discover the unlabelled one as well.
@@ -476,6 +557,16 @@ expect_equal "Alloy's process has HOME=/home/alloy, owned by 473:473 and writabl
     printf "%s %s %s" "${h:-unset}" "$(stat -c %u:%g "$h" 2>/dev/null || echo none)" \
       "$(test -w "$h" && echo writable || echo not-writable)"' 2>&1)" \
   '/home/alloy 473:473 writable'
+# T-1 and T-2. compose.yaml pins the user, so an image with another UID fails the storage checks in CI
+# instead of passing on a new volume seeded for that UID. PID 1's credentials are read through Tempo's
+# PID namespace by a probe running as nobody: real, effective, saved and filesystem IDs.
+expect_equal "Tempo is configured as user $TEMPO_USER" "$(docker inspect -f '{{.Config.User}}' tempo 2>&1)" \
+  "$TEMPO_USER"
+tempo_pid1=$(probe_run "$TEMPO_PID_PROBE" --pid container:tempo --user 65534:65534 --entrypoint sh "$image" \
+  -c 'grep -E "^(Uid|Gid|Groups):" /proc/1/status' 2>&1 | awk '{ $1 = $1 } 1' | paste -sd'|' -) || true
+expect_equal "Tempo's process runs as $TEMPO_USER (every Uid and Gid of its PID 1)" \
+  "$(cut -d'|' -f1,2 <<<"$tempo_pid1")" 'Uid: 10001 10001 10001 10001|Gid: 10001 10001 10001 10001'
+echo "info Tempo's PID 1 supplementary groups: '$(sed -n 's/.*|Groups: *//p' <<<"$tempo_pid1")' (reported, never a failure)"
 
 # Requests from Alloy's address, the only one the proxy accepts: this probe shares Alloy's network
 # namespace. The markers of the refusals the proxy logged here are kept for the last check.
@@ -796,6 +887,39 @@ else
   if [[ -n $others ]]; then
     echo "info $(grep -c . <<<"$others") refusal(s) of other clients without this run's marker, not Alloy's:"
     head -5 <<<"$others" | sed 's/^/     /'
+  fi
+fi
+
+# T-4. Checks each entry's owner and group. The probe runs as Tempo's user without capabilities, so
+# find also fails on a directory that user cannot list or enter. It reads no file's content. A volume
+# written by a root Tempo needs the one-time migration (docs/OBSERVABILITY.md, Tempo volumes written
+# by root).
+name="Everything in Tempo's storage belongs to $TEMPO_USER, and $TEMPO_USER can traverse all of it"
+if [[ -z $tempo_volume ]]; then
+  fail "$name (no existing named volume at /var/tempo: '$tempo_mount')"
+else
+  storage=$(tempo_storage 'find /var/tempo 2>/dev/null | wc -l | sed "s/^ */entries=/"
+    find /var/tempo ! -user 10001 -o ! -group 10001')
+  if [[ ${storage%%$'\n'*} =~ ^entries=[0-9]+$ && ${storage#*$'\n'} == exit=0 ]]; then
+    pass "$name (${storage%%$'\n'*} in $tempo_volume)"
+  else
+    grep -vE '^(entries|exit)=' <<<"$storage" | head -5 | sed 's/^/     /'
+    fail "$name ($(grep -vcE '^(entries|exit)=' <<<"$storage" || true) line(s) from the probe, first ones above; ${storage##*$'\n'})"
+  fi
+fi
+# T-5. Only the current container's run: its StartedAt is on the daemon's clock, as --since is.
+name="Tempo logged no 'permission denied' since it started"
+if ! tempo_started=$(docker inspect -f '{{.State.StartedAt}}' tempo 2>&1); then
+  fail "$name (no start time: $tempo_started)"
+elif ! tempo_log=$(docker logs --since "$tempo_started" tempo 2>&1); then
+  fail "$name (docker logs tempo failed, so nothing is verified)"
+else
+  denied=$(grep -iF 'permission denied' <<<"$tempo_log" || true)
+  if [[ -z $denied ]]; then
+    pass "$name ($tempo_started)"
+  else
+    head -5 <<<"$denied" | cut -c1-300 | sed 's/^/     /'
+    fail "$name ($(grep -c . <<<"$denied") line(s), first ones above)"
   fi
 fi
 

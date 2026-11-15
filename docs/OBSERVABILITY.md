@@ -117,7 +117,7 @@ latency graph opens the trace of a request it counts
 
 | File | Role |
 |---|---|
-| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)) |
+| `observability/compose.yaml` | The stack, a Compose project of its own (`nimuairy-observability`). It creates the `nimuairy-observability` network, which it shares with the app, and its own `nimuairy-observability_stack` and `nimuairy-observability_docker-api` networks ([Networks](#networks)). Its `docker-socket-proxy` is the only service that mounts the Docker socket ([Docker API access](#docker-api-access)). Tempo runs as its image's user `10001:10001`, not as root ([Tempo volumes written by root](#tempo-volumes-written-by-root)) |
 | `observability/compose.prod.yaml` | The stack's production overlay, for the VPS and CI's `observability` job: memory, swap and PID limits and `oom_score_adj` for each service, the removal of every host port except Grafana's `127.0.0.1:3000`, and Grafana's admin password from a secret file ([Resource limits](#resource-limits)) |
 | `observability/compose.test.yaml` | The test overlay, for CI's `observability` job and local test runs only, never on the VPS: on top of the production overlay, it publishes again the five loopback ports the test scripts use ([Resource limits](#resource-limits), Where the overlay applies) |
 | `observability/secrets/grafana_admin_password` | Not in the repository: Git ignores `observability/secrets/`. Production Grafana's admin password, which only the production overlay reads. CI's `observability` job writes a disposable one for each run; on the VPS the operator creates it at S6. Development needs none ([Resource limits](#resource-limits)) |
@@ -162,6 +162,7 @@ diff -r --strip-trailing-cr <dir>/observability-stack observability
 | Alloy collects only containers labelled `observability.logs=true` (a `filter` in `discovery.docker`) | The course ships the logs of every container on the host. Production may collect the backend and frontend only, and one allowlist for development and production keeps the two from drifting apart |
 | Alloy reads the Docker API through `docker-socket-proxy` (`wollomatic/socket-proxy`) and no longer mounts the Docker socket | The socket is root-equivalent access to the host. The proxy passes on only the read calls Alloy makes ([Docker API access](#docker-api-access)) |
 | Alloy runs as `473:473` (course: `0`), the image's `alloy` user, with no capabilities (`cap_drop: [ALL]`) and `no-new-privileges` | Alloy needs no root: it reaches the Docker API over TCP through the proxy, listens on the unprivileged port 12345 and writes only its volume and `HOME`. `cap_drop` leaves it no capabilities, and `no-new-privileges` stops the image's setuid binaries from switching to root. Upstream calls non-root support in its image experimental, so the smoke test checks the user, the capabilities and the storage writes ([Verify](#verify-1)). A volume written by the course's root Alloy needs a one-time migration ([Alloy volumes written by root](#alloy-volumes-written-by-root)) |
+| Tempo runs as `10001:10001` (course: `0`), the image's own `tempo` user, set explicitly | Tempo needs no root: its ports (3200, 4317, 4318, 9095) are unprivileged, its configuration is a read-only bind mount, and it writes only under `/var/tempo`. The user is pinned instead of left to the image's default: an image that changes its UID then fails the smoke test in CI, instead of passing on CI's fresh volume while existing volumes break. The smoke test checks the user and the storage ([Verify](#verify-1)). A volume written by the course's root Tempo needs a one-time migration ([Tempo volumes written by root](#tempo-volumes-written-by-root)) |
 | Grafana trace-to-metrics uses `http_server_request_duration_seconds` | The course queried its own Node metric |
 | Image tags | Dependabot updates them here; the course keeps its own. Never take the course's tags over, they are older |
 | Tempo: no `ingester` and `compactor` blocks; the 7-day retention is `overrides.defaults.compaction.block_retention` | Tempo 3 removed both blocks and refuses to start with them (`field ingester not found`); the course still runs Tempo 2.10 |
@@ -355,6 +356,167 @@ fi
 
 Keep the backup outside the repository and never commit it. It holds container IDs, label sets and
 Alloy's seed, but no secrets.
+
+#### Tempo volumes written by root
+
+Tempo runs as `10001:10001` ([Where the stack comes from](#where-the-stack-comes-from)).
+
+**A new `tempo-data` volume needs nothing.** Docker seeds an empty volume from the image, whose
+`/var/tempo` belongs to `10001:10001` with mode `0755`, and Tempo creates its directories there
+itself.
+
+**A volume written by an earlier Tempo, which ran as root, does need a migration.**
+
+- Its own directory belongs to `10001:10001`, from the seed. Everything Tempo wrote in it belongs to
+  `root`:
+  - `wal`, `blocks` and `live-store`, and every directory under them, with mode `0700`;
+  - the WAL and block files;
+  - the backend scheduler's `batches.pb` and `shard_NNN.json` at the top.
+- As 10001, Tempo 3.1 cannot even enter those directories. It exits at start
+  (`failed to create store: mkdir /var/tempo/wal/blocks: permission denied`), and the restart policy
+  starts it again in a loop. Its API never answers.
+  - `docker compose up -d --wait` does not catch it. Tempo has no health check, so `--wait` has no
+    readiness to wait for and can accept a container that is only running: it exited `0` while
+    Tempo was in this loop.
+  - The smoke test does: Tempo is never ready, and T-4 and T-5 fail ([Verify](#verify-1)).
+  - Observed on a scratch volume, in S4b.3.
+- Migrate such a volume once, before the first `up` with the new configuration. The migration
+  changes only the owners, so the stored traces stay.
+
+**The development volume on the operator's machine has not been migrated.**
+- S4b.3 changed the configuration and rehearsed the steps below on a scratch volume only.
+- The first `up` of `observability/compose.yaml` with Tempo as `10001:10001` needs these steps on
+  that volume first. The operator runs them, with separate consent.
+- If the stack was already started with the new configuration, Tempo is in the restart loop above.
+  Migrate the same way: `chown -R` also covers any file Tempo wrote as 10001.
+
+**No backup** (decision B6,
+[S4b_DESIGN_CONTRACT.md](S4b_DESIGN_CONTRACT.md#74-migrating-a-development-volume-outline-for-observabilitymd-s4b3)):
+- the volume holds only local development traces, kept for 7 days, and `chown` changes owners, not
+  content;
+- an interrupted `chown` can simply be run again;
+- it covers development volumes only. It is no procedure for production data: on the VPS, a
+  `tempo-data` volume written by root would be unexpected, and S6 decides what to do with one.
+
+**Nothing migrates automatically.** `docker compose up` never changes an owner.
+
+The commands use Git Bash from the repository root. `MSYS_NO_PATHCONV=1` keeps Git Bash from
+rewriting container paths such as `/var/tempo`. The Tempo image has no shell and no `chown`. So the
+helper containers use the Alloy image from `observability/compose.yaml`, which has `find`,
+`sha256sum` and `chown`, and run without a network.
+
+**Check whether a migration is needed:**
+
+```bash
+export MSYS_NO_PATHCONV=1
+vol=nimuairy-observability_tempo-data
+img=grafana/alloy:v1.20.1
+if docker volume inspect "$vol" >/dev/null 2>&1; then
+  docker run --rm --network none --user 0:0 -v "$vol:/var/tempo:ro" --entrypoint find "$img" \
+    /var/tempo ! -user 10001 -o ! -group 10001 && echo "check complete"
+else
+  echo "no $vol volume: nothing to migrate"
+fi
+```
+
+- **Why the volume is inspected first:** `docker run` creates a named volume that does not exist,
+  even one mounted `:ro`, and Compose did not create that volume.
+- The helper runs as root, so it can enter directories of any owner. `check complete` appears only
+  when `find` succeeded. Without it, the check failed and proves nothing.
+- If the block prints only `check complete`, every entry already belongs to `10001:10001`.
+- Otherwise, migrate:
+
+1. **Stop Tempo**, so that it writes nothing during the change. The second command must print
+   `false`.
+
+   ```bash
+   docker compose -f observability/compose.yaml stop -t 30 tempo
+   docker inspect -f '{{.State.Running}}' tempo
+   ```
+
+2. **Record the volume, outside the repository**: each entry's owner, mode, size, type and path,
+   the volume's own directory (`.`) included, and each file's hash. This is a listing, not a
+   backup: it holds no trace data.
+   - The helper runs as root, with `set -e`, and writes to temporary files inside its container
+     instead of piping one command into the next.
+   - So a failed `find`, `sha256sum` or `sort` ends it with an error, and it prints no partial
+     listing as if it were complete.
+   - The listing goes to `before.partial`, which becomes `before.txt` only when the helper
+     succeeded.
+
+   ```bash
+   dir=$HOME/nimuairy-backups/tempo-data-migration-$(date -u +%Y%m%dT%H%M%SZ)
+   mkdir -p "$dir"
+   listing() {
+     docker run --rm --network none --user 0:0 -v "$vol:/var/tempo:ro" --entrypoint sh "$img" -c '
+       set -e
+       cd /var/tempo
+       find . -printf "%U:%G %m %s %y %p\n" > /tmp/entries
+       find . -type f -exec sha256sum {} + > /tmp/hashes
+       LC_ALL=C sort -k5 /tmp/entries
+       LC_ALL=C sort -k2 /tmp/hashes'
+   }
+   listing > "$dir/before.partial" && mv "$dir/before.partial" "$dir/before.txt" && echo "before.txt complete"
+   ```
+
+   Stop if it does not print `before.txt complete`, and change no owner.
+
+3. **Change the owners**, with a throwaway root container:
+
+   ```bash
+   docker run --rm --network none --user 0:0 --entrypoint chown -v "$vol:/var/tempo" "$img" -R 10001:10001 /var/tempo
+   ```
+
+4. **Check the result.**
+   - The check above prints only `check complete`.
+   - A new, complete listing equals the one from step 2 without the owners: the same paths, modes,
+     sizes and hashes.
+   - Each command runs only if the one before succeeded, and a missing listing file fails the
+     `sed`. So the last line appears only when both listings are complete and equal.
+
+   ```bash
+   listing > "$dir/after.partial" && mv "$dir/after.partial" "$dir/after.txt" &&
+     sed -E 's/^[0-9]+:[0-9]+ //' "$dir/before.txt" > "$dir/before-without-owners.txt" &&
+     sed -E 's/^[0-9]+:[0-9]+ //' "$dir/after.txt" > "$dir/after-without-owners.txt" &&
+     diff "$dir/before-without-owners.txt" "$dir/after-without-owners.txt" &&
+     echo "same paths, modes, sizes and hashes"
+   ```
+
+5. **Start the stack**, which recreates Tempo as 10001:
+
+   ```bash
+   docker compose -f observability/compose.yaml up -d --wait
+   ```
+
+   Then run `bash scripts/observability-smoke-test.sh`. It checks Tempo's user, that Tempo writes
+   its storage, that every entry belongs to it and every directory can be traversed as 10001, and
+   that it logged no `permission denied` (T-1 to T-5, [Verify](#verify-1)).
+
+**Rehearsed in S4b.3.** Two separate checks cover the steps above.
+- **The migration** ran on a scratch volume, in a separate Docker engine (Docker-in-Docker):
+  - a root Tempo had written the volume under load: 34 directories `0:0` with mode `0700`, and
+    380 files `0:0`;
+  - after the `chown` of step 3, all 415 entries belonged to `10001:10001`, with the same paths,
+    modes, sizes and hashes as before;
+  - Tempo then started as 10001, reloaded its blocks and wrote new ones, and the smoke test
+    passed.
+- **The snapshot commands** of steps 2 and 4 were tightened after that run: the helpers as
+  `--user 0:0`, `set -e` with temporary files, the `.partial` files, the chained comparison.
+  - Their logic was checked separately, on a local scratch directory without Docker. A complete
+    listing was saved, and an unchanged directory compared equal.
+  - It was also checked with failures. A changed file, a failing `find` or `sha256sum`, a missing
+    directory and a missing listing each stopped the steps without `before.txt complete` or
+    `same paths, modes, sizes and hashes`.
+  - The commands in their current form have not been run in the Docker engine again.
+
+**Rollback.**
+- Revert the `user` line in `observability/compose.yaml`, then
+  `docker compose -f observability/compose.yaml up -d --wait`. No chown back is needed: root with
+  Docker's default capabilities reads and writes files of any owner.
+- A root Tempo writes its files as `root` again, so a later return to 10001 needs the migration
+  again. The smoke test reports such files.
+- There is no backup to restore (B6). A volume damaged in some other way can only be recreated
+  empty, and its local traces are lost.
 
 ### What the overlay sets
 
@@ -932,6 +1094,33 @@ What it checks:
   - A refusal is Alloy's when it comes from Alloy's address without a `smoke=` parameter, so the
     test's own refusals from that address never count.
   - Requests Alloy made before the run, such as its first `HEAD /_ping`, are not covered.
+- **Tempo's user and storage** (T-1 to T-5 in
+  [S4b_DESIGN_CONTRACT.md](S4b_DESIGN_CONTRACT.md#75-tests)). Tempo's image has no shell, so
+  short-lived probes of the Prometheus image read its process and its volume, without a network or
+  capabilities.
+  - **T-1**: Tempo is configured as `10001:10001` (`docker inspect`).
+  - **T-2**: its PID 1 runs as 10001, in all four `Uid` and all four `Gid` fields of
+    `/proc/1/status`. A probe in Tempo's PID namespace, running as `nobody`, reads them. The
+    supplementary groups are only `info`.
+  - **T-3**: after Tempo accepted the probe trace, new data appears in the live store's WAL,
+    `/var/tempo/live-store/traces`: a new file, or new content.
+    - The probe compares SHA-256 listings with one taken just before the trace.
+    - An idle Tempo 3.1 writes nothing there, and a trace reaches it some 10 s after its request.
+      The check waits up to 60 s.
+    - Where the backend sends traces too, the new data need not be the probe's. The check shows
+      that Tempo writes its storage as 10001, not which trace it wrote.
+  - **T-4**: every entry of Tempo's volume belongs to `10001:10001`, and 10001 can traverse the
+    whole volume.
+    - The probe mounts the volume read-only and runs as 10001 without capabilities. It fails on an
+      entry with another owner or group, and on a directory 10001 cannot list or enter.
+    - It reads no file's content, so it does not check that each file is readable.
+    - It takes the volume from the container's mount and uses it only if `docker volume inspect`
+      finds it.
+  - **T-5**: Tempo logged no `permission denied` since the container's current start (its
+    `StartedAt`, on the daemon's clock).
+  - A probe that does not run, an incomplete listing or a failed `docker logs` fails its check.
+  - On a volume a root Tempo wrote, Tempo never becomes ready, and T-4 and T-5 fail
+    ([Tempo volumes written by root](#tempo-volumes-written-by-root)).
 
 The test starts and changes nothing but its own probe containers. It removes them when it exits,
 including when it is interrupted, and checks that only Alloy and the proxy are left on
@@ -1119,6 +1308,18 @@ collected since the last scrape, so Prometheus never stores them
   - Update `observability/compose.yaml`, the script and this document together.
   - If the UID changes, existing volumes need the
     [migration](#alloy-volumes-written-by-root) again, with the new UID.
+- **Tempo's user and storage**: `observability/compose.yaml` pins Tempo's user to `10001:10001`, the
+  image's own user.
+  - A new image could change:
+    - the `tempo` user's UID;
+    - the owner of `/var/tempo`;
+    - where Tempo writes an accepted trace first. The smoke test's T-3 reads the live store's WAL,
+      `/var/tempo/live-store/traces`.
+  - The smoke test pins the user and checks the storage, so CI fails on such a bump. Without the pin,
+    CI's fresh volume would be seeded for the new UID and pass, while existing volumes broke.
+  - Update `observability/compose.yaml`, the script and this document together.
+  - If the UID changes, existing volumes need the
+    [migration](#tempo-volumes-written-by-root) again, with the new UID.
 - **Prometheus scrape config**: after editing `observability/prometheus/prometheus.yml`, run
   `docker compose -f observability/compose.yaml restart prometheus`. Prometheus has no HTTP reload
   here: the stack runs it without `--web.enable-lifecycle`, so its reload endpoint answers `403`.
