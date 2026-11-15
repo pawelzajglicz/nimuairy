@@ -1053,7 +1053,7 @@ What it checks:
 **What the runtime modes need**:
 - **No `jq`.**
   - `runtime` needs `bash`, `docker`, `curl` and coreutils' `timeout` and `od`.
-  - `seed` and `verify` also need `date`, `sleep`, `mv` and `rm`.
+  - `seed` and `verify` need `bash`, `docker`, `curl`, `od`, `date`, `sleep`, `mv` and `rm`.
 - **The Grafana login** is `GRAFANA_AUTH` (`user:password`), as CI exports it. Otherwise it is
   `admin` with the content of the secret file next to the base file,
   `observability/secrets/grafana_admin_password`.
@@ -1460,15 +1460,26 @@ collected since the last scrape, so Prometheus never stores them
 - With the agent attached, the JVM prints one plain-text line on stderr (`Sharing is only
   supported for boot loader classes…`). In Loki it is in the `logstream="stderr"` stream; add
   `| __error__=""` after `| json` to hide lines that are not JSON.
-- The stack is for local development only. Only the socket proxy mounts the Docker socket, but
-  through it Alloy can still read the environment and logs of every container
-  ([Docker API access](#docker-api-access)). Alloy ships the logs of the labelled containers,
-  including nginx access logs with client IPs. Server spans record `client.address` and
-  `user_agent.original`. Grafana uses `admin`/`admin` in development (the production overlay reads
-  its password from a secret file instead, [Resource limits](#resource-limits)), and the other
-  services publish their ports on `127.0.0.1`. Running it on the VPS needs further hardening, which
-  later stages add. The resource limits of the production overlay are one part of it
-  ([Resource limits](#resource-limits)).
+- The base Compose file is the development configuration: Grafana uses `admin`/`admin`, and every
+  service publishes its ports on `127.0.0.1`. For the VPS, the repository has the production
+  overlay ([Resource limits](#resource-limits)). With it:
+  - only Grafana is published, on `127.0.0.1:3000`, and the other services' host ports are removed;
+  - Grafana reads its admin password from the secret file;
+  - Tempo runs as `10001:10001`, which the base file sets, so development and CI run it that way
+    too.
+
+  CI's `observability` job checks these settings on the exact production files. They have not been
+  deployed on the VPS: the first production run belongs to S6. They do not cover everything the
+  host needs:
+  - the port reset is no access boundary: a process on the VPS host can still reach a container's
+    address
+    ([S4b contract, §4.4](S4b_DESIGN_CONTRACT.md#44-what-the-port-policy-protects-and-what-it-does-not));
+  - only the socket proxy mounts the Docker socket, but through it Alloy can still read the
+    environment and logs of every container ([Docker API access](#docker-api-access));
+  - Alloy ships the logs of the labelled containers, including nginx access logs with client IPs,
+    and server spans record `client.address` and `user_agent.original`;
+  - capability drops and `no-new-privileges` for Tempo, Prometheus, Loki and Grafana are deferred
+    ([DEFERRED_WORK](DEFERRED_WORK.md#s4b--capability-drops-and-no-new-privileges-for-tempo-prometheus-loki-and-grafana)).
 
 ## Stage 3: from a metric to its trace (exemplars)
 

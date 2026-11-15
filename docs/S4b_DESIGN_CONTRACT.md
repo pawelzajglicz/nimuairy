@@ -1,11 +1,17 @@
 # S4b Design Contract — Production hardening of the observability stack
 
-**Status, 2026-11-14: decisions accepted, nothing implemented.**
-- The operator accepted decisions B1 to B11 on 2026-11-14 (§13.1). No operator decision is open
-  (§13.2).
-- The unverified technical assumptions of §12.1 remain. The implementation steps resolve them.
-- This document records the analysis, the design and those decisions.
-- Each implementation step (§9) still starts only with the operator's approval.
+**Status, 2026-11-15: S4b.1 to S4b.4 implemented and merged (#119 to #122). S4b.5 closes S4b in
+the repository.**
+- S4b.5 is a documentation close-out (§9). It records the results (§10) and the resolved
+  assumptions (§12.1), and changes no implementation.
+- S4b changed nothing on the VPS, and nothing was deployed there. The first production use belongs
+  to S6, which needs its own approval (§12.3).
+- B7 stays deferred (§7.6).
+- **N8 was not run** (§8.7). Its result stays unverified, and it does not count as passed. The
+  operator accepted closing S4b in the repository without it (§9, §10).
+- The decisions B1 to B11 (§13.1) are unchanged. The assumptions that §12.1 still lists as
+  unverified stay open: U1 for a Linux engine, U3, U7 to U10 and U12.
+- This document records the analysis, the design, those decisions and the results.
 
 Revisions:
 - **1** (2026-11-14): the draft for review, with B1 to B10 open.
@@ -33,6 +39,21 @@ Revisions:
   - the guard now also requires a regular file (`-f`), and N3 no longer expects the engine to refuse
     a missing path (§6.3, §8.7, U1);
   - P-S5 also pins the development credentials `admin`/`admin` (§8.4).
+- **6** (2026-11-15), S4b.5: the close-out after S4b.1 to S4b.4 (#119 to #122):
+  - the status above, and S4b.1 to S4b.4 in §2.1;
+  - §10's checklist, from the PRs' reports and their CI runs: #340 (S4b.1), #342 (S4b.2), #345
+    (S4b.3) and #348 (S4b.4, run 43713463685), each with a green `observability` job;
+  - §12.1, with §6.3, §7.3, B3 and §13.2 following it:
+    - U2, U4 and U6 confirmed;
+    - U5 resolved by N7;
+    - U11 and U13 confirmed by CI run #348;
+    - U3 not observed;
+    - U1 still unverified for a Linux engine;
+  - §9: N8 was not run, an omission the operator accepted. Its result stays unverified;
+  - the tools the runtime modes need, as the script checks them (§8.4, §9, §12.3, B8): `runtime`
+    needs `bash`, `docker`, `curl`, and coreutils' `timeout` and `od`. `seed` and `verify` need
+    `bash`, `docker`, `curl` and `od`, and also `date`, `sleep`, `mv` and `rm`;
+  - §12.3: each `prod-check runtime` run makes one failed `admin:admin` login.
 
 ## 1. Purpose and scope
 
@@ -71,6 +92,10 @@ Line numbers refer to `master` at `ebaa9fa`.
 | S4.3 | The VPS resource budget | #114, 2026-11-11 |
 | S4.4.2 | The stack's resource limits in `observability/compose.prod.yaml` | #115, 2026-11-12 |
 | S4.4.3 | The app's resource limits in `compose.prod.yaml`, applied on the VPS by hand on 2026-11-12 and observed for about 35 h (S4.4.4) | #116, 2026-11-14 (`ebaa9fa`) |
+| S4b.1 | The production port policy: only Grafana's `127.0.0.1:3000` in the production render, the test overlay, `prod-check static` | #119, 2026-11-14 |
+| S4b.2 | Grafana's production password from a secret file, with the start guard | #120, 2026-11-14 |
+| S4b.3 | Tempo as `10001:10001` | #121, 2026-11-15 |
+| S4b.4 | `prod-check runtime`, `seed` and `verify`, and CI's phase B | #122, 2026-11-15 (`ff0139a`) |
 
 - **S4.4 is complete.** GitHub shows PR #116 merged at 2026-11-14T11:19:31Z [CI].
   - The release freeze of S4.4's rollout ended with that merge (B10).
@@ -488,10 +513,15 @@ grafana:
     [LOCAL];
   - `$$` escapes Compose's interpolation;
   - the candidate renders [LOCAL, Compose v5.6.1].
-- Still [UNVERIFIED] (U2, U3; tested by N3 and N4 on real containers in S4b.2):
-  - what the container actually receives;
-  - that each of these cases, the directory included, stops Grafana before `run.sh` runs;
-  - how `up --wait` reports a container that exits and is restarted under `unless-stopped`.
+- Verified by N3 and N4 on real containers in S4b.2 (#120) [LOCAL, Docker Desktop, isolated
+  projects]:
+  - the container's `Entrypoint` equals the guard as `prod-check static` pins it (U2);
+  - each of these cases, the directory included, stopped Grafana before `run.sh` ran: its log had
+    only the guard's `FATAL` lines, and no `grafana.db` was created;
+  - `up --wait` exited 1 after 7–8 s with `container … is unhealthy`, while `unless-stopped`
+    restarted Grafana in a loop (U2);
+  - not observed: what `run.sh` does with an unreadable file, because the guard stopped Grafana
+    first (U3).
 - **A render is no evidence that the guard works.** `docker compose config` only shows that Compose
   accepts the text. Only N3 and N4 show the behaviour.
 - The cost: the overlay depends on the image's `/run.sh` and `/bin/bash`. If an image update moves
@@ -626,12 +656,16 @@ machine is one of them (§7.1).
 
 | Volume | Owner today | Needed | Expected |
 |---|---|---|---|
-| CI, new on every run | — | Seeded as `10001:10001` from the image | Works without a migration [S]. S4b.3's CI run confirms it first (U4) |
+| CI, new on every run | — | Seeded as `10001:10001` from the image | Works without a migration [S]. Confirmed by S4b.3's CI run #345 (U4) |
 | VPS (S6) | None is expected: the stack has never run there. P0 left existing `nimuairy-observability` volumes unconfirmed [PLAN] | S6 lists the volumes before its first `up`. A `tempo-data` volume written by root would be unexpected and would need a migration. S6 decides how: B6, the migration without a backup, covers development volumes only | No migration |
 | Development, created before the change | Root directory `10001:10001`, content `0:0` [LOCAL, on this machine] | A one-time migration (§7.4) before the first `up` with the new configuration | Required |
 
-What Tempo 3.1 does as 10001 on a volume written by root is [UNVERIFIED] (U5). It could fail at
-start, or later, when it flushes or compacts blocks. N7 observes it on a scratch volume.
+What Tempo 3.1 does as 10001 on a volume written by root (U5) was observed by N7, on a scratch
+volume in an isolated engine (S4b.3, #121):
+- Tempo exits at start with `failed to create store: mkdir /var/tempo/wal/blocks: permission
+  denied`, and loops under the restart policy;
+- `up -d --wait` still exits 0, because Tempo has no health check;
+- the smoke test fails.
 
 ### 7.4 Migrating a development volume (outline for OBSERVABILITY.md, S4b.3)
 
@@ -824,8 +858,8 @@ Four modes:
 | Mode | Where | Needs |
 |---|---|---|
 | `static` | CI, local | `jq`, as the limits check does |
-| `runtime` | CI phase B only, after the recreate (§8.3, step 8); the VPS in S6 (B8) | `bash`, `docker` and `curl` only. No `jq`: the VPS is not assumed to have it |
-| `seed`, `verify` | CI only | as `runtime` |
+| `runtime` | CI phase B only, after the recreate (§8.3, step 8); the VPS in S6 (B8) | `bash`, `docker`, `curl`, and coreutils' `timeout` and `od`. No `jq`: the VPS is not assumed to have it |
+| `seed`, `verify` | CI only | `bash`, `docker`, `curl` and `od`, and also `date`, `sleep`, `mv` and `rm`. No `jq` |
 
 **How the port checks compare.**
 - They compare sets, never a count.
@@ -1137,8 +1171,8 @@ Rules for every step:
 
 - **Goal**: SG4, on the exact production files.
 - **Scope**:
-  - `prod-check runtime`, `seed` and `verify`; `runtime` needs only `bash`, `docker` and `curl`
-    (B8);
+  - `prod-check runtime`, `seed` and `verify`, none of which needs `jq` (B8). `runtime` needs
+    `bash`, `docker`, `curl`, and coreutils' `timeout` and `od` (§8.4);
   - CI's phase B: the recreate, `prod-check runtime`, a second `limits-check runtime`, and
     `prod-check verify` (§8.3);
   - the probe filter of "No probe containers left";
@@ -1156,8 +1190,11 @@ Rules for every step:
     - `limits-check runtime` passes on the recreated containers;
     - P-V1: the seeded trace can be read (U13), Tempo's storage belongs to 10001, and the password
       still works;
-  - N8 fails as expected;
-  - the job stays within 10 min.
+  - **N8 was not run.**
+    - It needs an isolated engine and a separate consent for a runtime test (§8.7).
+    - The operator accepted closing S4b without it.
+    - Its result stays unverified, and it must not be reported as passed;
+  - the job stays within 10 min: 3 min 35 s in CI run #348.
 - **Out of scope**: running the check on the VPS. That belongs to S6 (B8) and needs separate
   consent there.
 
@@ -1177,14 +1214,20 @@ Rules for every step:
 
 ## 10. Testing and acceptance criteria
 
-- [ ] P-S1 to P-S3, comparing exact sets (§5.1):
+Status after S4b.4 (revision 6): every criterion is met except N8, which was not run. Each item
+names its evidence: the step's PR report and, where CI ran the check, the CI run, whose
+`observability` job passed.
+
+- [x] P-S1 to P-S3, comparing exact sets (§5.1):
   - the production render has exactly `{grafana 127.0.0.1:3000->3000/tcp}`;
   - the base render has exactly the seven development mappings;
   - the test render has exactly the six test-run mappings.
-- [ ] P-S6: no render uses `network_mode: host`.
-- [ ] `limits-check static`, B11: its allowlist admits exactly the keys of §8.6, each only where
-      listed. Any other overlay change still fails it.
-- [ ] P-S4 and P-S5:
+  - Evidence: S4b.1, #119, CI run #340.
+- [x] P-S6: no render uses `network_mode: host`. Evidence: #119, CI run #340.
+- [x] `limits-check static`, B11: its allowlist admits exactly the keys of §8.6, each only where
+      listed. Any other overlay change still fails it. Evidence: `ports` in #119 (CI run #340);
+      Grafana's keys and the top-level `secrets` in #120 (CI run #342).
+- [x] P-S4 and P-S5:
   - Grafana's `environment` in the production render equals the base render's, with exactly two
     differences: `GF_SECURITY_ADMIN_PASSWORD` removed, and
     `GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password` added;
@@ -1192,14 +1235,23 @@ Rules for every step:
   - its `secrets` and the top-level `secrets` hold exactly the one secret, and its `entrypoint` is
     the start guard;
   - the base render has neither a secret nor the guard, and keeps `admin`/`admin`.
-- [ ] N3 and N4 on real containers: Grafana does not start when its password file is missing, not
+  - Evidence: S4b.2, #120, CI run #342.
+- [x] N3 and N4 on real containers: Grafana does not start when its password file is missing, not
       a regular file (a directory at its path included), unreadable, empty or `admin`. A render
-      alone does not count.
-- [ ] T-1 to T-5: Tempo is configured as, and runs as, `10001:10001`. Its storage belongs entirely
-      to `10001:10001`, was written during the run, and shows no permission error.
-- [ ] A one-time run sees a block flushed and compacted as 10001.
-- [ ] The migration of §7.4 rehearsed on a scratch volume, and its result checked.
-- [ ] Phase B, after the recreate on exactly `compose.yaml` + `compose.prod.yaml`, passes:
+      alone does not count. Evidence: #120, all five cases in isolated projects on Docker Desktop
+      (§6.3).
+- [x] T-1 to T-5: Tempo is configured as, and runs as, `10001:10001`. Its storage belongs entirely
+      to `10001:10001`, was written during the run, and shows no permission error. Evidence:
+      S4b.3, #121, CI run #345, on a fresh volume (U4).
+- [x] A one-time run sees a block flushed and compacted as 10001. Evidence: #121, in an isolated
+      engine (U6).
+- [x] The migration of §7.4 rehearsed on a scratch volume, and its result checked. Evidence: #121.
+  - After the `chown`, every entry was `10001:10001`, with the content unchanged, and Tempo then
+    ran as 10001.
+  - The operator's development volume was not migrated.
+  - The documented snapshot commands were tightened after the rehearsal. Their final form was not
+    rerun in a Docker engine (#121).
+- [x] Phase B, after the recreate on exactly `compose.yaml` + `compose.prod.yaml`, passes:
   - P-R1 to P-R4:
     - the bindings, exactly P-S1's set, and the connections;
     - Grafana's `Config.Env`;
@@ -1210,16 +1262,33 @@ Rules for every step:
     - the datasources answer `OK`;
     - the seeded trace survives the recreate;
     - Tempo's storage still belongs to 10001.
-- [ ] The existing checks still pass in phase A, with the same substance:
+  - Evidence: S4b.4, #122, CI run #348 (43713463685). The seed before the recreate and the cleanup
+    after it passed too: no probe container was left, and the socket proxy was healthy again.
+- [x] The existing checks still pass in phase A, with the same substance:
   - the smoke test: the exemplar link, the network and Docker API boundaries, log continuity,
     Alloy;
   - the outage check;
   - `limits-check static` and `runtime`.
-- [ ] N1 to N9 each failed as expected, reported once.
-- [ ] Unchanged: the resource keys, the networks, the proxy's command and allowlist, and the app's
-      files.
-- [ ] No secret file is tracked, and `.gitignore` covers `observability/secrets/`.
-- [ ] Each step updated the documents its change made stale.
+  - Evidence: CI runs #340, #342, #345 and #348.
+- [x] N1 to N7 and N9 each failed as expected, reported once:
+  - N1, N2, and N9 (a) with `ports` on `docker-socket-proxy`: #119;
+  - N3, N4, N5, N9 (a) with `environment` on `tempo`, and N9 (b): #120;
+  - N6 and N7: #121.
+- [ ] **N8: not run, an accepted omission.** It was not run, so it is not a passed test, and its
+      result stays unverified. The operator accepted this exception when closing S4b (§9).
+- [x] Unchanged: the resource keys, the networks, the proxy's command and allowlist, and the app's
+      files. Evidence: `git diff 307f98c ff0139a`, from before S4b.1 to after S4b.4:
+  - the production overlay only gained keys;
+  - `observability/compose.yaml` changed only Tempo's `user`;
+  - no app file changed.
+- [x] No secret file is tracked, and `.gitignore` covers `observability/secrets/`. Evidence:
+      `git ls-files observability/secrets` is empty, and `git check-ignore` matches
+      `.gitignore:20`.
+- [x] Each step updated the documents its change made stale. Evidence:
+  - #119 to #122 each changed `docs/OBSERVABILITY.md`;
+  - #120 changed this contract too (revision 5), and #121 changed `docs/DEFERRED_WORK.md`;
+  - S4b.5 changed this contract's status and checklist, and OBSERVABILITY.md's known-limits
+    bullet.
 
 ## 11. Migration and rollback
 
@@ -1248,21 +1317,27 @@ Rules for every step:
 
 ### 12.1 Unverified assumptions
 
+Revision 6 changes the status of these assumptions:
+- confirmed: U2, U4, U6, U11 and U13;
+- resolved: U5;
+- not observed: U3;
+- still unverified: U1 for a Linux engine, and U7 to U10 and U12, which belong to S6.
+
 | # | Assumption | Resolved by |
 |---|---|---|
 | U1 | The engine refuses a bind source that does not exist for a file secret (Mount API) | N3, S4b.2: **refuted for Docker Desktop**, which creates a directory at the path (§6.1). Unverified for a Linux engine; the guard does not depend on it (§6.3) |
-| U2 | The guard's text reaches the container as written (the `$$` escapes), and `up --wait` fails clearly when Grafana exits under `unless-stopped` | N4, S4b.2 |
-| U3 | An unreadable secret file leaves the password empty (bash's `export` semantics) | N4 |
-| U4 | A new volume is seeded as `10001:10001` for Tempo | S4b.3's CI run |
-| U5 | How Tempo behaves as 10001 on a volume root wrote | N7 |
-| U6 | Tempo 3.1 flushes and compacts blocks as 10001 | S4b.3's one-time run |
+| U2 | The guard's text reaches the container as written (the `$$` escapes), and `up --wait` fails clearly when Grafana exits under `unless-stopped` | N3 and N4, S4b.2: **confirmed** (#120). The container's `Entrypoint` equals the pinned guard, every case stopped Grafana before `run.sh`, and `up --wait` exited 1 with `container … is unhealthy` while `unless-stopped` restarted Grafana in a loop (§6.3) |
+| U3 | An unreadable secret file leaves the password empty (bash's `export` semantics) | N4, S4b.2: **not observed**, so still unverified. The guard rejected the unreadable file before `run.sh` ran (#120). So nobody saw how `run.sh` reads such a file, or whether the password would have been empty. The guard does not depend on it |
+| U4 | A new volume is seeded as `10001:10001` for Tempo | S4b.3: **confirmed** by CI run #345 (#121) |
+| U5 | How Tempo behaves as 10001 on a volume root wrote | N7, S4b.3: **resolved** (#121). Tempo exits at start with `mkdir /var/tempo/wal/blocks: permission denied` (§7.3) |
+| U6 | Tempo 3.1 flushes and compacts blocks as 10001 | S4b.3's one-time run: **confirmed** (#121), in an isolated engine |
 | U7 | Compose 5.6.0 on the VPS applies `!reset` as 5.6.1 does locally | S6 renders before `up` |
 | U8 | The VPS host has no untrusted users or services (§4.4) | The operator, at S6 |
 | U9 | The LXC container maps UIDs 10001, 472 and 473 in a way that works. PR #112 left Alloy's 473 to S6 | S6 |
 | U10 | The extraction on the VPS leaves the configuration files readable by every user (umask), as the non-root services need | S6 |
-| U11 | Grafana 13's Tempo datasource proxy serves `/api/v2/traces/<id>` | S4b.4; otherwise `docker exec prometheus wget` |
+| U11 | Grafana 13's Tempo datasource proxy serves `/api/v2/traces/<id>` | S4b.4: **confirmed** by CI run #348 (#122). `seed` read the trace back through Grafana's Tempo datasource proxy (`/api/datasources/proxy/uid/tempo`), so the fallback, `docker exec prometheus wget`, was not needed |
 | U12 | Whether the VPS has a public IPv6 address | S6 |
-| U13 | Tempo 3.1 still serves a trace accepted shortly before a recreate (WAL replay) | S4b.4 |
+| U13 | Tempo 3.1 still serves a trace accepted shortly before a recreate (WAL replay) | S4b.4: **confirmed** by CI run #348 (#122). The trace seeded before the recreate could be read after it, on containers recreated from exactly `compose.yaml` + `compose.prod.yaml` |
 
 ### 12.2 Risks
 
@@ -1298,8 +1373,11 @@ S6 needs these, besides its own design:
 - **a render on the VPS's Compose 5.6.0, before the first `up`**, that shows exactly P-S1's set
   (U7);
 - **`observability-prod-check.sh runtime` on the VPS**, accepted as part of S6's procedure (B8):
-  - it uses only `bash`, `docker` and `curl`; `jq` is not assumed (S4.4 found it not guaranteed);
+  - it needs `bash`, `docker`, `curl`, and coreutils' `timeout` and `od`; `jq` is not assumed
+    (S4.4 found it not guaranteed);
   - running it there still needs the operator's consent within S6;
+  - each run makes one failed `admin:admin` login (P-R4). Grafana limits failed logins per user,
+    so S6 runs the check deliberately, and does not repeat it without need;
   - S6 also checks the stack's limits read-only, like
     [S4.4 §10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only);
 - **answers to U8 to U10 and U12**:
@@ -1325,12 +1403,12 @@ collects logs on the VPS.
 |---|---|---|---|
 | B1 | How CI runs the tests once production publishes no test ports | **A2**, in the existing `observability` job, with no second job. Phase A: the base file + the production overlay + `compose.test.yaml`, for the tests that need host ports, and the seed of a known trace. Phase B: a recreate on exactly `compose.yaml` + `compose.prod.yaml`, then `prod-check runtime`, `limits-check runtime` again on the recreated containers, and `prod-check verify` | §8.3 |
 | B2 | The mechanism for the Grafana secret | **G-A**: a file outside the repository, read through `GF_SECURITY_ADMIN_PASSWORD__FILE`. The production overlay removes the inherited `admin` with `!reset null`. `.gitignore` excludes `observability/secrets/`, and CI generates a disposable password per run. Its limitations are in §6.7 | §6.2, §6.4, §6.5, §6.7 |
-| B3 | A password file that is missing, not a regular file, unreadable, empty or `admin` | **The start guard**: Grafana does not start. Detection after the start is not enough. Amended in revision 5: the guard also requires a regular file, because Docker Desktop mounts a directory in place of a missing file. Its behaviour in a real container, and how `up --wait` reports it, are still to be verified (U1 to U3) | §6.3 |
+| B3 | A password file that is missing, not a regular file, unreadable, empty or `admin` | **The start guard**: Grafana does not start. Detection after the start is not enough. Amended in revision 5: the guard also requires a regular file, because Docker Desktop mounts a directory in place of a missing file. N3 and N4 in S4b.2 verified its behaviour on real containers, and how `up --wait` reports it (#120, U2). U1 for a Linux engine and U3 stay unverified, and the guard depends on neither | §6.3 |
 | B4 | Where Tempo's user is set | **The base file**, `observability/compose.yaml`: development, CI and production run the same identity | §7.2 |
 | B5 | How Tempo's user is set | **Explicitly**: `user: "10001:10001"`, so CI detects a change of the image's UID | §7.2 |
 | B6 | Migrating an existing development volume | **A one-time, manual `chown`, without a backup**. It covers development volumes only. It does not change the decision to take no regular backups of telemetry data in production | §7.4 |
 | B7 | `cap_drop: [ALL]` and `no-new-privileges` for Tempo, Prometheus, Loki and Grafana | **Deferred**. Not implemented in S4b | §7.6; [DEFERRED_WORK](DEFERRED_WORK.md#s4b--capability-drops-and-no-new-privileges-for-tempo-prometheus-loki-and-grafana) |
-| B8 | `prod-check runtime` on the VPS | **Part of S6's procedure**. It needs only `bash`, `docker` and `curl`, with no `jq`. Running it needs separate consent within S6. This is not consent to run anything on the VPS now | §8.4, §12.3 |
+| B8 | `prod-check runtime` on the VPS | **Part of S6's procedure**. It needs `bash`, `docker`, `curl`, and coreutils' `timeout` and `od`, with no `jq`. Running it needs separate consent within S6. This is not consent to run anything on the VPS now | §8.4, §12.3 |
 | B9 | The test overlay's name | **`observability/compose.test.yaml`** | §8.2 |
 | B10 | Closing S4.4 | **A separate documentation change in `docs/S4.4_DESIGN_CONTRACT.md`, ready before S4b.1.** The release freeze ended with the merge of PR #116 on 2026-11-14 | §2.1, §9 |
 | B11 | How the limits check treats the S4b keys of the production overlay | **L1**: `observability-limits-check.sh static` keeps its strict allowlist, which says which keys may change. The allowlist gains only these: `ports` on `prometheus`, `loki`, `tempo` and `alloy` (S4b.1); `environment`, `secrets` and `entrypoint` on `grafana`, and the top-level `secrets` (S4b.2). It admits these keys nowhere else, and admits no other key. `observability-prod-check.sh static` verifies these keys' exact values and the required properties (P-S1, P-S4). L2, moving the rule into the production check, was rejected | §8.6 |
@@ -1339,12 +1417,15 @@ collects logs on the VPS.
 
 B1 to B11 are all accepted (§13.1).
 
-§12.1 lists the unverified technical assumptions U1 to U13. They are a separate kind:
-- they are not operator decisions;
-- they have not been verified;
-- the tests of the implementation steps verify them.
+§12.1 lists the technical assumptions U1 to U13. They are a separate kind: they are not operator
+decisions, and the tests of the implementation steps were to verify them. After S4b.4 (revision 6):
+- confirmed: U2, U4 and U6 (S4b.2, S4b.3), U11 and U13 (S4b.4);
+- resolved: U5, by N7, which recorded Tempo's behaviour;
+- not observed, so still unverified: U3, because the guard stopped Grafana first;
+- still unverified: U1 for a Linux engine (refuted for Docker Desktop), and U7 to U10 and U12,
+  which belong to S6.
 
-None of them needs an operator decision before S4b.1.
+None of them needed an operator decision before S4b.1.
 
 ## 14. Out of scope
 
