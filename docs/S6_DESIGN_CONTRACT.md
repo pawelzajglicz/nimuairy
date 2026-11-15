@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-15: draft for review (revision 2). Nothing in it has been run on the VPS.**
+**Status, 2026-11-15: draft for review (revision 3). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -28,6 +28,22 @@ Revisions:
     operator reviews and what counts as PASS, INCONCLUSIVE and STOP (§6, §8);
   - V11 compares the real, effective, saved and file-system IDs, and the supplementary groups
     (§10.1).
+- **3** (2026-11-15), the second review of PR #129:
+  - an executable order without a circular dependency: G1 to G10 and G12 pass, D3 and D4 are
+    decided, C5 is given, the sampler starts, G11 completes with it running, then G13 (§4.1);
+  - the pull and the first `up` have separate consents, C3a and C3b. G13 is evaluated twice:
+    G13a before the pull, and G13b after it, on samples that include the pull and on the pull's own
+    memory stall (R-p). C3b is given only after G13b passes, and lapses if the `up` does not follow
+    within 15 min (§4, §8, §9);
+  - G6's inventory shows every queued `at` job's script, every SSH key by its fingerprint with its
+    options, from the effective `AuthorizedKeysFile` per account, any `AuthorizedKeysCommand`,
+    principals or certificate authority, and the user-level services and timers of every user
+    manager. Each listing says whether its source is absent, empty or unreadable (§6, §8);
+  - the readout requires the exact expected entity set (`-v expect`); a missing, duplicated or
+    unexpected entity is INCONCLUSIVE. The readout wrapper checks the sampler before and after the
+    readout. The sampler refuses a container named twice (§10.3);
+  - P9 evaluates `sshd -T -C` with the session's real connection context, and lists the `Match`
+    and `Include` lines that the context may not represent (§6).
 
 ## 1. Purpose and scope
 
@@ -54,8 +70,8 @@ marks a conclusion that nothing has shown directly.
 |---|---|---|---|
 | S6.1 | Reads the VPS's current state | Nothing | C1 |
 | S6.2 | Creates the directory, delivers the archive, writes `observability/.env` and the Grafana secret | Files only | C2 |
-| S6.3 | Pre-start gates G1 to G13; G13 reads the pre-start sampler | The sampler and readout files and the sampler's log in `deploy`'s home | C5 for the sampler; the gates only read |
-| S6.4 | Pulls the six images, runs the first `up` | Images, networks, volumes, containers | C3 |
+| S6.3 | Pre-start gates G1 to G13, in the order of §4.1; G11 and G13 read the pre-start sampler | The sampler and readout files and the sampler's log in `deploy`'s home | C5 for the sampler; the gates only read |
+| S6.4 | Pulls the six images; after G13b, runs the first `up` | Images; then networks, volumes, containers | C3a for the pull, C3b for the `up` |
 | S6.5 | Verifies the stack; one run of the production check; an idle sampling window | The sampler's log; one failed Grafana login | C4, C5 |
 | S6.6 | Recovery | Only what each action names | Per action |
 | S6.7 | Documentation close-out | Nothing (repository only) | Normal review |
@@ -177,15 +193,16 @@ These are accepted and are not reopened here.
 
 - **Nothing in this contract authorizes a VPS operation.** That includes the read-only ones: the
   operator runs every VPS command, and the agent never connects to the VPS.
-- **The consents**, each given by the operator for that step, at that time:
+- **The consents**, each given by the operator for that step, at that time, in this order:
 
   | Consent | Covers | Requires first |
   |---|---|---|
   | C1 | The read-only preflight of S6.1 | This contract accepted |
   | C2 | Creating or changing files on the VPS in S6.2: `/var/nimuairy-observability`, the archive in `deploy`'s home, its extraction, `REVISION`, `observability/.env`, `observability/secrets/` | S6.1 recorded with no open STOP; D1 and D2 decided |
-  | C3 | The image `pull` and the **first `docker compose up`** (S6.4) | Every gate of S6.3, G1 to G13, passed and recorded; D3 and D4 decided; D7 decided if G9 asks for it |
+  | C5 | The sampling of §10.3: saving `~/s6-sampler.sh` and `~/s6-readout.awk` in `deploy`'s home, the readout's self-test, and running the sampler in the background, first before the start (G11, G13) and then for the window, with its logs in that home | G1 to G10 and G12 passed, with G9 resolved by D7 where G9 asked for it; D3 and D4 decided. C5 does not depend on G11 or G13: they depend on it |
+  | C3a | The image `pull` of S6.4, step 4, and nothing else | G11 passed; then, immediately before the pull, G1 to G3 repeated and G13a passed |
+  | C3b | The **first `docker compose up`** of S6.4, step 6 | The pull done with its readings, and G13b passed, R-p included. It is given only after G13b, for an `up` that starts within 15 min of G13b's reading; otherwise it lapses, and G13b runs again before a new C3b. Neither C3a nor any earlier statement stands in for it |
   | C4 | **One** run of `scripts/observability-prod-check.sh runtime` (V6) | V1 to V5 passed |
-  | C5 | The sampling of §10.3: saving `~/s6-sampler.sh` and `~/s6-readout.awk` in `deploy`'s home, the readout's self-test, and running the sampler in the background, first before the start (G11, G13) and then for the window, with its logs in that home | D3 decided; G1 to G12 passed. G13 needs the sampler, so C5 comes before C3 |
 
 - **Every recovery action that changes state** (§11) needs its own consent, even when this
   contract names it.
@@ -197,15 +214,43 @@ These are accepted and are not reopened here.
 - **S6 does not authorize S7.** It connects nothing to the stack and changes nothing in the
   application.
 - **Read-only checks** need no consent of their own, but they run only inside an S6 session that
-  the operator has started under C1, C2, C3 or C5.
+  the operator has started under C1, C2, C5, C3a or C3b.
+
+### 4.1 The order of S6
+
+Each step needs every step above it. No step needs a step below it, so the order has no cycle.
+
+| # | Step | Needs |
+|---|---|---|
+| 1 | C1, then the preflight P1 to P10 (S6.1) | This contract accepted |
+| 2 | D1 and D2 decided, C2, then the delivery and the host configuration (S6.2) | 1 |
+| 3 | G1 to G10 and G12 (S6.3), read-only; G9 resolved by D7 where it asks for it | 2 |
+| 4 | D3 and D4 decided, then C5 | 3 |
+| 5 | Save the sampler and the readout, run the self-test, take R0's first reading, start the pre-start sampler (§10.3) | 4 |
+| 6 | G11, with the sampler running: timing, the release freeze, the self-test's result | 5 |
+| 7 | At least 30 min of sampling, then G1 to G3 again and G13a | 6 |
+| 8 | C3a, then the pull with its pressure readings (S6.4, step 4) | 7 |
+| 9 | G13b, on the samples that include the pull and on the pull's own stall (S6.4, step 5) | 8 |
+| 10 | C3b, then the first `up` within 15 min of G13b, its readiness and its logs (S6.4, steps 6 to 8) | 9 |
+| 11 | V1 to V5; C4; V6; V7 to V16; R1; the window's sampler; R3 and R4 (S6.5) | 10 |
+| 12 | The close-out (S6.7), after S6.5's acceptance | 11 |
+
+A step that does not pass stops the order there. Its resolution is recorded before the order goes on,
+and a resolution that changes state needs its own consent (§11).
 
 ## 5. Conventions
 
 - **Who runs what.** The operator runs every VPS command and sends the output back for review. The
   agent writes no VPS command into a shell.
-- **P7's output is the exception.** Its account, key, sudoers, cron and service listings stay with
-  the operator, who reviews them on the VPS. Only G6's conclusion is shared, and an entry the
-  operator wants discussed is shared with its secrets, addresses and names removed.
+- **P7's and P9's output is the exception.** Their account, key, address, sudoers, cron, `at` and
+  service listings stay with the operator, who reviews them on the VPS. Only G6's conclusion and
+  P9's verdict are shared, and an entry the operator wants discussed is shared with its secrets,
+  addresses and names removed.
+- **The words of P7 and P9.** A line starting `absent:` says that the source does not exist, such
+  as an account without an authorized-keys file. `empty:` says that the source was read and holds
+  nothing. `UNREAD:` says that a command failed or a source could not be read, so nothing about it
+  is known. `REVIEW:` names something that the listing cannot show on its own, such as keys from an
+  `AuthorizedKeysCommand`.
 - **Block labels**, as in the guide's
   [Conventions](OBSERVABILITY_PRODUCTION.md#conventions): *VPS, read-only*; *VPS, changes files*;
   *VPS, changes runtime state*; *Local*. A block labelled *admin* runs as an administrative account
@@ -374,27 +419,144 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
 conclusion does.
 
-**P7a. Accounts and privileges. Admin, read-only:**
+**P7 helpers.** Two functions that P7a and P9 use. **Admin, read-only.** Define them again in each
+new shell:
 
 ```bash
+sudo -v
+# The connection context of this SSH session, for sshd -T -C (sshd(8)): addr and host are the
+# client's address and resolved name, laddr and lport the server's address and port.
+ssh_context() {
+  local caddr laddr lport cfg usedns name
+  ctx=
+  if [ -z "${SSH_CONNECTION-}" ]; then echo "UNREAD: SSH_CONNECTION is empty: not an SSH session"; return 1; fi
+  read -r caddr _ laddr lport <<<"$SSH_CONNECTION"
+  if ! cfg=$(sudo sshd -T 2>&1); then echo "UNREAD: sshd -T failed: $cfg"; return 1; fi
+  usedns=$(awk '$1 == "usedns" { print $2 }' <<<"$cfg")
+  name=$caddr
+  if [ "$usedns" = yes ]; then
+    name=$(getent hosts "$caddr" | awk '{ print $2; exit }')
+    name=${name:-$caddr}
+    echo "REVIEW: UseDNS yes: host=$name comes from getent; sshd also confirms the name forward, so a Match Host may see another name"
+  fi
+  ctx="host=$name,addr=$caddr,laddr=$laddr,lport=$lport"
+  echo "context: UseDNS ${usedns:-unknown}; $ctx"
+}
+# Every key that sshd accepts for account $1 (home $2, UID $3), from its effective configuration $4:
+# one "key:" line per key with its fingerprint and its forwarding options, never the key itself.
+# Returns 2 when no authorized-keys file exists.
+keys_of() {
+  local u=$1 h=$2 id=$3 cfg=$4 value p f content line fp opts n keys found=0 k v
+  local -a paths
+  for k in authorizedkeyscommand authorizedprincipalsfile authorizedprincipalscommand trustedusercakeys; do
+    v=$(awk -v k="$k" '$1 == k { $1 = ""; sub(/^ +/, ""); print }' <<<"$cfg")
+    if [ -n "$v" ] && [ "$v" != none ]; then echo "REVIEW: $u: $k $v: keys or certificates from it are not listed here"; fi
+  done
+  value=$(awk '$1 == "authorizedkeysfile" { $1 = ""; print }' <<<"$cfg")
+  read -ra paths <<<"$value"
+  for p in "${paths[@]}"; do
+    [ "$p" != none ] || continue
+    f=${p//%%/$'\001'}
+    f=${f//%h/$h}
+    f=${f//%u/$u}
+    f=${f//%U/$id}
+    f=${f//$'\001'/%}
+    case $f in /*) ;; *) f=$h/$f ;; esac
+    sudo test -e "$f" || continue
+    found=1
+    if ! content=$(sudo cat "$f" 2>&1); then echo "UNREAD: $u: $f: $content"; continue; fi
+    n=0
+    keys=0
+    while IFS= read -r line; do
+      n=$((n + 1))
+      if [[ $line =~ ^[[:space:]]*(#|$) ]]; then continue; fi
+      keys=$((keys + 1))
+      opts=$(grep -oE '(^|,)(restrict|no-port-forwarding|port-forwarding|permitopen="[^"]*"|from="[^"]*"|command="[^"]*")' <<<"$line" | tr -d '\n')
+      if fp=$(ssh-keygen -l -E sha256 -f - <<<"$line" 2>/dev/null); then
+        echo "key: $u $f:$n $fp${opts:+; options $opts}"
+      else
+        echo "UNREAD: $u $f:$n: not a key that ssh-keygen can read"
+      fi
+    done <<<"$content"
+    if [ "$keys" -eq 0 ]; then echo "empty: $u: $f holds no key"; fi
+  done
+  [ "$found" -eq 1 ] || return 2
+}
+```
+
+- **`ssh_context`** takes the session's connection from `SSH_CONNECTION`: the client's address and
+  port, then the server's address and port. `sshd -T -C` takes them as `addr`, `laddr` and `lport`,
+  and `host` as the client's resolved name ([P9](#p9-ssh-forwarding-for-the-copy-and-the-tunnel)).
+  With `UseDNS no`, OpenSSH's default, sshd uses the address in place of a name, so `host` is the
+  address. With `UseDNS yes` the name comes from `getent`, which may differ from sshd's own lookup:
+  `REVIEW`.
+- **`keys_of`** lists every key of the account's effective `AuthorizedKeysFile` paths, with `%h`,
+  `%u`, `%U` and `%%` expanded and relative paths taken under the home. Each key appears as its
+  SHA-256 fingerprint (`ssh-keygen -l`), with its file, line number and forwarding options, never as
+  the key itself. A line that `ssh-keygen` cannot read is `UNREAD`.
+- **Other sources of keys:** an `AuthorizedKeysCommand`, `AuthorizedPrincipalsFile`,
+  `AuthorizedPrincipalsCommand` or `TrustedUserCAKeys` other than `none` is `REVIEW`. The keys or
+  certificates it admits are not in the listing, so the operator reviews that source itself.
+
+**P7a. Accounts, privileges and keys. Admin, read-only:**
+
+```bash
+ssh_context
 getent passwd | awk -F: '$3 == 0 { print "uid 0:", $1 }'
 getent passwd | awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }'
-for g in sudo admin docker adm systemd-journal; do getent group "$g" || echo "no group $g"; done
-sudo passwd -S -a | awk '$2 == "P" { print "usable password:", $1 }'
-getent passwd | awk -F: '$7 !~ /(nologin|false|sync)$/ { print $1, $6 }' | while read -r u h; do
-  n=$(sudo grep -cvE '^[[:space:]]*(#|$)' "$h/.ssh/authorized_keys" 2>/dev/null)
-  echo "authorized_keys of $u: ${n:-no file} key line(s)"
-done
-sudo grep -rvhE '^[[:space:]]*(#|$)' /etc/sudoers /etc/sudoers.d
-last -n 20
+for g in sudo admin docker adm systemd-journal; do getent group "$g" || echo "absent: no group $g"; done
+if o=$(sudo passwd -S -a 2>&1); then
+  u=$(awk '$2 == "P" { printf "%s%s", sep, $1; sep = " " }' <<<"$o")
+  echo "usable password: ${u:-none}"
+else
+  echo "UNREAD: passwd -S -a failed: $o"
+fi
+absent=0
+if [ -n "$ctx" ]; then
+  while IFS=: read -r u _ id _ _ h _; do
+    if ! cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then echo "UNREAD: $u: sshd -T failed: $cfg"; continue; fi
+    keys_of "$u" "$h" "$id" "$cfg"
+    if [ $? -eq 2 ]; then absent=$((absent + 1)); fi
+  done < <(getent passwd)
+  echo "absent: $absent account(s) without an authorized-keys file"
+else
+  echo "UNREAD: no connection context, so no account's keys are listed"
+fi
+if o=$(sudo grep -rvhE '^[[:space:]]*(#|$)' /etc/sudoers /etc/sudoers.d 2>&1); then
+  printf '%s\n' "$o"
+elif [ $? -eq 1 ]; then
+  echo "empty: no sudo rule"
+else
+  echo "UNREAD: the sudo rules: $o"
+fi
+last -n 20 || echo "UNREAD: last failed"
 ```
+
+- **Every account's keys are listed, not only those with a login shell.** An account with
+  `nologin` can still authenticate, for example to forward a port with `ssh -N`.
+- **To compare the fingerprints** with the keys the operator trusts, **Local:**
+  `ssh-keygen -l -E sha256 -f <public key file>` for each of them: the operator's own keys, and the
+  public half of the key the deploy workflow uses. Every `key:` line must match one of them.
 
 **P7b. Scheduled work, with the commands it runs. Admin, read-only:**
 
 ```bash
-sudo grep -vHE '^[[:space:]]*(#|$)' /etc/crontab /etc/cron.d/*
+if o=$(sudo grep -vHE '^[[:space:]]*(#|$)' /etc/crontab /etc/cron.d/* 2>&1); then
+  printf '%s\n' "$o"
+elif [ $? -eq 1 ]; then
+  echo "empty: no line in /etc/crontab or /etc/cron.d"
+else
+  echo "UNREAD: /etc/crontab or /etc/cron.d: $o"
+fi
 for d in /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
-  echo "$d runs: $(run-parts --test "$d" | tr '\n' ' ')"
+  if [ ! -d "$d" ]; then
+    echo "absent: $d"
+  elif o=$(run-parts --test "$d" 2>&1); then
+    echo "$d runs: ${o:-nothing}" | tr '\n' ' '
+    echo
+  else
+    echo "UNREAD: $d: $o"
+  fi
 done
 for f in /etc/cron.d/* /etc/cron.hourly/* /etc/cron.daily/* /etc/cron.weekly/* /etc/cron.monthly/*; do
   [ -f "$f" ] || continue
@@ -403,44 +565,114 @@ for f in /etc/cron.d/* /etc/cron.hourly/* /etc/cron.daily/* /etc/cron.weekly/* /
     echo "$f: from package ${p%%:*}${m:+; MODIFIED: $m}"
   else
     echo "== $f: from no package. Its content:"
-    sudo cat "$f"
+    sudo cat "$f" || echo "UNREAD: $f"
   fi
 done
-sudo sh -c 'd=/var/spool/cron/crontabs; [ -d "$d" ] || { echo "no $d: no user crontabs"; exit 0; }; [ -r "$d" ] || { echo "STOP: cannot read $d"; exit 1; }; n=0; for f in "$d"/*; do [ -f "$f" ] || continue; n=$((n + 1)); echo "== crontab of ${f##*/}"; grep -vE "^[[:space:]]*(#|\$)" "$f"; done; echo "user crontabs: $n"'
-if command -v atq >/dev/null; then sudo atq; else echo 'at is not installed'; fi
+sudo sh -c 'd=/var/spool/cron/crontabs; [ -d "$d" ] || { echo "absent: $d: no user crontabs"; exit 0; }; [ -r "$d" ] || { echo "UNREAD: $d"; exit 1; }; n=0; for f in "$d"/*; do [ -f "$f" ] || continue; n=$((n + 1)); echo "== crontab of ${f##*/}"; grep -vE "^[[:space:]]*(#|\$)" "$f"; done; echo "user crontabs: $n"'
+if ! command -v atq >/dev/null; then
+  echo "absent: at is not installed, so no at job"
+elif ! q=$(sudo atq 2>&1); then
+  echo "UNREAD: atq failed: $q"
+elif [ -z "$q" ]; then
+  echo "empty: no queued at job"
+else
+  printf '%s\n' "$q"
+  while read -r id _; do
+    echo "== at job $id, the script it will run:"
+    sudo at -c "$id" || echo "UNREAD: at -c $id failed"
+  done <<<"$q"
+fi
 ```
 
-**P7c. Services and timers, with their definitions; listeners. VPS, read-only**, the last line as
-admin:
+- **`at -c <id>`** prints the script that the job will run, its environment included. It can hold
+  secrets, and stays with the operator.
+
+**P7c. Services, timers and user managers, with their definitions; listeners. Admin, read-only:**
 
 ```bash
+# Prints where unit $2 of the manager $1 comes from: its package, user and any modification; or, if it
+# does not come only from a package, its whole definition. $1 is "system", or a user's name.
 unit_review() {
-  local u=$1 f d p m
-  f=$(systemctl show -p FragmentPath --value "$u")
-  d=$(systemctl show -p DropInPaths --value "$u")
+  local m=$1 u=$2 f d p mod
+  local -a sc=(systemctl)
+  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  f=$("${sc[@]}" show -p FragmentPath --value "$u")
+  d=$("${sc[@]}" show -p DropInPaths --value "$u")
   p=
   if [ -n "$f" ]; then p=$(dpkg -S "$f" 2>/dev/null || dpkg -S "${f#/usr}" 2>/dev/null); fi
   if [ -n "$p" ] && [ -z "$d" ]; then
-    m=$(dpkg -V "${p%%:*}" 2>/dev/null | grep -F "${f#/usr}")
-    echo "$u: from package ${p%%:*} ($f), User=$(systemctl show -p User --value "$u")${m:+; MODIFIED: $m}"
+    mod=$(dpkg -V "${p%%:*}" 2>/dev/null | grep -F "${f#/usr}")
+    echo "$m $u: from package ${p%%:*} ($f), User=$("${sc[@]}" show -p User --value "$u")${mod:+; MODIFIED: $mod}"
   else
-    echo "== $u: not only from a package (${f:-no unit file}${d:+; drop-ins: $d}). Its definition:"
-    systemctl cat --no-pager "$u"
+    echo "== $m $u: not only from a package (${f:-no unit file}${d:+; drop-ins: $d}). Its definition:"
+    "${sc[@]}" cat --no-pager "$u" || echo "UNREAD: $m $u: no definition could be read"
   fi
 }
-systemctl list-units --type=service --state=running --no-pager --no-legend --plain | awk '{ print $1 }' |
-  while read -r u; do unit_review "$u"; done
-systemctl list-timers --all --no-pager --no-legend | awk '{ print $(NF-1), $NF }' |
-  while read -r t s; do unit_review "$t"; unit_review "$s"; done
-ls /var/lib/systemd/linger 2>/dev/null || echo 'no user lingers'
-sudo ss -Hltunp
+# The running services and the timers, with the services they start, of manager $1.
+review_manager() {
+  local m=$1 out u t s
+  local -a sc=(systemctl)
+  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  if ! out=$("${sc[@]}" list-units --type=service --state=running --no-pager --no-legend --plain 2>&1); then
+    echo "UNREAD: $m: its running services: $out"
+  elif [ -z "$out" ]; then
+    echo "empty: $m: no running service"
+  else
+    while read -r u _; do unit_review "$m" "$u"; done <<<"$out"
+  fi
+  if ! out=$("${sc[@]}" list-timers --all --no-pager --no-legend 2>&1); then
+    echo "UNREAD: $m: its timers: $out"
+  elif [ -z "$out" ]; then
+    echo "empty: $m: no timer"
+  else
+    while read -r t s; do
+      unit_review "$m" "$t"
+      unit_review "$m" "$s"
+    done < <(awk '{ print $(NF-1), $NF }' <<<"$out")
+  fi
+}
+review_manager system
+# User managers: those that linger, which run without a login, and those that run now.
+if [ ! -e /var/lib/systemd/linger ]; then
+  linger=
+  echo "absent: /var/lib/systemd/linger: no user lingers"
+elif ! linger=$(ls -A /var/lib/systemd/linger 2>&1); then
+  echo "UNREAD: /var/lib/systemd/linger: $linger"
+  linger=
+elif [ -z "$linger" ]; then
+  echo "empty: no user lingers"
+else
+  echo "lingering: $(tr '\n' ' ' <<<"$linger")"
+fi
+if ! active=$(loginctl list-users --no-legend 2>&1); then
+  echo "UNREAD: loginctl list-users: $active"
+  active=
+fi
+users=$( { printf '%s\n' "$linger"; awk '{ print $2 }' <<<"$active"; } | grep . | sort -u)
+if [ -z "$users" ]; then
+  echo "empty: no user manager to review"
+else
+  while read -r u; do review_manager "$u"; done <<<"$users"
+fi
+if o=$(sudo ss -Hltunp 2>&1); then
+  printf '%s\n' "${o:-empty: no listener}"
+else
+  echo "UNREAD: ss: $o"
+fi
 ```
 
-- **What it shows:** every account that can log in, and how (a usable password, a number of keys);
-  every account with UID 0 or in a privileged group; the sudo rules; recent logins; every cron
-  line, periodic script, user crontab and `at` job, with its command; every running service and
-  every timer, with its unit file, or its whole definition where it does not come only from a
-  package; users whose own services run without a login; every listener with its process.
+- **User managers** run units without the system manager: those of lingering users even without a
+  login, those of logged-in users while they are logged in. P7c reviews every manager that lingers
+  or runs now (`loginctl list-users`), through `systemctl --user -M <user>@`, which needs root. A
+  manager it cannot reach is `UNREAD`.
+- **What P7a to P7c show:**
+  - every account with UID 0 or in a privileged group, the sudo rules and the recent logins;
+  - which accounts have a usable password, and every key that sshd accepts for any account, by its
+    fingerprint and options;
+  - every cron line, periodic script, user crontab and `at` job, with its command;
+  - every running service and timer of the system and of every user manager, with its unit file, or
+    its whole definition where it does not come only from a package;
+  - every listener with its process.
 - **Package files are checked, not trusted:** `dpkg -V` reports a cron script or unit file that
   differs from its package (`MODIFIED`).
 - `dpkg -S` may not find a unit under `/usr/lib` that its package records under `/lib`; the
@@ -467,25 +699,53 @@ ss -6 -Hltn
 
 ### P9. SSH forwarding for the copy and the tunnel
 
-**Admin, read-only**, for each account D2 considers, from inside an SSH session (the `addr` is the
-client address of that session):
+**Admin, read-only**, for each account D2 considers. It runs from inside an SSH session, ideally
+the one that will open the tunnel, and needs P7's helpers:
 
 ```bash
 u=<user>
-sudo sshd -T -C "user=$u,host=$(hostname),addr=${SSH_CONNECTION%% *}" | grep -E '^(allowtcpforwarding|disableforwarding|permitopen|authorizedkeysfile) '
-h=$(getent passwd "$u" | cut -d: -f6)
-echo "key lines: $(sudo grep -cvE '^[[:space:]]*(#|$)' "$h/.ssh/authorized_keys")"
-sudo grep -noE '(^|,)(restrict|no-port-forwarding|port-forwarding|permitopen="[^"]*")' "$h/.ssh/authorized_keys"
+if ssh_context; then
+  h= id=
+  IFS=: read -r _ _ id _ _ h _ < <(getent passwd "$u")
+  if [ -z "${h-}" ]; then
+    echo "UNREAD: no account $u"
+  elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
+    grep -E '^(allowtcpforwarding|disableforwarding|permitopen|permitlisten) ' <<<"$cfg"
+    keys_of "$u" "$h" "$id" "$cfg"
+    if [ $? -eq 2 ]; then echo "absent: $u has no authorized-keys file"; fi
+  else
+    echo "UNREAD: $u: sshd -T failed: $cfg"
+  fi
+fi
+if o=$(sudo grep -rnHiE '^[[:space:]]*(Match|Include)[[:space:]]' /etc/ssh/sshd_config /etc/ssh/sshd_config.d 2>&1); then
+  printf '%s\n' "$o"
+elif [ $? -eq 1 ]; then
+  echo "empty: no Match or Include line"
+else
+  echo "UNREAD: the sshd configuration files: $o"
+fi
 ```
 
+- **The context is this session's.** `ssh_context` passes the client's address as `addr` (and as
+  `host` under `UseDNS no`), and the server's address and port as `laddr` and `lport`. Earlier
+  revisions passed the VPS's own hostname as `host`, which no `Match Host` would compare with.
+- **What the context cannot represent:** a `Match` block that tests `Address`, `Host`,
+  `LocalAddress`, `LocalPort` or `RDomain` applies only to connections like this one. If the tunnel
+  will come from another network or through another port, run P9 from such a session, or review
+  each such block by hand. `Match User` and `Match Group` are evaluated for `<user>`.
+- **The `Match` and `Include` lines** are listed so that the operator can see them. An `Include`
+  that points outside `/etc/ssh/sshd_config.d` may hold further `Match` blocks: read that file too.
+  Until then, P9 is INCONCLUSIVE.
 - **The tunnel needs** `allowtcpforwarding` `yes` or `local`, `disableforwarding no`, and a
   `permitopen` that allows `127.0.0.1:3000` (`any` by default).
-- **Per key**, the second `grep` prints only these options with their line numbers, never a key.
-  A key with `restrict` and without `port-forwarding`, or with `no-port-forwarding`, cannot open the
-  tunnel. A key the deploy workflow uses should keep such a restriction; the tunnel then needs
-  another key or account (D2).
-- If `authorizedkeysfile` is not the default `.ssh/authorized_keys`, read that file instead.
-- The Alloy UI tunnel of V15 also needs `permitopen` to allow a container address.
+- **Per key**, `keys_of` prints the fingerprint and the forwarding options, never the key. A key with
+  `restrict` and without `port-forwarding`, or with `no-port-forwarding`, cannot open the tunnel. A
+  key the deploy workflow uses should keep such a restriction; the tunnel then needs another key or
+  account (D2).
+- **The Alloy UI tunnel** of V15 also needs `permitopen` to allow a container address.
+- **The verdict** that the operator shares: whether the account may forward to `127.0.0.1:3000`
+  with the key that will be used, which the operator identifies by its fingerprint; or why not.
+  The fingerprints and addresses themselves stay with the operator (§5).
 
 ### P10. The `deploy` account and tools
 
@@ -531,7 +791,7 @@ sudo -n -l >/dev/null 2>&1 && echo 'deploy: passwordless sudo' || echo 'deploy: 
 | P6 | Listeners on the stack's ports | None | | |
 | P7 | Accounts, privileges, scheduled work, services, timers, listeners | Reviewed by the operator for G6; only the conclusion is recorded | | |
 | P8 | Global IPv6, UFW, IPv6 listeners | Recorded for G9 | | |
-| P9 | Forwarding for the D2 account(s) | Allowed for the tunnel account | | |
+| P9 | Forwarding for the D2 account(s), in this session's context | Allowed for the tunnel account and its key; every `Match` that the context cannot represent reviewed; only the verdict is recorded | | |
 | P10 | `deploy`, environment, tools, sudo | As expected above | | |
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 
@@ -710,11 +970,14 @@ set -o history
 ## 8. S6.3 — Pre-start gates
 
 **Rules:**
-- **All gates pass, and their outputs are recorded, before C3.** G1 to G3 run again, and G13 is
-  evaluated, immediately before the pull (S6.4, steps 2 and 3), because a day can pass between
-  S6.2 and S6.4.
-- **Each gate is PASS, FAIL or INCONCLUSIVE.** A failed or inconclusive gate blocks C3 until it is
-  resolved explicitly (§4).
+- **The gates run in the order of §4.1:**
+  1. G1 to G10 and G12, before C5;
+  2. G11, after C5, with the pre-start sampler running;
+  3. G1 to G3 again, and G13a, immediately before the pull (C3a), because a day can pass between
+     S6.2 and S6.4;
+  4. G13b after the pull, before C3b.
+- **Each gate is PASS, FAIL or INCONCLUSIVE.** A failed or inconclusive gate blocks the next step of
+  §4.1 until it is resolved explicitly.
 - **The gates only read.** G11 and G13 read the pre-start sampler, which C5 starts. A gate's
   resolution that changes state has its own consent.
 
@@ -730,9 +993,10 @@ set -o history
 | G8 | The modes the extraction left | U10 |
 | G9 | Public IPv6 and the firewall | U12 |
 | G10 | Free disk space for the images and their growth | |
-| G11 | Timing, the release freeze, the baseline and the pre-start sampler | §10.3's R0 |
+| G11 | Timing, the release freeze, the self-test and the running pre-start sampler, after C5 | §10.3's R0 |
 | G12 | cgroup v2, Docker's `systemd` driver, systemd scopes, limit support | R1's and the sampler's preconditions |
-| G13 | The VPS's memory, pressure, events and the application, measured over at least 30 min, before the pull | Whether the first start may begin |
+| G13a | The VPS's memory, pressure, events and the application, over at least 30 min, before the pull | Whether the pull may begin (C3a) |
+| G13b | The same over the samples that include the pull, and the pull's own memory stall (R-p), after it | Whether the first `up` may begin (C3b) |
 
 ### G1. Existing volumes
 
@@ -841,24 +1105,29 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
 
 ### G6. U8: no untrusted users or services
 
-- **Command:** P7a, P7b and P7c, and P3's container list.
+- **Command:** P7's helpers, then P7a, P7b and P7c, from inside an SSH session, and P3's container
+  list.
 - **Why it matters:** the port reset is no boundary against processes on the host. Prometheus,
   Loki and Tempo have no authentication, and the host reaches every container address
   ([S4b §4.4](S4b_DESIGN_CONTRACT.md#44-what-the-port-policy-protects-and-what-it-does-not)).
 - **What the operator reviews,** entry by entry, on the VPS:
   1. the accounts with UID 0: only `root`;
-  2. the accounts with a login shell, which of them have a usable password, and how many
-     `authorized_keys` lines each has;
-  3. the members of `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, and every sudo rule;
-  4. the recent logins of `last`;
-  5. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
+  2. the accounts with a login shell, and which accounts have a usable password;
+  3. every `key:` line, of every account: its fingerprint, compared with the trusted keys' own
+     (P7a), and its options; every `REVIEW:` line about another source of keys or certificates;
+  4. the members of `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, and every sudo rule;
+  5. the recent logins of `last`;
+  6. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
      `/etc/cron.hourly`, `daily`, `weekly` and `monthly`, with each script's package or, for a script
-     from no package, its content; every user crontab; every `at` job;
-  6. every running service and every timer with the service it starts, with its package and user,
-     or its whole definition where it does not come only from a package; users that linger;
-  7. every listener with its process, and every container (P3).
-- **Expected (PASS):** every command ran without an error, and the operator can attribute every
-  entry to one of:
+     from no package, its content; every user crontab; every queued `at` job's script;
+  7. every running service and every timer with the service it starts, of the system manager and of
+     every user manager, with its package and user, or its whole definition where it does not come
+     only from a package;
+  8. every listener with its process, and every container (P3).
+- **The marker words** (§5): `absent:` and `empty:` lines say that there is nothing to review in that
+  source. `UNREAD:` says that the source is unknown, and `REVIEW:` that it is not shown.
+- **Expected (PASS):** no `UNREAD:` line; every `REVIEW:` line resolved; and every entry
+  attributed to one of:
   - the operating system or one of its packages, with no `MODIFIED` file;
   - the application: the `deploy` account and the key the deploy workflow uses, the backup cron
     entry ([README, Database backups](../README.md#database-backups)), the four application
@@ -866,13 +1135,16 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   - the operator's own administration: their accounts, keys and changes.
 
   The operator records "G6 PASS" with the date. The lists themselves are not recorded (§5).
-- **INCONCLUSIVE:** a command failed or could not run, for example without `sudo`; or an entry is
-  not yet attributed, such as a script or unit from no package whose purpose is not yet clear. C3
-  waits until every entry is read and attributed.
+- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, a key file that cannot be read,
+  a key that `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:` line not
+  yet resolved, such as an `AuthorizedKeysCommand` whose source is not yet reviewed; or an entry not
+  yet attributed, such as a script or unit from no package whose purpose is not yet clear. The
+  order of §4.1 waits until every source is read and every entry attributed.
 - **STOP:** an entry the operator considers unknown or untrusted: a UID 0 account other than
-  `root`; an unknown member of `sudo`, `admin` or `docker`; a key, a usable password or a sudo rule
-  the operator did not set up; a `MODIFIED` package file; a job, service, timer, listener, login or
-  container of unknown origin.
+  `root`; an unknown member of `sudo`, `admin` or `docker`; a key whose fingerprint matches no
+  trusted key, a usable password or a sudo rule the operator did not set up; an `at` job, a
+  certificate authority or a key command the operator did not set up; a `MODIFIED` package file; a
+  job, service, timer, user unit, listener, login or container of unknown origin.
 - **Next allowed action:** on INCONCLUSIVE, the missing reading or the attribution, then G6 again.
   On STOP, a separate investigation outside S6, which may be a security incident. S6 does not
   continue until a new G6 passes.
@@ -935,7 +1207,7 @@ find . ! -user deploy -print
   - That is a gap on the host that predates S6.
   - D7 decides whether S6 goes ahead with the gap recorded, or the firewall is fixed first in a
     separate change.
-- **Next allowed action:** on PASS, the next gate; otherwise D7, and C3 only after it.
+- **Next allowed action:** on PASS, the next gate; otherwise D7, and C5 only after it (§4.1).
 
 ### G10. Disk space
 
@@ -953,23 +1225,38 @@ d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d" && echo "available MiB: 
 - **Next allowed action:** a separate decision about what may be removed, or about a different
   threshold. Nothing is removed to make space within S6.
 
-### G11. Timing, freeze, baseline and the pre-start sampler
+### G11. Timing, freeze, self-test and the running pre-start sampler
 
-- **Command:** **Local:** `gh run list --workflow release.yml --limit 5`, or GitHub's Actions view.
-  **VPS, read-only:** `date` (the VPS's local time), then R0 of §10.3. **VPS, changes files (C5):**
-  saving the sampler and the readout (§10.3, R2); then the readout's self-test, which only reads;
-  then the pre-start sampler.
-- **Expected:** no release run in progress, none planned until the window of §10.3 ends, the time
-  outside 03:00–04:00, R0 recorded, the self-test `ok` twice, and the pre-start sampler running.
-- **Timing:** the pull starts at least 30 min after the pre-start sampler (G13), and the first `up`
-  when the operator can watch the VPS for at least an hour. Neither falls within 03:00–04:00 of
-  the VPS's time zone (P1), the window of the daily backup.
+- **When:** after C5 (§4.1, step 6). The setup of §10.3 has run under C5 by then:
+  - the sampler and the readout are saved;
+  - the self-test has run;
+  - R0 has had its first reading;
+  - the pre-start sampler has started.
+- **Command:**
+  - **Local:** `gh run list --workflow release.yml --limit 5`, or GitHub's Actions view.
+  - **VPS, read-only:** `date` for the VPS's local time.
+  - **VPS, read-only,** after at least 1 min of sampling: §10.3's readout wrapper,
+    `s6_readout ~/s6-sample-<UTC>.log <PID> 60 "$pre"`.
+- **Expected:**
+  - no release run in progress, and none planned until the window of §10.3 ends;
+  - the time outside 03:00–04:00;
+  - R0 recorded;
+  - the self-test `ok` three times;
+  - the wrapper's `PASS`: the sampler runs, writes complete samples, and samples exactly the root
+    and the four application containers.
+- **Timing:** the pull starts at least 30 min after the pre-start sampler (G13a), and the first
+  `up` when the operator can watch the VPS for at least an hour. Neither falls within 03:00–04:00
+  of the VPS's time zone (P1), the window of the daily backup.
 - **Release freeze (D4):** no `release.yml` run from the start of the pre-start sampler to the end
   of the sampling window of §10.3. No other manual operation on the application in that time.
-- **STOP** if a release is running or planned in that time, or if the self-test fails.
-- **Next allowed action:** choose another time, after the release has finished and its own checks
-  have passed. A failed self-test means that the VPS's awk does not run the readout as tested: no
-  readout result counts, and the readout's compatibility is a repository question (§11).
+- **STOP** if a release is running or planned in that time, if the self-test fails, or if the
+  wrapper does not print `PASS`.
+- **Next allowed action:**
+  - **a release:** choose another time, after the release has finished and its own checks have
+    passed;
+  - **a failed self-test:** the VPS's awk does not run the readout as tested. No readout result
+    counts, and the readout's compatibility is a repository question (§11);
+  - **a sampler that does not pass:** find the cause (§11), start a new sampler, and run G11 again.
 
 ### G12. Docker engine and cgroup preconditions
 
@@ -1012,34 +1299,53 @@ done
 - **Next allowed action:** a separate design for that configuration. Changing Docker's cgroup
   driver is a daemon change that affects the application, and is not part of S6.
 
-### G13. Resources before the start
+### G13. Resources before the pull (G13a) and before the first `up` (G13b)
 
 **Why a gate.** The ten limits overcommit the visible memory by design (§10.3), the effective
 outer limit T is not verified, and the first start's peak has never been measured on the VPS. So
-the first start begins only when the VPS shows, right before it, enough headroom, no memory stall
-and no OOM or PID event.
+the pull and the first start each begin only when the VPS shows, right before, enough headroom, no
+memory stall and no OOM or PID event.
 
-**What it reads:**
-- the pre-start sampler's log (§10.3, R2), at least 30 min of it, with the readout and
-  `-v min_span=1800`: the root's highest `anon + shmem + kernel + sock`, its lowest `MemAvailable`,
-  its memory stall time, and each application container's highest working set and
-  `pids.current`;
-- R0's event counters (§10.3), read once when the sampler starts and once more now, with R1's loop
-  for the four application containers and its root lines;
-- P3's two commands again: state, health, `RestartCount`, `OOMKilled`;
-- `grep -F MemTotal /proc/meminfo` and the root's `memory.max` and `memory.high`.
+**Why twice.** The pull is a load of its own, next to the running application, on one CPU: the
+download, the decompression, page cache and disk writes. A gate that passed before it says nothing
+about it. So G13a decides the pull, and G13b decides the `up` on samples that include the pull.
 
-**PASS needs all of these** (proposed thresholds, D3):
+**What both read:**
+- **the pre-start sampler's log** (§10.3, R2), through the readout wrapper:
+  `s6_readout ~/s6-sample-<UTC>.log <PID> 1800 "$pre"`. It reports:
+  - the root's highest `anon + shmem + kernel + sock`, its lowest `MemAvailable` and its memory
+    stall time;
+  - each application container's highest working set and `pids.current`.
 
-| # | Condition | Not met |
-|---|---|---|
-| R-a | The readout ends with `COVERAGE PASS` for the root and the four application containers, read while the sampler runs | INCONCLUSIVE |
-| R-b | `MemTotal` is `4456448 kB` (4352 MiB, the plan's size), and the root's `memory.max` and `memory.high` are `max` | STOP: the budget's premise changed |
-| R-c | Every `oom` and `oom_kill` in `memory.events` and `memory.events.local`, at the root and in the four application containers, is 0, and so is `pids.events max`, at both readings | STOP |
-| R-d | The four application containers run, are healthy where they have a health check, and have the same `RestartCount` as at P3, and `OOMKilled` false | STOP |
-| R-e | Each application container's highest working set is at most half its limit (backend 896 MiB, postgres 256, frontend 64, cloudflared 128), and its highest `pids.current` at most half its PID limit (512, 128, 64, 64) | STOP: the application is not in the state S4.4.4 measured |
-| R-f | The root's memory stall time over the samples: `full` 0 µs, and `some` at most 0.1 % of the time covered | INCONCLUSIVE; a second G13 at another time that again misses it: STOP |
-| R-g | The root's highest `anon + shmem + kernel + sock` at most **2064 MiB**, and its lowest `MemAvailable` at least **2288 MiB** | STOP |
+  For G13a the log covers at least 30 min before the pull. For G13b it is the same log, now longer:
+  the 30 min and the pull. The sampler runs throughout;
+- **R0's event counters** (§10.3), with R1's loop for the four application containers and its root
+  lines. They are read when the sampler starts, again for G13a, and again for G13b;
+- **P3's two commands** again: state, health, `RestartCount`, `OOMKilled`;
+- **the memory size and limits:** `grep -F MemTotal /proc/meminfo`, and the root's `memory.max` and
+  `memory.high`;
+- **for G13b only, R-p:** the pull's own memory stall, from the readings that S6.4's pull block
+  takes right before and right after the pull.
+
+**PASS needs every condition**, for G13a and again for G13b. The thresholds are proposed (D3).
+
+| # | Condition | G13a not met | G13b not met |
+|---|---|---|---|
+| R-a | The wrapper prints `PASS`: `COVERAGE PASS` for exactly the root and the four application containers, with the sampler running before and after the readout | INCONCLUSIVE | INCONCLUSIVE, and no `up` (Next allowed action) |
+| R-b | `MemTotal` is `4456448 kB` (4352 MiB, the plan's size), and the root's `memory.max` and `memory.high` are `max` | STOP: the budget's premise changed | STOP |
+| R-c | Every `oom` and `oom_kill` in `memory.events` and `memory.events.local`, at the root and in the four application containers, is 0, and so is `pids.events max`, at every reading | STOP | STOP |
+| R-d | The four application containers run, are healthy where they have a health check, and have the same `RestartCount` as at P3, and `OOMKilled` false | STOP | STOP |
+| R-e | Each application container's highest working set is at most half its limit (backend 896 MiB, postgres 256, frontend 64, cloudflared 128), and its highest `pids.current` at most half its PID limit (512, 128, 64, 64) | STOP: the application is not in the state S4.4.4 measured | STOP |
+| R-f | The root's memory stall time over the samples: `full` 0 µs, and `some` at most 0.1 % of the time covered | INCONCLUSIVE; a second G13a at another time that again misses it: STOP | STOP |
+| R-g | The root's highest `anon + shmem + kernel + sock` at most **2064 MiB**, and its lowest `MemAvailable` at least **2288 MiB** | STOP | STOP |
+| R-p | The pull's own stall, from S6.4's readings: `full` 0 µs, and `some` at most 0.1 % of the pull's duration | — | STOP |
+
+- **Why G13b only stops.** In G13a, a miss of R-a or R-f can be measured again later. In G13b it
+  cannot: the pull is over, and the samples taken during it are the only evidence of its load.
+- **Why R-p besides R-f.** R-f divides the stall time by the whole log's time, at least 30 min
+  more than the pull. A stall during a short pull could pass it. R-p divides by the pull's own time.
+- **The `up` follows G13b within 15 min** (C3b). After that, G13b runs again on the same, longer log
+  before a new C3b.
 
 **Where R-g's values come from** [ESTIMATE]:
 - They are T − R − A and R + A, with T = 4352 MiB (visible), R = 1088 MiB (the 25 % reserve) and
@@ -1068,15 +1374,25 @@ and no OOM or PID event.
   why R-f requires nearly no stall, and why a stall makes the gate INCONCLUSIVE even when R-g
   passes.
 
-**INCONCLUSIVE** blocks C3 like a STOP: an incomplete or failed readout, a sampler not running, or
-R-f's first miss. Measure again at another time.
+**INCONCLUSIVE** blocks the next consent like a STOP: C3a after G13a, C3b after G13b.
 
-**Next allowed action:** on PASS, S6.4's pull. On STOP, no first start: the finding goes to a
-review of the budget (D3) or of the application's state, in a separate step.
+**Next allowed action:**
+- **G13a PASS:** C3a, then the pull of S6.4, step 4.
+- **G13a INCONCLUSIVE:** an incomplete or failed readout, a sampler not running, or R-f's first
+  miss. Measure again at another time; a sampler that stopped is replaced and gets its 30 min
+  again.
+- **G13b PASS:** C3b, then the first `up` within 15 min.
+- **G13b INCONCLUSIVE:** the pull's samples are incomplete, so its load is unknown, and no `up`
+  follows. The images are on disk now, and a new window would no longer contain a pull. How to go on
+  is the operator's recorded decision: remove the six pulled images by name and repeat from G13a,
+  or accept a new G13b over 30 min without a pull.
+- **STOP, in either:** no pull or no first start. The finding goes to a review of the budget (D3) or
+  of the application's state, in a separate step.
 
 ## 9. S6.4 — First startup
 
-**Consent:** C3. **Where:** `/var/nimuairy-observability`, as `deploy`.
+**Consents:** C3a for the pull (step 4), C3b for the first `up` (step 6), each after its gate.
+**Where:** `/var/nimuairy-observability`, as `deploy`.
 
 **Rules:**
 - exactly `-f observability/compose.yaml -f observability/compose.prod.yaml`;
@@ -1088,26 +1404,62 @@ review of the budget (D3) or of the application's state, in a separate step.
 
 1. **The revision.** `cat REVISION` names the SHA of S6.2.
 2. **G1 to G3 again**, immediately before. Any `STOP` ends S6.4 here.
-3. **G13**, on at least 30 min of the pre-start sampler, which G11 started and which keeps running
+3. **G13a**, on at least 30 min of the pre-start sampler. G11 started it, and it keeps running
    through the pull and the start. Anything but PASS ends S6.4 here.
-4. **Pull.** **VPS, changes runtime state** (images only):
+4. **C3a, then the pull.** **VPS, changes runtime state** (images only). The block reads the root's
+   memory stall totals right before and right after the pull, for G13b's R-p. It pulls nothing if
+   the first reading fails:
 
    ```bash
    cd /var/nimuairy-observability
-   date -u +%FT%TZ
-   docker compose -f observability/compose.yaml -f observability/compose.prod.yaml pull; echo "pull exit=$?"
+   # The root's memory stall totals as "<epoch> <some us> <full us>", or a failure.
+   stall() {
+     awk -v t="$(date -u +%s)" '$1 == "some" || $1 == "full" { for (i = 2; i <= NF; i++) if ($i ~ /^total=[0-9]+$/) v[$1] = substr($i, 7) }
+       END { if (("some" in v) && ("full" in v)) print t, v["some"], v["full"]; else exit 1 }' /sys/fs/cgroup/memory.pressure
+   }
+   if ! s0=$(stall); then
+     echo "STOP: the root's memory pressure cannot be read; no pull"
+   else
+     echo "the pull starts at $(date -u +%FT%TZ)"
+     docker compose -f observability/compose.yaml -f observability/compose.prod.yaml pull
+     rc=$?
+     if [ "$rc" -ne 0 ]; then
+       echo "STOP: the pull failed with exit status $rc"
+     elif ! s1=$(stall); then
+       echo "STOP: the root's memory pressure cannot be read after the pull"
+     else
+       read -r t0 some0 full0 <<<"$s0"
+       read -r t1 some1 full1 <<<"$s1"
+       echo "the pull took $((t1 - t0)) s; memory stall during it: some $((some1 - some0)) us, full $((full1 - full0)) us"
+       if [ $((full1 - full0)) -eq 0 ] && [ $((some1 - some0)) -le $(((t1 - t0) * 1000)) ]; then
+         echo "ok: R-p met: no full stall, and some for at most 0.1 % of the pull's time"
+       else
+         echo "STOP: R-p not met"
+       fi
+     fi
+   fi
+   ```
+
+   Then, **VPS, read-only:**
+
+   ```bash
    docker image inspect -f '{{index .RepoTags 0}} {{index .RepoDigests 0}} {{.Size}}' \
      prom/prometheus:v3.15.0 grafana/loki:3.7.8 grafana/tempo:3.1.0 grafana/alloy:v1.20.1 \
      wollomatic/socket-proxy:1.13.2 grafana/grafana-oss:13.0.2
    d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d"
    ```
 
-   - Expected: exit 0, six digests recorded, the disk still above G10's threshold.
+   - **Expected:** `ok: R-p met`, six digests recorded, and the disk still above G10's threshold.
+   - **Any `STOP` line** ends S6.4 here: no G13b, no `up`.
    - The tags are those of `ff0139a`'s `observability/compose.yaml`. An archive from another commit
      names its own.
-   - Pulling first keeps the download out of `up`'s wait and shows the disk use on its own.
-5. **The first start.** **VPS, changes runtime state.** Record the time first; V3 compares the
-   volumes with it:
+   - Pulling first keeps the download out of `up`'s wait, shows the disk use on its own, and lets
+     G13b judge the pull's load before the start.
+5. **G13b**, right after the pull: the same readout on the same, longer log, R0's counters again,
+   P3 again, and R-p from step 4. Anything but PASS ends S6.4 here. On PASS, the operator gives C3b
+   for an `up` that starts within 15 min.
+6. **C3b, then the first start.** **VPS, changes runtime state.** It starts within 15 min of G13b's
+   reading; otherwise G13b runs again first. Record the time first; V3 compares the volumes with it:
 
    ```bash
    cd /var/nimuairy-observability
@@ -1116,7 +1468,7 @@ review of the budget (D3) or of the application's state, in a separate step.
    ```
 
    It creates the three networks, the five volumes and the six containers.
-6. **Readiness, one service at a time.** **VPS, read-only.** Loki reports ready only about 15 s
+7. **Readiness, one service at a time.** **VPS, read-only.** Loki reports ready only about 15 s
    after it starts, so repeat a failed check for up to 2 minutes before reading it as a failure:
 
    ```bash
@@ -1128,7 +1480,7 @@ review of the budget (D3) or of the application's state, in a separate step.
    docker exec grafana wget -qO- http://localhost:3000/api/health; echo " grafana exit=$?"
    ```
 
-7. **Targeted logs.** **VPS, read-only.** Only after step 6 showed all six containers, so that a
+8. **Targeted logs.** **VPS, read-only.** Only after step 7 showed all six containers, so that a
    missing container cannot look like a clean log:
 
    ```bash
@@ -1155,7 +1507,7 @@ review of the budget (D3) or of the application's state, in a separate step.
   `permission denied` ([S4b §7.3](S4b_DESIGN_CONTRACT.md#73-volumes)).
 - A proxy that is healthy can open the socket; that does not show that its API answers Alloy
   ([OBSERVABILITY.md, Docker API access](OBSERVABILITY.md#docker-api-access)).
-- So only steps 6 and 7, and then S6.5, decide whether the start worked.
+- So only steps 7 and 8, and then S6.5, decide whether the start worked.
 
 **Outcome.** `up` exit 0, every container running, the three health checks healthy, the five
 readiness checks answering, and no line from the first four log checks: go on to S6.5. Anything else:
@@ -1169,8 +1521,8 @@ Read-only unless marked. Record each result, with the time, in the S6 record.
 
 | # | Check | Command | Expected |
 |---|---|---|---|
-| V1 | Six services, state, restarts, OOM | The `docker inspect` template of S6.4, step 6 | All `running`; Prometheus, Grafana and the proxy `healthy`; `restarts=0`; `oomkilled=false`; every `started` after `t_up` |
-| V2 | Readiness | S6.4, step 6, again after at least 5 min | Every check answers. Health is not readiness: Grafana `healthy` says nothing about its data sources (V7) |
+| V1 | Six services, state, restarts, OOM | The `docker inspect` template of S6.4, step 7 | All `running`; Prometheus, Grafana and the proxy `healthy`; `restarts=0`; `oomkilled=false`; every `started` after `t_up` |
+| V2 | Readiness | S6.4, step 7, again after at least 5 min | Every check answers. Health is not readiness: Grafana `healthy` says nothing about its data sources (V7) |
 | V3 | The volumes are new | Block V3 below | Five volumes, each `created` after `t_up`, with the project label. Without this, P-R4 and the Tempo checks could pass on pre-existing state |
 | V4 | Networks | Block V4 below | The three networks with the project label; `nimuairy-observability_docker-api` `internal=true` |
 | V5 | Bindings | `docker ps --format '{{.Names}}\t{{.Ports}}'`; `docker port grafana`; `ss -Hltn` | Only Grafana shows a `->`: `127.0.0.1:3000->3000/tcp`. `docker port grafana` prints exactly `3000/tcp -> 127.0.0.1:3000`. The `ss` lines are information |
@@ -1178,7 +1530,7 @@ Read-only unless marked. Record each result, with the time, in the S6 record.
 | V7 | Grafana through the tunnel, and its data sources | Block V7 below | Login works; Prometheus, Loki and Tempo answer `OK` |
 | V8 | Prometheus targets | Block V8 below | `prometheus` and `alloy` `up`; `nimuairy-api` `down`, by design until S7: the backend is on no network of the stack, so its `lastError` most likely names a failed lookup |
 | V9 | Alloy's discovery path | Block V9 below | Alloy running for at least 5 min; no `Unable to refresh target groups`; no `blocked request` from Alloy's address |
-| V10 | The socket proxy | `docker inspect -f '{{.State.Status}} {{.State.Health.Status}} restarts={{.RestartCount}}' docker-socket-proxy`; its log as in S6.4, step 7 | `running healthy restarts=0`; no `socket not available`, no `blocked request` at all |
+| V10 | The socket proxy | `docker inspect -f '{{.State.Status}} {{.State.Health.Status}} restarts={{.RestartCount}}' docker-socket-proxy`; its log as in S6.4, step 8 | `running healthy restarts=0`; no `socket not available`, no `blocked request` at all |
 | V11 | U9 at runtime: the processes' identities | Block V11 below | Every line `ok`: the real, effective, saved and file-system UIDs and GIDs as expected; no container but the proxy in the socket's group; `NoNewPrivs` 1 for Alloy and the proxy |
 | V12 | Volume ownership and placement | Block V12 below | Mounts as listed; `tempo-data` only `10001:10001`, `alloy-data` only `473:473`; the others recorded |
 | V13 | Limits and OOM settings of all ten containers | §10.3, R1 | Every line `ok` |
@@ -1412,9 +1764,9 @@ env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES bash scripts/observability-pr
   is a lower bound of the peak, never the peak. What must not be added together is in the budget's
   [What must not be added together](VPS_RESOURCE_BUDGET.md#what-must-not-be-added-together).
 
-**R0, the baseline before the pull (G11, G13).** **VPS, read-only:** P4's blocks, and the R1 loop
-below with only its four application lines, and its root lines. Run it when the pre-start sampler
-starts (G11), and again for G13. G13's R-c compares the two readings.
+**R0, the baseline before the pull (G11, G13a, G13b).** **VPS, read-only:** P4's blocks, and the R1
+loop below with only its four application lines, and its root lines. Run it when the pre-start
+sampler starts (§4.1, step 5), again for G13a, and again for G13b. R-c compares every reading.
 
 **R1, after the start (V13).** **VPS, read-only.** A.3's loop, extended to all ten containers, with
 the expected values and a comparison:
@@ -1508,6 +1860,7 @@ fail() {
 }
 
 for c in "$@"; do
+  [ -z "${cg[$c]-}" ] || fail "$c is named twice, or is the name of the root"
   pid=$(docker inspect -f '{{.State.Pid}}' "$c") && [[ $pid =~ ^[1-9][0-9]*$ ]] || fail "no running container $c"
   path=$(sed -n 's/^0:://p' "/proc/$pid/cgroup") && [ -n "$path" ] || fail "no cgroup v2 path for $c"
   [ -r "$root$path/memory.stat" ] || fail "cannot read $root$path/memory.stat for $c"
@@ -1585,9 +1938,10 @@ done
   and is a whole number; the pressure averages must be decimal numbers. A missing, unreadable or
   malformed value makes the line `INVALID`, with the keys that failed. It never writes a partial
   `ok` line, and never a zero in place of a value it could not read.
-- **It refuses to start**, with exit status 1 and no log, when a named container is not running,
-  its cgroup cannot be read, or the root's `memory.stat` lacks a field it needs. The log's header
-  records which kernel-memory fields it uses: `kernel`, or its parts.
+- **It refuses to start**, with exit status 1 and no log, when a container is named twice or named
+  `lxc-root`, a named container is not running, its cgroup cannot be read, or the root's
+  `memory.stat` lacks a field it needs. The log's header records which kernel-memory fields it
+  uses (`kernel`, or its parts), and the entities it samples.
 - **After its start it calls no `docker`** and starts nothing. It reads the cgroup files,
   `/proc/meminfo` and the root's `memory.pressure`.
 - **A stop with `kill <PID>`** (TERM) appends `# s6-sampler stopped at <epoch>`. A `kill -9`, a
@@ -1600,8 +1954,9 @@ Save as `~/s6-readout.awk`:
 # S6's readout of an s6-sampler log (docs/S6_DESIGN_CONTRACT.md, section 10.3, R3). POSIX awk only:
 # no gawk extension, no regex interval, no time function, no whole-array delete, so mawk, Ubuntu's
 # default awk, runs it too; the self-test of R3 checks that on the VPS.
-# Variables: end (required), the epoch of the reading, taken while the sampler runs; min_span,
-# max_gap and max_mean in seconds. A line that is not a complete, well-formed sample is rejected,
+# Variables: end (required), the epoch of the reading, taken while the sampler runs; expect
+# (required), the comma-separated entities the log must hold, exactly; min_span, max_gap and
+# max_mean in seconds. A line that is not a complete, well-formed sample is rejected,
 # never read as zero. It prints one line per entity in the header's order, then the coverage
 # verdict, and exits 0 only when the coverage passes.
 function problem(msg) { problems++; plist[problems] = msg }
@@ -1631,6 +1986,12 @@ BEGIN {
   if (max_gap == "") max_gap = 30
   if (max_mean == "") max_mean = 12
   if (!whole(end)) problem("no reading time: pass -v end=$(date -u +%s)")
+  if (expect == "") problem("no expected entities: pass -v expect=<entity>,<entity>,...")
+  nx = split(expect, xs, ",")
+  for (i = 1; i <= nx; i++) {
+    if (xs[i] in wanted) problem("the expected entities name " xs[i] " twice")
+    wanted[xs[i]] = 1
+  }
   nbase = split("memory.current pids.current anon file shmem inactive_file sock workingset_refault_file pgmajfault", base, " ")
 }
 NR == 1 {
@@ -1639,7 +2000,12 @@ NR == 1 {
   if (!whole(h["start"]) || h["kernel"] == "" || h["entities"] == "") { problem("the header lacks start, kernel or entities"); next }
   nk = split(h["kernel"], kf, ",")
   ne = split(h["entities"], ent, ",")
-  for (i = 1; i <= ne; i++) known[ent[i]] = 1
+  for (i = 1; i <= ne; i++) {
+    if (ent[i] in known) problem("the header names " ent[i] " twice")
+    else if (!(ent[i] in wanted)) problem("the header names " ent[i] ", which is not expected")
+    known[ent[i]] = 1
+  }
+  for (i = 1; i <= nx; i++) if (!(xs[i] in known)) problem("the header lacks the expected " xs[i])
   header = 1
   next
 }
@@ -1724,8 +2090,14 @@ END {
   - an entity's times must increase strictly.
 
   A rejected line is never read as zero: it counts against the coverage.
+- **It requires the exact expected entity set**, `-v expect`: the root and the four application
+  containers before the start (`$pre`), the root and all ten containers for the window (`$window`).
+  The header's entities must be that set, compared as a set.
 - **It checks the coverage of every entity of the header.** Each of these makes it print
   `COVERAGE INCONCLUSIVE` with the reasons and exit 1:
+  - no `expect`, or an expected set that names an entity twice;
+  - an expected entity missing from the header, an entity the header names twice, or one it names
+    that is not expected;
   - an `INVALID` or a rejected line;
   - an entity without a valid sample;
   - valid samples that span less than `min_span`;
@@ -1741,8 +2113,9 @@ END {
   `delete`, and no `for (key in array)` loop that decides the output's order. The self-test below
   checks this on the VPS's own awk.
 
-**The self-test.** **VPS, read-only**, before G13's or R3's first readout. It writes no file, and
-runs the readout on a pinned log that passes and on a variant that must fail:
+**The self-test.** **VPS, read-only**, under C5 before any readout counts (§4.1, step 5). It writes
+no file. It runs the readout on a pinned log that passes, on a variant that must fail, and on the
+pinned log against a wrong entity set:
 
 ```bash
 k='kernel_stack=262144 pagetables=262144 percpu=262144 slab_reclaimable=131072 slab_unreclaimable=131072'
@@ -1771,35 +2144,84 @@ COVERAGE INCONCLUSIVE:
   lxc-root: 15.0 s between samples on average, more than 12 s
   tempo: 1 INVALID sample(s)
   tempo: 15.0 s between samples on average, more than 12 s'
-selftest() {
+set_out='kernel memory: the sum of kernel_stack,pagetables,percpu,slab_reclaimable,slab_unreclaimable, an ESTIMATE
+lxc-root: 4 samples 2027-01-15T08:00:00Z..2027-01-15T08:00:30Z (0.0 h, largest gap 10 s); WS max 8.0 MiB at 2027-01-15T08:00:20Z; anon+shmem+kernel+sock max 7.0 MiB at 2027-01-15T08:00:20Z; pids.current max 152; refaults +2; major faults +1
+lxc-root: MemAvailable min 3067.0 MiB at 2027-01-15T08:00:20Z; memory pressure avg10 max some 0.12, full 0.00; stalled over the samples: some 1000 us (0.003 %), full 0 us
+tempo: 4 samples 2027-01-15T08:00:00Z..2027-01-15T08:00:30Z (0.0 h, largest gap 10 s); WS max 2.5 MiB at 2027-01-15T08:00:20Z; anon+shmem+kernel+sock max 3.0 MiB at 2027-01-15T08:00:20Z; pids.current max 21; refaults +0; major faults +0
+COVERAGE INCONCLUSIVE:
+  the header names tempo, which is not expected
+  the header lacks the expected grafana'
+selftest() {   # NAME EXPECTED_EXIT EXPECTED_ENTITIES LOG EXPECTED_OUTPUT
   local got rc
-  got=$(printf '%s\n' "$3" | awk -v end=1800000035 -v min_span=30 -v max_gap=30 -v max_mean=12 -f ~/s6-readout.awk); rc=$?
-  if [ "$got" = "$4" ] && [ "$rc" = "$2" ]; then
+  got=$(printf '%s\n' "$4" | awk -v end=1800000035 -v min_span=30 -v max_gap=30 -v max_mean=12 -v expect="$3" -f ~/s6-readout.awk); rc=$?
+  if [ "$got" = "$5" ] && [ "$rc" = "$2" ]; then
     echo "self-test $1: ok"
   else
     echo "self-test $1: FAIL (exit $rc, expected $2)"
-    diff <(printf '%s\n' "$4") <(printf '%s\n' "$got")
+    diff <(printf '%s\n' "$5") <(printf '%s\n' "$got")
   fi
 }
-selftest pass 0 "$log" "$pass_out"
-selftest fail 1 "$(sed -e '7s/ ok .*/ INVALID memory.current/' -e '4s/pids.current=152/pids.current=15x/' <<<"$log")" "$fail_out"
+selftest pass 0 lxc-root,tempo "$log" "$pass_out"
+selftest fail 1 lxc-root,tempo "$(sed -e '7s/ ok .*/ INVALID memory.current/' -e '4s/pids.current=152/pids.current=15x/' <<<"$log")" "$fail_out"
+selftest set 1 lxc-root,grafana "$log" "$set_out"
 ```
 
-- **Expected:** `self-test pass: ok` and `self-test fail: ok`.
+- **Expected:** `self-test pass: ok`, `self-test fail: ok` and `self-test set: ok`.
 - **Anything else** means that this awk does not run the readout as tested. No readout result
   counts, and G11 is a STOP (§11).
-- **Tested locally** (the 2026-11-15 revision), and nowhere else:
+- **Tested locally** (revision 3), and nowhere else:
   - with gawk 5.4.1 (Git Bash), `gawk --posix`, gawk 5.3.2 and mawk 1.3.4 20260129 (Ubuntu 26.04 in
     WSL);
-  - each passes the self-test, and gives the same output on 23 synthetic logs;
-  - a readout altered to always exit 0 fails the self-test.
+  - each passes the self-test, and gawk 5.4.1, `gawk --posix` and mawk give the same output on 33
+    synthetic logs;
+  - two altered readouts fail it: one that always exits 0, and revision 2's readout, which lacks the
+    entity check, in the `set` case.
 
   Ubuntu 24.04's mawk is an older 1.3.4 build, which was not available here. So the self-test on
   the VPS is the evidence for its awk, not these runs.
 
+**The readout wrapper.** G11, G13a, G13b and R3 read a log through it. **VPS, read-only.** Define
+it in each new shell:
+
+```bash
+# Whether PID $1 is a running s6-sampler.sh: kill -0 sends no signal, and the command line rules out
+# another process that got the same PID.
+running() { kill -0 "$1" 2>/dev/null && tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline" | grep -q 's6-sampler\.sh'; }
+# The readout of log $1 from the sampler with PID $2, over at least $3 s, for exactly the entities $4.
+# It passes only when the sampler runs before and after the readout and the readout's coverage passes.
+s6_readout() {
+  local rc
+  if ! running "$2"; then
+    echo "INCONCLUSIVE: no s6-sampler.sh runs as PID $2"
+  elif [ ! -s "$1" ]; then
+    echo "INCONCLUSIVE: $1 is missing or empty"
+  else
+    awk -v end="$(date -u +%s)" -v min_span="$3" -v expect="$4" -f ~/s6-readout.awk "$1"
+    rc=$?
+    if ! running "$2"; then
+      echo "INCONCLUSIVE: the sampler $2 stopped during the readout"
+    elif [ "$rc" -ne 0 ]; then
+      echo "INCONCLUSIVE: the readout exited $rc"
+    else
+      echo "PASS: COVERAGE PASS, and the sampler $2 still runs"
+    fi
+  fi
+}
+pre=lxc-root,postgres-nimuairy,backend-nimuairy,frontend-nimuairy,cloudflared-nimuairy
+window=lxc-root,prometheus,loki,tempo,alloy,docker-socket-proxy,grafana,postgres-nimuairy,backend-nimuairy,frontend-nimuairy,cloudflared-nimuairy
+```
+
+- **It passes only when** the sampler runs before and after the readout, the log exists and is not
+  empty, and the readout exits 0, so the coverage passed for exactly the expected entities.
+  Anything else prints `INCONCLUSIVE` and its reason.
+- **"Runs" means** that `kill -0` finds the PID, which sends no signal, and that the PID's command
+  line names `s6-sampler.sh`. A PID that another process reused does not pass.
+- **`$pre` and `$window`** are the expected entity sets for the pre-start log and for the window.
+
 **Starting the samplers** (C5):
-- **The pre-start sampler, at G11:** the root and the four application containers. It runs
-  through G13, the pull, the start and R1, so its log shows the stack's start too.
+- **The pre-start sampler, under C5, before G11** (§4.1, step 5): the root and the four application
+  containers. It runs through G11, G13a, the pull, G13b, the start and R1, so its log shows the
+  pull and the stack's start too.
 
   ```bash
   nohup bash ~/s6-sampler.sh postgres-nimuairy backend-nimuairy frontend-nimuairy cloudflared-nimuairy > ~/s6-sampler-pre.out 2>&1 &
@@ -1824,23 +2246,15 @@ selftest fail 1 "$(sed -e '7s/ ok .*/ INVALID memory.current/' -e '4s/pids.curre
 - **Size** [ESTIMATE]: eleven lines of about 450 bytes every 10 s, about 45 MB a day.
 
 **R3, at the end of the window.** **VPS, read-only:**
-1. **The readout, while the sampler still runs:**
+1. **The readout, while the sampler still runs**, through the wrapper:
 
    ```bash
-   log=~/s6-sample-<UTC>.log
-   pid=<PID>
-   if ! kill -0 "$pid" 2>/dev/null; then
-     echo "INCONCLUSIVE: the sampler $pid is not running"
-   elif [ ! -s "$log" ]; then
-     echo "INCONCLUSIVE: $log is missing or empty"
-   else
-     awk -v end="$(date -u +%s)" -v min_span=86400 -f ~/s6-readout.awk "$log"; echo "readout exit=$?"
-   fi
+   s6_readout ~/s6-sample-<UTC>.log <PID> 86400 "$window"
    ```
 
    - `<UTC>` comes from the log's name in `~/s6-sampler.out`, `<PID>` from the start.
-   - `kill -0` sends no signal: it only tests that the process exists.
-   - G13 runs the same block on the pre-start log, with `min_span=1800`.
+   - The wrapper checks the sampler before and after the readout. Only its `PASS` line counts.
+   - G11 runs the same on the pre-start log with `60 "$pre"`, and G13a and G13b with `1800 "$pre"`.
 2. **Stop the sampler:** `kill <PID>`.
 3. **R1 again.** Every event counter must equal R1's. The cumulative CPU and pressure values minus
    R1's give the window's CPU time and stall time per container.
@@ -1865,11 +2279,15 @@ selftest fail 1 "$(sed -e '7s/ ok .*/ INVALID memory.current/' -e '4s/pids.curre
 
 **R4, evaluation (proposed criteria, D3).**
 
-**Coverage comes first.** R3's readout must end with `COVERAGE PASS` for all eleven entities, read
-while the sampler ran. Otherwise the measurement is **INCONCLUSIVE, never PASS**, whatever M1 to M7
-show, and a new window is needed. That covers a missing or empty log, a sampler that stopped or
-crashed, an `INVALID` or rejected sample, a gap over 30 s, more than 12 s between samples on
-average, and a span under 24 h.
+**Coverage comes first.** R3's wrapper must print `PASS`: `COVERAGE PASS` for exactly the eleven
+entities of `$window`, with the sampler running before and after the readout. Otherwise the
+measurement is **INCONCLUSIVE, never PASS**, whatever M1 to M7 show, and a new window is needed.
+That covers:
+- a missing or empty log;
+- a sampler that stopped, crashed, or stopped during the readout;
+- a missing, duplicated or unexpected entity;
+- an `INVALID` or rejected sample;
+- a gap over 30 s, more than 12 s between samples on average, or a span under 24 h.
 
 With the coverage passed, the idle measurement succeeds when all of these hold:
 - **M1:** R1 is all `ok`, for all ten containers.
@@ -1963,7 +2381,9 @@ A revisit is a repository change with its own review. S6 changes no limit.
 | A login is refused | Which password the file has; the time of the failures | Wait for Grafana's lockout to pass; never retry in a loop. The reset procedure is **Not validated** | An explanation; with a new volume, the file's password is the database's |
 | The sampler refuses to start, writes `INVALID` lines, or stops | Its `.out` file; the `INVALID` keys in its log; `kill -0 <PID>` | Fix the cause if it is outside the stack, for example a container that was recreated; then start a new sampler. Its earlier log stays as it is | A complete new window. A window with a gap or an `INVALID` line is never repaired or merged |
 | The readout's self-test fails | Its `diff` output; P10's `awk` line | None on the VPS. Do not edit the readout there | A reviewed readout in the repository, whose self-test passes on that awk |
-| G13 is not a PASS | The readout and R0's two readings | None for the stack. On INCONCLUSIVE, measure again at another time. On STOP, the application's state or the budget is reviewed first | A G13 PASS |
+| G13a is not a PASS | The wrapper's output and R0's readings | No pull. On INCONCLUSIVE, measure again at another time. On STOP, the application's state or the budget is reviewed first | A G13a PASS |
+| The pull block prints `STOP`, or G13b is not a PASS | The pull block's lines; the wrapper's output; R0's readings | No `up`. On G13b INCONCLUSIVE, the operator's recorded decision of G13's Next allowed action. On STOP, the budget is reviewed first. Removing the six pulled images, by name, needs its own consent | A G13b PASS, then a new C3b |
+| C3b's 15 min passed before the `up` | The time of G13b's reading | None. G13b again, on the same, longer log | A fresh G13b PASS |
 
 ## 12. S6.7 — Documentation close-out
 
@@ -1995,15 +2415,16 @@ before the deployment has succeeded.
 ### 13.2 Proposed procedures
 
 Accepted together with this contract:
-- the seven stages and the consents C1 to C5 (§4);
-- the preflight P1 to P10 and its record (§6);
+- the seven stages, the consents C1, C2, C5, C3a, C3b and C4 (§4), and the order of §4.1;
+- the preflight P1 to P10, its helpers and its record (§6);
 - the commit rule of §7.1, the directory of §7.2, the hand-over of §7.3, and the creation blocks of
   §7.4 and §7.5;
-- the gates G1 to G13 (§8), with G13's thresholds as D3 decides them;
-- the startup steps (§9);
+- the gates G1 to G12, G13a and G13b (§8), with G13's thresholds as D3 decides them;
+- the startup steps (§9), with the pull's stall readings;
 - the checklist V1 to V16 and the single production check run (§10.1, §10.2);
-- the resource procedure R0 to R4 (§10.3): the fail-closed sampler, the readout and its self-test,
-  the coverage rule, and the criteria as D3 decides them;
+- the resource procedure R0 to R4 (§10.3): the fail-closed sampler, the readout with its expected
+  entity sets, its self-test and its wrapper, the coverage rule, and the criteria as D3 decides
+  them;
 - the recovery table (§11) and the close-out (§12).
 
 ### 13.3 Open: decisions for the operator
@@ -2027,6 +2448,9 @@ Accepted together with this contract:
 | G13's headroom (R-g) | Root `anon + shmem + kernel + sock` ≤ 2064 MiB and `MemAvailable` ≥ 2288 MiB | With R = 20 %: ≤ 2282 and ≥ 2070 MiB. With A = 600 MiB: ≤ 2664 and ≥ 1688 MiB | Follows from R and A; T − R − A and R + A |
 | G13's memory stall (R-f) | `full` 0; `some` ≤ 0.1 % of the time covered | `some` 0 too; or no stall condition | The only visible sign of a lower outer limit (G13). A strict 0 could fail on a trace of reclaim; none would ignore the sign |
 | G13's pre-start window | At least 30 min, with the coverage rule | 10 min; 1 h | Long enough for some 150 samples per entity, short enough to start the same day |
+| G13b after the pull | The same conditions on the longer log, each a STOP, plus R-p | G13a alone, as in revision 2 | The pull is a load of its own, and the `up` should follow evidence that includes it |
+| The pull's stall (R-p) | `full` 0; `some` ≤ 0.1 % of the pull's duration | A share of the whole log's time only (R-f) | R-f dilutes a short pull's stall over at least 30 min |
+| C3b's freshness | The `up` within 15 min of G13b's reading | 5 min; 30 min | Long enough to give the consent and type the command, short enough that the reading still describes the VPS |
 | The application's share in G13 (R-e) | Working set and `pids.current` ≤ half their limits | No condition | The 2× rule of the budget. S4.4.4 saw at most 21.3 % and 10.5 % |
 | The coverage rule | ≥ 24 h (window) or ≥ 30 min (G13); ≤ 12 s between samples on average; no gap over 30 s; no `INVALID` or rejected line; read while running | A gap up to 60 s | The sampler runs every 10 s; S4.4.4's sampler was never more than 11 s apart |
 | The window | At least 24 h, one 03:30 backup | 35 h, as S4.4.4 | A day and the backup are the recurring load; a longer window is allowed |
@@ -2129,14 +2553,21 @@ S6 has not started. Every item is open.
 - [ ] S6.1: the preflight record complete, without an open STOP.
 - [ ] S6.2: the archive from a verified commit (§7.1), extracted, `REVISION` written, `.env` and the
       secret created without the password appearing anywhere.
-- [ ] S6.3: G1 to G12 PASS, recorded; the readout's self-test `ok` twice on the VPS; G1 to G3
-      repeated, and G13 PASS on at least 30 min of the pre-start sampler, immediately before the
-      pull.
-- [ ] S6.4: `up` with exactly the two files; readiness of each service; the targeted logs clean.
+- [ ] S6.3, in the order of §4.1:
+  - [ ] G1 to G10 and G12 PASS, recorded, before C5;
+  - [ ] C5; the readout's self-test `ok` three times on the VPS; the pre-start sampler running;
+        then G11 PASS;
+  - [ ] G1 to G3 repeated, and G13a PASS on at least 30 min of the pre-start sampler, immediately
+        before the pull.
+- [ ] S6.4:
+  - [ ] C3a; the pull with its readings, `ok: R-p met`;
+  - [ ] G13b PASS on the samples that include the pull;
+  - [ ] C3b; `up` within 15 min of G13b, with exactly the two files;
+  - [ ] readiness of each service; the targeted logs clean.
 - [ ] S6.5: V1 to V14 and V16 as expected; V15 recorded if run.
 - [ ] S6.5: one `prod-check runtime` run, passed, with its failed login recorded.
-- [ ] S6.5: R1 all `ok`; R3's readout `COVERAGE PASS` for all eleven entities, read while the
-      sampler ran; R4 evaluated, with any revisit item reported.
+- [ ] S6.5: R1 all `ok`; R3's wrapper `PASS` for exactly the eleven entities, with the sampler
+      running before and after the readout; R4 evaluated, with any revisit item reported.
 - [ ] No `down -v`, no prune, no ownership change, no added port, no changed limit, no edit of a
       tracked file on the VPS.
 - [ ] S6.7: the documents updated from the observed facts, in their own PR.
