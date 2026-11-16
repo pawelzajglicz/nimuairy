@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 10). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 11). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -152,6 +152,25 @@ Revisions:
     understood, and `empty:` needs every listing read (§6);
   - **`unit_review` checks `systemctl show -p User`'s status:** a failed query is `UNREAD`,
     never a user's name (§6).
+- **11** (2026-11-16), the review of revision 10: one rule, applied to all of P7 and P9. Every
+  external parser's status is checked, or bash does the parsing (§5, §6):
+  - **the review's two items:**
+    - P7a's extraction of the groups that the sudo rules name keeps only `grep`, with its status
+      checked, and drops `sed` and `sort`;
+    - `sudo.conf`'s plugins and the `sudoers:` line are matched in bash;
+    - P7b splits grep's status line in bash, for `/etc/cron.d` and the user crontabs;
+    - P7b's second pass makes an unconfirmed directory `UNREAD`, never skipped;
+  - **the same kind of parser, elsewhere in P7 and P9:**
+    - a new helper, `sshd_value`, reads `sshd -T`, so `keys_of` can no longer take a failing
+      `awk` for "no key file", nor lose an `AuthorizedKeysCommand`;
+    - `nss_sources` checks its `grep`s, so an unknown `/run/systemd/userdb` service or an
+      `initgroups:` line can no longer be lost;
+    - P7a checks the `awk`s that list UID 0 accounts, login shells, primary-group members and
+      usable passwords;
+    - P7a splits its two `getent` pipelines without `sed`;
+    - P7b lists `run-parts`' scripts without `tr`;
+    - P9 reads its forwarding settings with `sshd_value`, and its `Match` and `Include` lines with
+      grep's status from inside `sudo`.
 
 ## 1. Purpose and scope
 
@@ -367,6 +386,13 @@ and a resolution that changes state needs its own consent (§11).
   with `sudo` (D2); all others run as `deploy`.
 - **The shell.** Bash, interactive, without `set -e`. The blocks report each failure with `STOP` and
   do not rely on errexit.
+- **A parser is a command too (P7, P9).** An `awk`, `grep`, `sed`, `sort`, `tail` or `tr` that fails
+  usually prints nothing, and nothing is what "no entry" looks like. So in P7 and P9:
+  - every such parser's exit status is checked, and a failure is `UNREAD`; or
+  - bash itself does the work: `read`, `[[ =~ ]]`, parameter expansion, `mapfile` and
+    associative arrays.
+
+  A status line is split off with parameter expansion, never with `tail` and `sed`.
 - **No shell trace around the password.** With `set -x`, Bash prints each command after expansion,
   the password included. The blocks that expand it turn xtrace off themselves (§7.5, V7). §10.2
   keeps the production check's own Bash from inheriting xtrace. Neither protects against a reader
@@ -536,7 +562,7 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
 conclusion does.
 
-**P7 helpers.** Seven functions that P7a to P7c and P9 use. **Admin, read-only.** Define them again in each
+**P7 helpers.** Eight functions that P7a to P7c and P9 use. **Admin, read-only.** Define them again in each
 new shell:
 
 ```bash
@@ -549,7 +575,7 @@ ssh_context() {
   if [ -z "${SSH_CONNECTION-}" ]; then echo "UNREAD: SSH_CONNECTION is empty: not an SSH session"; return 1; fi
   read -r caddr _ laddr lport <<<"$SSH_CONNECTION"
   if ! cfg=$(sudo sshd -T 2>&1); then echo "UNREAD: sshd -T failed: $cfg"; return 1; fi
-  usedns=$(awk '$1 == "usedns" { print $2 }' <<<"$cfg")
+  if ! usedns=$(sshd_value usedns "$cfg"); then echo "UNREAD: sshd -T printed no usedns"; return 1; fi
   name=$caddr
   if [ "$usedns" = yes ]; then
     name=$(getent hosts "$caddr" | awk '{ print $2; exit }')
@@ -559,6 +585,16 @@ ssh_context() {
   ctx="host=$name,addr=$caddr,laddr=$laddr,lport=$lport"
   echo "context: UseDNS ${usedns:-unknown}; $ctx"
 }
+# The value of key $1 in sshd -T's output $2, found with read: no external parser, whose failure
+# would look like a key that is not set. Returns 1 when the key is missing; OpenSSH 9.6's sshd -T
+# prints every key that these blocks read, "none" included.
+sshd_value() {
+  local k v
+  while read -r k v; do
+    if [ "$k" = "$1" ]; then printf '%s\n' "$v"; return 0; fi
+  done <<<"$2"
+  return 1
+}
 # Every key that sshd accepts for account $1 (home $2, UID $3), from its effective configuration $4:
 # one "key:" line per key with its fingerprint and its forwarding options, never the key itself.
 # Returns 2 when no authorized-keys file exists.
@@ -566,10 +602,13 @@ keys_of() {
   local u=$1 h=$2 id=$3 cfg=$4 value p f content line fp opts n keys found=0 k v e
   local -a paths
   for k in authorizedkeyscommand authorizedprincipalsfile authorizedprincipalscommand trustedusercakeys; do
-    v=$(awk -v k="$k" '$1 == k { $1 = ""; sub(/^ +/, ""); print }' <<<"$cfg")
+    if ! v=$(sshd_value "$k" "$cfg"); then echo "UNREAD: $u: sshd -T printed no $k"; found=1; continue; fi
     if [ -n "$v" ] && [ "$v" != none ]; then echo "REVIEW: $u: $k $v: keys or certificates from it are not listed here"; fi
   done
-  value=$(awk '$1 == "authorizedkeysfile" { $1 = ""; print }' <<<"$cfg")
+  if ! value=$(sshd_value authorizedkeysfile "$cfg") || [ -z "$value" ]; then
+    echo "UNREAD: $u: sshd -T printed no authorizedkeysfile, so no key file is known"
+    return 1
+  fi
   read -ra paths <<<"$value"
   for p in "${paths[@]}"; do
     [ "$p" != none ] || continue
@@ -602,7 +641,11 @@ keys_of() {
       n=$((n + 1))
       if [[ $line =~ ^[[:space:]]*(#|$) ]]; then continue; fi
       keys=$((keys + 1))
-      opts=$(grep -oE '(^|,)(restrict|no-port-forwarding|port-forwarding|permitopen="[^"]*"|from="[^"]*"|command="[^"]*")' <<<"$line" | tr -d '\n')
+      opts=$(grep -oE '(^|,)(restrict|no-port-forwarding|port-forwarding|permitopen="[^"]*"|from="[^"]*"|command="[^"]*")' <<<"$line")
+      case $? in
+        0 | 1) opts=${opts//$'\n'/} ;;
+        *) echo "UNREAD: $u $f:$n: its options could not be read"; continue ;;
+      esac
       if fp=$(ssh-keygen -l -E sha256 -f - <<<"$line" 2>/dev/null); then
         echo "key: $u $f:$n $fp${opts:+; options $opts}"
       else
@@ -618,12 +661,17 @@ keys_of() {
 # dynamic users. getent exits 2 whenever no source returned an entry, also when a source failed, so
 # "absent" needs nss_local=true and a direct read of the file.
 nss_sources() {
-  local conf db lines d o ok=true
+  local conf db lines d o re ok=true
   nss_local=false
   nss_sys=
   if ! conf=$(cat /etc/nsswitch.conf 2>&1); then echo "UNREAD: /etc/nsswitch.conf: $conf"; return 1; fi
   for db in passwd group initgroups gshadow; do
+    # grep's status is checked: a grep that fails prints nothing, like a database without a line.
     lines=$(grep -iE "^[[:space:]]*$db[[:space:]]*:" <<<"$conf")
+    case $? in
+      0 | 1) ;;
+      *) echo "UNREAD: the $db: line of /etc/nsswitch.conf could not be searched"; ok=false; continue ;;
+    esac
     echo "nss: ${lines:-no $db line}"
     if [ "$db" = initgroups ] || [ "$db" = gshadow ]; then
       if [ -z "$lines" ]; then
@@ -632,7 +680,8 @@ nss_sources() {
         continue
       fi
     fi
-    if [ "$(grep -c . <<<"$lines")" -ne 1 ] || ! grep -qE "^[[:space:]]*$db:[[:space:]]*files([[:space:]]+systemd)?[[:space:]]*\$" <<<"$lines"; then
+    re="^[[:space:]]*$db:[[:space:]]*files([[:space:]]+systemd)?[[:space:]]*\$"
+    if [ -z "$lines" ] || [[ $lines == *$'\n'* ]] || ! [[ $lines =~ $re ]]; then
       echo "REVIEW: NSS $db: not exactly one line \"$db: files\" or \"$db: files systemd\", so another source may answer"
       ok=false
     fi
@@ -651,9 +700,16 @@ nss_sources() {
       ok=false
       continue
     fi
-    if [ "$d" = /run/systemd/userdb ]; then o=$(grep -vxE 'io\.systemd\.(DynamicUser|Multiplexer|NameServiceSwitch|DropIn)' <<<"$o"); fi
+    if [ "$d" = /run/systemd/userdb ] && [ -n "$o" ]; then
+      # Only the services not accepted are left; grep exits 1 when there is none, 2 on an error.
+      o=$(grep -vxE 'io\.systemd\.(DynamicUser|Multiplexer|NameServiceSwitch|DropIn)' <<<"$o")
+      case $? in
+        0 | 1) ;;
+        *) echo "UNREAD: $d: its services could not be checked"; ok=false; continue ;;
+      esac
+    fi
     if [ -n "$o" ]; then
-      echo "REVIEW: $d: records or services of nss-systemd that P7a does not read: $(tr '\n' ' ' <<<"$o")"
+      echo "REVIEW: $d: records or services of nss-systemd that P7a does not read: ${o//$'\n'/ }"
       ok=false
     fi
   done
@@ -837,6 +893,18 @@ pkg_file() {
 - **Other sources of keys:** an `AuthorizedKeysCommand`, `AuthorizedPrincipalsFile`,
   `AuthorizedPrincipalsCommand` or `TrustedUserCAKeys` other than `none` is `REVIEW`. The keys or
   certificates it admits are not in the listing, so the operator reviews that source itself.
+- **`sshd_value`** reads one key of `sshd -T`'s output with bash's `read`.
+  - **Where it is used:** `ssh_context`, `keys_of` and P9.
+  - **A missing key is `UNREAD`.** OpenSSH 9.6's `sshd -T` prints every key these blocks read,
+    `none` and `any` included. So a missing key means an output that cannot be trusted, not an
+    unset option.
+    - **The source:** `dump_config` prints them unconditionally
+      ([OpenSSH 9.6p1, `servconf.c`](https://github.com/openssh/openssh-portable/blob/V_9_6_P1/servconf.c#L3078-L3122)).
+    - **`AuthorizedKeysFile`** is the one list among them, and a list with no entry would be
+      left out. It always has one: the two default files, or a configured `none`, which is kept
+      as a word (lines 416–425 and 2037–2051).
+  - **Why not `awk`:** an `awk` that failed made `AuthorizedKeysFile` empty. `keys_of` then
+    reported no key file at all, and dropped the `REVIEW` for an `AuthorizedKeysCommand`.
 - **`nss_sources`** decides whether a missing account or group can be confirmed at all:
   - **`getent` cannot tell a missing entry from a failed source.** Its exit status is 2 whenever
     the lookup returned no entry, and 0 after any enumeration, even one in which a source failed
@@ -981,16 +1049,24 @@ elif [ -z "$db" ]; then
 elif ! missing=$(printf '%s\n' "$db" | awk -F: 'NR == FNR { seen[$1] = 1; next } /^[ \t]*(#|$)/ { next } !($1 in seen) { print $1 }' - /etc/passwd); then
   echo "UNREAD: /etc/passwd could not be read, so the account list cannot be checked against it"
 elif [ -n "$missing" ]; then
-  echo "UNREAD: getent passwd did not list these entries of /etc/passwd: $(tr '\n' ' ' <<<"$missing")"
+  echo "UNREAD: getent passwd did not list these entries of /etc/passwd: ${missing//$'\n'/ }"
 elif ! awk -F: '$3 == 0 { found = 1 } END { exit !found }' <<<"$db"; then
   echo "UNREAD: no account with UID 0 was listed, so the account database was not read completely"
 elif [ "$nss_local" != true ]; then
   echo "UNREAD: nss_sources did not accept NSS's sources (above), so accounts may come from a source that this list does not show"
 else
   accounts=true
-  echo "accounts: $(grep -c . <<<"$db")"
-  awk -F: '$3 == 0 { print "uid 0:", $1 }' <<<"$db"
-  awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }' <<<"$db"
+  mapfile -t acl <<<"$db"
+  echo "accounts: ${#acl[@]}"
+  # Each listing's awk is checked: one that fails prints nothing, like a list without entries.
+  if o=$(awk -F: '$3 == 0 { print "uid 0:", $1 }' <<<"$db"); then printf '%s\n' "$o"; else echo "UNREAD: the accounts with UID 0 could not be listed"; fi
+  if ! o=$(awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }' <<<"$db"); then
+    echo "UNREAD: the accounts with a login shell could not be listed"
+  elif [ -n "$o" ]; then
+    printf '%s\n' "$o"
+  else
+    echo "empty: no account has a login shell"
+  fi
 fi
 # The sudo rules, and the groups they name (%name or %#GID), which join the groups reviewed below.
 # Read as sudo reads them (sudoers(5), "Including other files"): /etc/sudoers, and every file that
@@ -1086,14 +1162,20 @@ elif [ "$e" != file ]; then
 elif ! o=$(sudo cat -- /etc/sudo.conf 2>&1); then
   echo "UNREAD: /etc/sudo.conf: $o"
 else
-  o=$(grep -E '^[[:space:]]*Plugin[[:space:]]' <<<"$o" | grep -vE '^[[:space:]]*Plugin[[:space:]]+sudoers_(policy|io|audit)[[:space:]]+sudoers\.so[[:space:]]*$')
-  if [ -n "$o" ]; then echo "REVIEW: /etc/sudo.conf: $o: a plugin or sudoers.so option that P7a does not read"; fi
+  # Matched in bash, line by line: a grep that fails would hide a plugin as if there were none.
+  plug=
+  while IFS= read -r line; do
+    [[ $line =~ ^[[:space:]]*Plugin[[:space:]] ]] || continue
+    [[ $line =~ ^[[:space:]]*Plugin[[:space:]]+sudoers_(policy|io|audit)[[:space:]]+sudoers\.so[[:space:]]*$ ]] && continue
+    plug+=${plug:+; }$line
+  done <<<"$o"
+  if [ -n "$plug" ]; then echo "REVIEW: /etc/sudo.conf: $plug: a plugin or sudoers.so option that P7a does not read"; fi
 fi
 o=$(grep -iE '^[[:space:]]*sudoers[[:space:]]*:' /etc/nsswitch.conf 2>&1)
 case $? in
   0)
-    if [ "$(grep -c . <<<"$o")" -ne 1 ] || ! grep -qxE '[[:space:]]*sudoers:[[:space:]]*files[[:space:]]*' <<<"$o"; then
-      echo "REVIEW: /etc/nsswitch.conf: $(tr '\n' ' ' <<<"$o"): sudo also takes rules from a source that P7a does not read"
+    if [[ $o == *$'\n'* ]] || ! [[ $o =~ ^[[:space:]]*sudoers:[[:space:]]*files[[:space:]]*$ ]]; then
+      echo "REVIEW: /etc/nsswitch.conf: ${o//$'\n'/ }: sudo also takes rules from a source that P7a does not read"
     fi
     ;;
   1) ;;
@@ -1102,10 +1184,27 @@ esac
 # The groups and other user lists that the rules name. A reference counts only if it starts an
 # item: at the start of a line, or after white space, ",", "=", "(", "!" or ":". Only %name and
 # %#GID are Unix groups; a netgroup (+name), a non-Unix group (%:name, %:#GID), a quoted or escaped
-# name, or any other form is REVIEW, never a partial group name.
-while read -r r; do
+# name, or any other form is REVIEW, never a partial group name. grep's status is checked (1: no
+# reference); the separator before a reference is removed, and duplicates dropped, in bash.
+refs=$(grep -oE '(^|[[:space:],=(!:])"?[%+][^[:space:],=()!]*' <<<"$rules")
+case $? in
+  0 | 1) ;;
+  *)
+    echo "UNREAD: the groups that the sudo rules name could not be extracted, so they are not reviewed below"
+    refs=
+    ;;
+esac
+sep='[[:space:],=(!:]'
+unset seenref
+declare -A seenref=()
+while IFS= read -r r; do
+  r=${r#$sep}
   case $r in
     '' | % | +) continue ;;
+  esac
+  if [ -n "${seenref[$r]-}" ]; then continue; fi
+  seenref[$r]=1
+  case $r in
     \"*) echo "REVIEW: the sudo rules name $r..., a quoted name, which P7a does not resolve"; continue ;;
     *\\*) echo "REVIEW: the sudo rules name $r, an escaped name, which P7a does not resolve"; continue ;;
     +*) echo "REVIEW: the sudo rules name $r, a netgroup or a + word, whose members P7 does not inventory"; continue ;;
@@ -1113,14 +1212,20 @@ while read -r r; do
   esac
   if [[ $r =~ ^%[A-Za-z_][A-Za-z0-9_.-]*\$?$ ]]; then
     n=${r#%}
-  elif [[ $r =~ ^%#[0-9]+$ ]] && n=$(awk -F: -v gid="${r#%#}" '$3 == gid { print $1; exit }' /etc/group) && [ -n "$n" ]; then
-    :
+  elif [[ $r =~ ^%#[0-9]+$ ]]; then
+    if ! n=$(awk -F: -v gid="${r#%#}" '$3 == gid { print $1; exit }' /etc/group); then
+      echo "UNREAD: the sudo rules name $r, and /etc/group could not be searched for it"
+      continue
+    elif [ -z "$n" ]; then
+      echo "REVIEW: the sudo rules name $r, which no group of /etc/group has"
+      continue
+    fi
   else
     echo "REVIEW: the sudo rules name $r, which P7a does not resolve to a group"
     continue
   fi
   case " $groups " in *" $n "*) ;; *) groups="$groups $n" ;; esac
-done < <(grep -oE '(^|[[:space:],=(!:])"?[%+][^[:space:],=()!]*' <<<"$rules" | sed -E 's/^[[:space:],=(!:]//' | sort -u)
+done <<<"$refs"
 echo "groups reviewed: $groups"
 # Exit status 2 is absent only if NSS asks no other source and /etc/group, read directly, has no
 # such group. A group's members are its listed members and the accounts whose primary group it is.
@@ -1130,17 +1235,25 @@ echo "groups reviewed: $groups"
 for g in $groups; do
   why=
   r=$(getent group "$g" | awk -F: -v OFS=: 'length($2) > 1 { $2 = ($2 ~ /^[!*]/) ? "<locked>" : "<set>" } { print }'; echo "exit ${PIPESTATUS[0]} ${PIPESTATUS[1]}")
-  read -r _ rc arc <<<"${r##*$'\n'}"
-  o=$(sed '$d' <<<"$r")
+  # The status line is split off, and the entry's form checked, in bash: no further parser.
+  st=${r##*$'\n'}
+  read -r _ rc arc <<<"$st"
+  o=${r%"$st"}
+  o=${o%$'\n'}
+  colons=${o//[^:]/}
   if [ "$arc" != 0 ]; then
     echo "UNREAD: group $g: the awk that hides its password field exited $arc, so getent's answer (exit $rc) is unknown"
-  elif [ "$rc" = 0 ] && { [ "$(grep -c . <<<"$o")" -ne 1 ] || [ "$(awk -F: '{ print NF }' <<<"$o")" != 4 ] || [ "${o%%:*}" != "$g" ]; }; then
+  elif [ "$rc" = 0 ] && { [ -z "$o" ] || [[ $o == *$'\n'* ]] || [ "${#colons}" -ne 3 ] || [ "${o%%:*}" != "$g" ]; }; then
     echo "UNREAD: group $g: getent exited 0 without one well-formed entry named $g"
   elif [ "$rc" = 0 ]; then
     printf '%s\n' "$o"
     if $accounts; then
-      m=$(awk -F: -v gid="$(cut -d: -f3 <<<"$o")" '$4 == gid { printf "%s%s", sep, $1; sep = " " }' <<<"$db")
-      echo "primary group $g: ${m:-no account}"
+      IFS=: read -r _ _ gid _ <<<"$o"
+      if ! m=$(awk -F: -v gid="$gid" '$4 == gid { printf "%s%s", sep, $1; sep = " " }' <<<"$db"); then
+        echo "UNREAD: the accounts whose primary group is $g could not be listed"
+      else
+        echo "primary group $g: ${m:-no account}"
+      fi
     else
       echo "UNREAD: no complete account list, so the accounts whose primary group is $g are not listed"
     fi
@@ -1200,13 +1313,15 @@ else
         # root, through the same kind of awk. Both exit statuses are kept: getent's (through sudo)
         # and awk's; an entry counts only as one line of four fields named $g.
         r=$(sudo getent gshadow "$g" | awk -F: '{ print NF, $1, (($2 == "") ? "empty" : ($2 ~ /^[!*]/) ? "locked" : "set"), (($3 == "") ? "-" : $3), (($4 == "") ? "-" : $4) }'; echo "exit ${PIPESTATUS[0]} ${PIPESTATUS[1]}")
-        read -r _ rc arc <<<"${r##*$'\n'}"
-        x=$(sed '$d' <<<"$r")
+        st=${r##*$'\n'}
+        read -r _ rc arc <<<"$st"
+        x=${r%"$st"}
+        x=${x%$'\n'}
         nf= name= s= ad= mem= extra= why=
         read -r nf name s ad mem extra <<<"$x"
         if [ "$arc" != 0 ]; then
           echo "UNREAD: gshadow $g: the awk that hides its password field exited $arc, so NSS's answer (exit $rc) is unknown"
-        elif [ "$rc" = 0 ] && [ "$(grep -c . <<<"$x")" -eq 1 ] && [ "$nf" = 4 ] && [ "$name" = "$g" ] && [[ $s =~ ^(empty|locked|set)$ ]] && [ -n "$mem" ] && [ -z "$extra" ]; then
+        elif [ "$rc" = 0 ] && [ -n "$x" ] && [[ $x != *$'\n'* ]] && [ "$nf" = 4 ] && [ "$name" = "$g" ] && [[ $s =~ ^(empty|locked|set)$ ]] && [ -n "$mem" ] && [ -z "$extra" ]; then
           echo "REVIEW: gshadow $g: not in /etc/gshadow, but NSS returns an entry: password $s; administrators: $ad; members: $mem"
         elif [ "$rc" = 0 ]; then
           echo "UNREAD: gshadow $g: getent gshadow exited 0 without one well-formed entry named $g"
@@ -1233,8 +1348,11 @@ if [ "$rc" -ne 0 ]; then
 elif ! awk '$1 == "root" { found = 1 } END { exit !found }' <<<"$o"; then
   echo "UNREAD: passwd -S -a listed no root, so its list is not complete"
 else
-  u=$(awk '$2 == "P" { printf "%s%s", sep, $1; sep = " " }' <<<"$o")
-  echo "usable password: ${u:-none}"
+  if u=$(awk '$2 == "P" { printf "%s%s", sep, $1; sep = " " }' <<<"$o"); then
+    echo "usable password: ${u:-none}"
+  else
+    echo "UNREAD: the accounts with a usable password could not be listed"
+  fi
 fi
 absent=0
 if ! $accounts; then
@@ -1284,6 +1402,11 @@ last -n 20 || echo "UNREAD: last failed"
     - non-Unix groups (`%:name`, `%:#GID`);
     - names in double quotes, which hold their prefix, as in `"%domain users"`;
     - escaped names, as in `\x20`.
+
+    The references are found with one `grep -oE`, whose status is checked: a failure is `UNREAD`,
+    and the groups the rules name are then unknown. The separator before each reference is
+    removed, and duplicates dropped, in bash. A `%#GID` that `/etc/group` cannot be searched for
+    is `UNREAD`; one that no group has is `REVIEW`.
 
     Their members are not in P7's inventory, so each is `REVIEW`, never a partial group name:
     - revision 7 read `"%domain users"` as the group `domain`;
@@ -1596,6 +1719,63 @@ last -n 20 || echo "UNREAD: last failed"
       - P7c now reviews units in their listing order, not sorted;
       - messages are now joined into one line by bash, not `tr`;
       - under gawk and mawk both suites gave identical output.
+  - **Tested locally, revision 11** [LOCAL], with the same harness:
+    - **Setup:** one parser at a time failed, printing nothing and exiting 2, while the data stayed
+      valid. Revision 10's blocks ran the same cases as the control.
+    - **A fixture correction:** the fake `sshd -T` now prints every key that the blocks read,
+      as OpenSSH 9.6 does. One case leaves a key out on purpose.
+    - **P7a:**
+      - **the `grep` that finds the groups the sudo rules name:** revision 10 silently left out
+        `custom-admins`; revision 11 gives `UNREAD`;
+      - **that extraction's `sed` or `sort`:** revision 10 left out `custom-admins`; revision 11
+        no longer runs them, and reviews it;
+      - **either `grep` of `sudo.conf`:** revision 10 hid a `sudoers_file=` plugin; revision 11
+        shows its `REVIEW`;
+      - **the `awk` that resolves `%#100`:** `UNREAD`, where revision 10 gave `REVIEW`;
+      - **the `awk`s listing UID 0 accounts, login shells and usable passwords:** revision 10 printed
+        nothing, or `usable password: none`; revision 11 gives `UNREAD`;
+      - **`cut` or `awk` for primary-group members:** revision 10 printed `primary group docker: no
+        account`, though an account of the local `/etc/passwd` has that GID. Revision 11 lists it,
+        or gives `UNREAD`;
+      - **`sed '$d'` in the group pipeline:** revision 10 gave `UNREAD` for every group;
+        revision 11 no longer runs it;
+      - **the `grep` that finds an `initgroups: files sss` line:** revision 10 printed "no initgroups
+        line" and accepted the sources; revision 11 gives `UNREAD`;
+      - **the `grep` that filters `/run/systemd/userdb`, holding `io.systemd.Home`:** revision 10
+        accepted the sources; revision 11 gives `UNREAD`;
+      - **an `sshd -T` without `usedns`:** revision 10 carried on with "UseDNS unknown";
+        revision 11 gives `UNREAD`.
+    - **P7b:**
+      - **`sed '$d'`:** revision 10 hid every line of `/etc/crontab`, `/etc/cron.d` and the user
+        crontab, without an `UNREAD`; revision 11 shows them;
+      - **`tail`:** `UNREAD` in revision 10; correct in revision 11, which no longer runs it;
+      - **the `tr` that lists `run-parts`' scripts:** revision 10 printed `runs:` with nothing;
+        revision 11 lists them;
+      - **`path_kind` failing only on its second call for `/etc/cron.daily`:** revision 10
+        skipped that directory's entries silently; revision 11 gives `UNREAD`.
+    - **P9 and `keys_of`:**
+      - **the `awk` that reads `AuthorizedKeysFile`:** revision 10 printed `absent: s6key has no
+        authorized-keys file` for an account with a key; revision 11 lists the key;
+      - **the `awk` that reads `AuthorizedKeysCommand`:** revision 10 lost its `REVIEW`;
+        revision 11 keeps it;
+      - **the `grep` of a key's options:** revision 10 showed the key without its `restrict`;
+        revision 11 gives `UNREAD`;
+      - **the `grep` of the forwarding settings:** revision 10 printed none; revision 11 shows
+        them;
+      - **an `sshd -T` without `authorizedkeysfile`:** revision 10 gave `absent:`; revision 11
+        gives `UNREAD`;
+      - **a failed `sudo` reading `Match` and `Include`:** revision 10 printed `empty: no Match or
+        Include line`; revision 11 gives `UNREAD`.
+    - **Unforced:** both revisions gave the same results.
+    - **The earlier suites, rerun with revision 11's blocks:**
+      - **revision 10's (`pkg_file`, P7c):** its results again, unchanged;
+      - **revision 9's:** revision 10's results, with three differences:
+        - in the cases where every `sudo` fails, P7b's second pass now gives one `UNREAD` per cron
+          directory, where it skipped them;
+        - lines joined by bash end without a trailing space;
+        - in P9, the `Match` line of the fixture's new `sshd_config` is listed, and all four
+          forwarding settings are printed;
+      - under gawk and mawk, every suite gave the same output.
 - **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
   and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
   `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
@@ -1635,8 +1815,10 @@ if { [ "$k1" = file ] || [ "$k1" = absent ]; } && { [ "$k2" = directory ] || [ "
     if [ "$#" -eq 0 ]; then echo "grep not run: no file"; exit 0; fi
     grep -vHE "^[[:space:]]*(#|\$)" "$@" 2>&1
     echo "grep exit status $?"' sh "$k1" "$k2" 2>&1)
-  st=$(tail -n 1 <<<"$o")
-  o=$(sed '$d' <<<"$o")
+  # The status line is split off in bash: a tail or sed that fails would hide the lines found.
+  st=${o##*$'\n'}
+  o=${o%"$st"}
+  o=${o%$'\n'}
   case $st in
     "grep exit status 0") printf '%s\n' "$o" ;;
     "grep exit status 1") echo "empty: no line in /etc/crontab or /etc/cron.d" ;;
@@ -1659,7 +1841,7 @@ for d in /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
       elif [ -z "$o" ]; then
         echo "empty: $d: run-parts would run none of its files"
       else
-        echo "$d runs: $(tr '\n' ' ' <<<"$o")"
+        echo "$d runs: ${o//$'\n'/ }"
       fi
       ;;
     *) echo "UNREAD: $d: ${k#unknown: }" ;;
@@ -1668,7 +1850,14 @@ done
 # Every entry of these directories, listed as root, with its package check (pkg_file), or its
 # content where no package vouches for it.
 for d in /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
-  [ "$(path_kind "$d")" = directory ] || continue
+  # A missing directory was reported above; anything else that is no directory is UNREAD here too,
+  # so that a second, failing inspection cannot skip the directory silently.
+  k=$(path_kind "$d")
+  case $k in
+    directory) ;;
+    absent) continue ;;
+    *) echo "UNREAD: $d: its entries are not checked: ${k#unknown: }"; continue ;;
+  esac
   if ! names=$(sudo ls -A -- "$d" 2>&1); then echo "UNREAD: $d: $names"; continue; fi
   if [ -z "$names" ]; then echo "empty: $d: no file"; continue; fi
   while IFS= read -r n; do
@@ -1703,15 +1892,17 @@ case $k in
       while IFS= read -r n; do
         echo "== crontab of $n"
         o=$(sudo sh -c 'grep -vE "^[[:space:]]*(#|\$)" -- "$1" 2>&1; echo "grep exit status $?"' sh "$d/$n" 2>&1)
-        st=$(tail -n 1 <<<"$o")
-        o=$(sed '$d' <<<"$o")
+        st=${o##*$'\n'}
+        o=${o%"$st"}
+        o=${o%$'\n'}
         case $st in
           "grep exit status 0") printf '%s\n' "$o" ;;
           "grep exit status 1") echo "empty: crontab of $n: no line" ;;
           *) echo "UNREAD: crontab of $n: $st $o" ;;
         esac
       done <<<"$names"
-      echo "user crontabs: $(grep -c . <<<"$names")"
+      mapfile -t ucl <<<"$names"
+      echo "user crontabs: ${#ucl[@]}"
     fi
     ;;
   *) echo "UNREAD: $d: ${k#unknown: }" ;;
@@ -1747,8 +1938,12 @@ fi
     directory it cannot read (debianutils 5.23.1) [LOCAL];
   - a directory whose listing fails is `UNREAD`;
   - one with no file, or from which `run-parts` would run none, is `empty:`.
+- **Grep's output and its status line** are split in bash, for `/etc/crontab` and `/etc/cron.d`
+  and for each user crontab. A `tail` or `sed` that failed could otherwise have hidden every line
+  found, under grep's status 0.
 - **Each entry of `/etc/cron.d` and the periodic directories** is listed as root and checked with
-  `pkg_file`. Every entry is reported, not only regular files:
+  `pkg_file`. A directory that `path_kind` does not confirm is `UNREAD` in this pass too, never
+  skipped. Every entry is reported, not only regular files:
   - one that is no regular file is `REVIEW`;
   - one that cannot be inspected is `UNREAD`;
   - a file that no package vouches for is shown in full.
@@ -2009,22 +2204,33 @@ if ssh_context; then
   elif [ "$rc" -ne 0 ] || [ -z "$h" ]; then
     echo "UNREAD: account $u: getent passwd exited $rc, and no complete entry or confirmed absence was read${why:+: $why}"
   elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
-    grep -E '^(allowtcpforwarding|disableforwarding|permitopen|permitlisten) ' <<<"$cfg"
+    # The forwarding settings, read with sshd_value: a missing one is UNREAD, never silence.
+    for k in allowtcpforwarding disableforwarding permitopen permitlisten; do
+      if v=$(sshd_value "$k" "$cfg"); then echo "$k $v"; else echo "UNREAD: $u: sshd -T printed no $k"; fi
+    done
     keys_of "$u" "$h" "$id" "$cfg"
     if [ $? -eq 2 ]; then echo "absent: $u has no authorized-keys file"; fi
   else
     echo "UNREAD: $u: sshd -T failed: $cfg"
   fi
 fi
-if o=$(sudo grep -rnHiE '^[[:space:]]*(Match|Include)[[:space:]]' /etc/ssh/sshd_config /etc/ssh/sshd_config.d 2>&1); then
-  printf '%s\n' "$o"
-elif [ $? -eq 1 ]; then
-  echo "empty: no Match or Include line"
-else
-  echo "UNREAD: the sshd configuration files: $o"
-fi
+# grep's exit status comes from inside sudo: a failed sudo also exits 1, like grep without a match.
+o=$(sudo sh -c 'grep -rnHiE "^[[:space:]]*(Match|Include)[[:space:]]" /etc/ssh/sshd_config /etc/ssh/sshd_config.d 2>&1; echo "grep exit status $?"' 2>&1)
+st=${o##*$'\n'}
+o=${o%"$st"}
+o=${o%$'\n'}
+case $st in
+  "grep exit status 0") printf '%s\n' "$o" ;;
+  "grep exit status 1") echo "empty: no Match or Include line" ;;
+  *) echo "UNREAD: the sshd configuration files: $st ${o//$'\n'/ }" ;;
+esac
 ```
 
+- **Every reading is checked:**
+  - the forwarding settings come from `sshd_value`, so a missing one is `UNREAD`, not an empty
+    listing;
+  - the `Match` and `Include` lines are read with grep's status from inside `sudo sh -c`, so a
+    failed `sudo` is `UNREAD`, never `empty:`.
 - **No shell trace:** P9 turns xtrace off first, as P7a does. `keys_of` reads each
   `authorized_keys` file into a variable, and a trace would print its lines, which §5 never
   prints.
