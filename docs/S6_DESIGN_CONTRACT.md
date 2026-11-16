@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 5). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 8). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -72,6 +72,53 @@ Revisions:
     (§6, G6);
   - P7a lists, for each privileged group, the accounts whose primary group it is, which
     `getent group` does not list (§6, G6).
+- **6** (2026-11-16), the review of revision 5:
+  - §7.3's hand-over fails closed. `install` runs only after `getent passwd deploy` exits 0 with
+    exactly one entry of seven fields for `deploy`, with a UID and GID other than 0, and a home
+    that resolves to an existing directory other than `/`. The destination is a file in that home,
+    owned by the entry's own UID and GID. Any failed check prints `STOP` (§7.3);
+  - P7a reads `/etc/gshadow` as root, through an `awk` that prints only each group's password
+    state (`empty`, `locked`, `set`), administrators and members, and how the members differ from
+    `/etc/group`'s; never a password field (§6):
+    - a set password, any administrator, a difference in members or an entry without a group is
+      `REVIEW`;
+    - an unreadable file, or a duplicate or malformed entry, is `UNREAD`;
+    - a missing entry or file is `absent:` only with NSS's sources accepted;
+  - the groups reviewed include every group that the sudo rules name. A failed `sudo` no longer
+    reads as no sudo rule. `nss_sources` also checks a `gshadow:` line. P7a turns xtrace off and
+    shows `/etc/group`'s password field only as its state (§6);
+  - G6: the `/etc/gshadow` inventory must be complete. An unknown administrator, or an unknown
+    member found only in `/etc/gshadow`, is STOP. A set group password needs a recorded decision
+    before G6 passes (§8).
+- **7** (2026-11-16), the review of revision 6:
+  - P7a reads the sudo rules as sudo does. It follows `#include`, `@include`, `#includedir` and
+    `@includedir`, nested, with relative paths and sudo's skipped names. It keeps
+    `#include`, `#includedir` and `#<UID>` lines, which revision 6 dropped as comments. An
+    include it cannot follow or read is `UNREAD`, and so are the groups the unread rules name
+    (§6, G6);
+  - `nss_sources` keeps accepting a missing `gshadow:` line. glibc gives it the `group:` line's
+    sources, and its own `files` default only when both lines are missing (glibc 2.39 source;
+    tested with 2.43). For a reviewed group that `/etc/gshadow` lacks, P7a now asks NSS through
+    `sudo getent gshadow`, through an `awk` that prints no password field. An entry that NSS
+    returns from outside the file is `REVIEW`, and no confirmed answer is `UNREAD` (§6, G6);
+  - `getent group`'s output is sanitized before it reaches a variable, so `/etc/group`'s
+    password field is never held in the shell, only `<set>` or `<locked>`. The exit status
+    checked stays `getent`'s (§6).
+- **8** (2026-11-16), the review of revision 7:
+  - an accepted NSS configuration no longer proves that every source works. nss-systemd 255
+    reports "not found" also when its services fail. So, wherever `systemd` is among a database's
+    sources, a missing account, group or gshadow entry is `absent:` only after two new helpers
+    confirm it. `userdb_none` asks each of nss-systemd's services directly, through `varlinkctl`;
+    `absent_ok` combines that with the accepted sources. A service that fails or holds a record is
+    `UNREAD`. A group in neither file gets its own `absent:` line (§6, G6);
+  - the sudo rules' references are classified by sudoers(5)'s user list:
+    - only `%name` and `%#GID` are Unix groups;
+    - a netgroup, a non-Unix group, a quoted or an escaped name is `REVIEW`, never a partial
+      group name;
+    - a `Plugin` line of `sudo.conf`, or a `sudoers:` line in `nsswitch.conf`, that P7a does not
+      read is `REVIEW` as well;
+    - G6 passes only after the operator lists and attributes their members (§6, G6);
+  - P9 turns xtrace off first, as P7a does, before `keys_of` reads any `authorized_keys` file (§6).
 
 ## 1. Purpose and scope
 
@@ -301,12 +348,14 @@ and a resolution that changes state needs its own consent (§11).
 - **Never printed, sent or recorded:** the Grafana password; Grafana's `/proc/1/environ`; a full
   `docker inspect` of an application container, which prints its secrets
   ([DEFERRED_WORK, S3](DEFERRED_WORK.md#s3--application-secrets-out-of-container-environment-variables));
-  key material from `authorized_keys`.
+  key material from `authorized_keys`; a password field or a whole line of `/etc/gshadow`.
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
 - **None of these commands has run on the VPS.** Each block passes `bash -n`. The sampler, the
-  readout and a few helpers also ran against simulated input, locally (§10.3), and P7a and P9
-  against the real `getent` in a namespace (P7a); nothing else did.
+  readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
+  against the real `getent`, and P7a against fixture `/etc/gshadow`, sudoers and nss-systemd files,
+  in a namespace (P7a);
+  and §7.3's hand-over against fakes (§7.3). Nothing else did.
   The first run of each block on the VPS is itself evidence, and its output is reviewed before the
   next step.
 - **STOP** means: take no further step of S6, report the output, and resolve the cause explicitly.
@@ -454,7 +503,7 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
 conclusion does.
 
-**P7 helpers.** Three functions that P7a and P9 use. **Admin, read-only.** Define them again in each
+**P7 helpers.** Five functions that P7a and P9 use. **Admin, read-only.** Define them again in each
 new shell:
 
 ```bash
@@ -533,15 +582,23 @@ keys_of() {
 nss_sources() {
   local conf db lines d o ok=true
   nss_local=false
+  nss_sys=
   if ! conf=$(cat /etc/nsswitch.conf 2>&1); then echo "UNREAD: /etc/nsswitch.conf: $conf"; return 1; fi
-  for db in passwd group initgroups; do
+  for db in passwd group initgroups gshadow; do
     lines=$(grep -iE "^[[:space:]]*$db[[:space:]]*:" <<<"$conf")
     echo "nss: ${lines:-no $db line}"
-    if [ "$db" = initgroups ] && [ -z "$lines" ]; then continue; fi
+    if [ "$db" = initgroups ] || [ "$db" = gshadow ]; then
+      if [ -z "$lines" ]; then
+        # glibc: a missing gshadow line takes the group line's sources.
+        if [ "$db" = gshadow ] && [[ " $nss_sys " == *" group "* ]]; then nss_sys+=" gshadow"; fi
+        continue
+      fi
+    fi
     if [ "$(grep -c . <<<"$lines")" -ne 1 ] || ! grep -qE "^[[:space:]]*$db:[[:space:]]*files([[:space:]]+systemd)?[[:space:]]*\$" <<<"$lines"; then
       echo "REVIEW: NSS $db: not exactly one line \"$db: files\" or \"$db: files systemd\", so another source may answer"
       ok=false
     fi
+    if [[ $lines == *systemd* ]]; then nss_sys+=" $db"; fi
   done
   for d in /etc/userdb /run/userdb /run/host/userdb /usr/local/lib/userdb /usr/lib/userdb /run/systemd/userdb; do
     [ -e "$d" ] || continue
@@ -564,6 +621,39 @@ nss_sources() {
     nss_local=true
     echo "nss: accounts and groups from /etc/passwd, /etc/group and dynamic users only"
   fi
+}
+# Whether nss-systemd's services confirm that they hold no user record ($1 = user) or group record
+# ($1 = group) named $2. getent cannot tell: nss-systemd 255 answers "not found" also when a
+# service fails. So each service in /run/systemd/userdb that nss-systemd asks is asked directly,
+# through varlinkctl, and only NoRecordFound from every one confirms. A reply's record is never
+# read. Otherwise it prints why, and returns 1.
+userdb_none() {
+  local method=GetUserRecord field=userName d=/run/systemd/userdb s e rc
+  if [ "$1" = group ]; then method=GetGroupRecord field=groupName; fi
+  if [ ! -x "$(command -v varlinkctl)" ]; then echo "no executable varlinkctl, so nss-systemd's services cannot be asked"; return 1; fi
+  if [ ! -S "$d/io.systemd.DynamicUser" ]; then echo "no socket $d/io.systemd.DynamicUser, so PID 1's service cannot be asked"; return 1; fi
+  for s in "$d"/*; do
+    case ${s##*/} in io.systemd.Multiplexer | io.systemd.NameServiceSwitch) continue ;; esac
+    # SYSTEMD_LOG_LEVEL=err: an inherited debug level would add the messages, records included.
+    e=$(SYSTEMD_LOG_LEVEL=err varlinkctl call "$s" "io.systemd.UserDatabase.$method" "{\"$field\":\"$2\",\"service\":\"${s##*/}\"}" 2>&1 >/dev/null)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then echo "${s##*/} holds a record named $2"; return 1; fi
+    if [ "$e" != "Method call io.systemd.UserDatabase.$method() failed: io.systemd.UserDatabase.NoRecordFound" ]; then
+      echo "${s##*/} gave no answer: $e"
+      return 1
+    fi
+  done
+  return 0
+}
+# Whether an entry of database $1 (passwd, group or gshadow) named $2, which getent did not return
+# and the file does not hold, is confirmed missing: NSS's sources accepted and, where systemd is
+# among the database's sources, every nss-systemd service confirms. Otherwise it prints why, and
+# returns 1.
+absent_ok() {
+  if [ "${nss_local-}" != true ]; then echo "nss_sources did not accept NSS's sources"; return 1; fi
+  case " ${nss_sys-} " in
+    *" $1 "*) if [ "$1" = passwd ]; then userdb_none user "$2"; else userdb_none group "$2"; fi ;;
+  esac
 }
 ```
 
@@ -589,7 +679,14 @@ nss_sources() {
     ([glibc 2.39, `nss/getent.c`](https://github.com/bminor/glibc/blob/glibc-2.39/nss/getent.c)).
     It also exits 2 for a group that exists when `/etc/group` cannot be read [LOCAL, glibc 2.43].
   - **The sources it accepts:** exactly one `passwd:` and one `group:` line, each `files` or
-    `files systemd`, and an `initgroups:` line, if there is one, of the same form. Any other form,
+    `files systemd`, and an `initgroups:` or `gshadow:` line, if there is one, of the same form.
+    A missing `gshadow:` line takes the `group:` line's sources: glibc applies its own default for
+    `gshadow`, `files`, only when `group:` is missing too
+    ([glibc 2.39, `nss_database.c`](https://github.com/bminor/glibc/blob/glibc-2.39/nss/nss_database.c#L357-L361)).
+    With glibc 2.43 and `group: files systemd` alone, `getent gshadow` returned nss-systemd's
+    entries, as with `gshadow: files systemd`, and none with `gshadow: files` [LOCAL]. With
+    `systemd` among these sources, P7a also asks NSS itself for each group that `/etc/gshadow`
+    lacks. Any other form,
     such as another source, an action in brackets, a comment after the sources or a second line
     for the same database, is `REVIEW`. glibc takes the later of two lines, and a missing line
     gives a default that depends on glibc's build.
@@ -608,11 +705,43 @@ nss_sources() {
     unit.
   - **nscd**, if it runs, can answer from its cache: `REVIEW`.
   - With every source accepted, it sets `nss_local=true`. Otherwise no account or group is
-    confirmed missing, and P7a's account list is not complete.
+    confirmed missing, and P7a's account list is not complete. It also records in `nss_sys` the
+    databases whose sources include `systemd`; `gshadow` takes `group`'s when it has no line.
+- **`nss_local=true` says that the configuration is accepted, not that every source works.**
+  - **Why getent is not enough:** nss-systemd 255 reports "not found" also when its services fail
+    ([`userdb.c`](https://github.com/systemd/systemd/blob/v255/src/shared/userdb.c)):
+    - when it cannot connect to any service, `userdb_start_query` returns the last error;
+    - but the lookups by name then try the drop-ins, whose own "not found" replaces that error;
+    - and one service's "not found" wins over another's error.
+
+    So `getent`'s exit status 2 cannot tell a missing record from a failed service.
+  - **`userdb_none`** asks every service in `/run/systemd/userdb` that nss-systemd asks, directly,
+    through `varlinkctl call`: each service except `io.systemd.Multiplexer`, which nss-systemd
+    never uses, and `io.systemd.NameServiceSwitch`, which it skips with `USERDB_EXCLUDE_NSS`
+    ([`userdb-glue.c`](https://github.com/systemd/systemd/blob/v255/src/nss-systemd/userdb-glue.c)).
+    PID 1's `io.systemd.DynamicUser` is the one that serves dynamic users and groups.
+    - **Confirms** only when every service answers exactly `io.systemd.UserDatabase.NoRecordFound`.
+    - **Does not confirm:**
+      - a service that holds a record;
+      - an error;
+      - a failed connection;
+      - a missing `io.systemd.DynamicUser` socket;
+      - a missing `varlinkctl`.
+
+      It prints why. A reply's record goes to `/dev/null`, never into a variable.
+
+    Ubuntu 24.04's `systemd` package ships `varlinkctl`
+    ([file list](https://packages.ubuntu.com/noble/amd64/systemd/filelist)).
+  - **`absent_ok`** is the condition for every `absent:` about an account or a group in P7a and P9:
+    NSS's sources accepted and, for a database with `systemd` among its sources, `userdb_none`
+    confirming. Otherwise the entry is `UNREAD`, with the reason.
 
 **P7a. Accounts, privileges and keys. Admin, read-only:**
 
 ```bash
+# No shell trace: it would print what P7a reads into variables, such as the authorized_keys lines
+# that keys_of reads, which §5 never prints.
+{ set +x; } 2>/dev/null
 ssh_context
 nss_sources
 # Every account, read once. The list is complete only if it holds every entry of /etc/passwd and
@@ -640,10 +769,139 @@ else
   awk -F: '$3 == 0 { print "uid 0:", $1 }' <<<"$db"
   awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }' <<<"$db"
 fi
+# The sudo rules, and the groups they name (%name or %#GID), which join the groups reviewed below.
+# Read as sudo reads them (sudoers(5), "Including other files"): /etc/sudoers, and every file that
+# a #include or @include line names, or that a #includedir or @includedir directory holds, nested.
+# A relative path is taken from the including file's directory. In a directory, names that contain
+# "." or end in "~" are skipped. /etc/sudoers.d is always read, also when no line includes it. A
+# line starting with "#" is a comment, unless it is an include, or "#" is followed by a digit (a UID).
+groups="sudo admin docker adm systemd-journal"
+rules=
+gaps=0
+todo=$'file /etc/sudoers\ndir /etc/sudoers.d'
+seen=$'\n'
+n=0
+while [ -n "$todo" ]; do
+  read -r kind p <<<"${todo%%$'\n'*}"
+  if [[ $todo == *$'\n'* ]]; then todo=${todo#*$'\n'}; else todo=; fi
+  case $seen in *$'\n'"$p"$'\n'*) echo "sudoers $kind $p: read already"; continue ;; esac
+  seen+=$p$'\n'
+  n=$((n + 1))
+  if [ "$n" -gt 256 ]; then
+    echo "UNREAD: more than 256 sudoers files and directories; the rest is not read"
+    gaps=$((gaps + 1))
+    break
+  fi
+  e=$(sudo sh -c 'if [ ! -e "$1" ]; then echo absent; elif [ -d "$1" ]; then echo dir; elif [ -f "$1" ]; then echo file; else echo other; fi' sh "$p" 2>&1)
+  if [ "$e" = absent ]; then
+    echo "absent: sudoers $kind $p"
+    continue
+  elif [ "$e" != "$kind" ]; then
+    case $e in
+      dir | file | other) echo "UNREAD: sudoers $kind $p is a $e, which is not read as a $kind" ;;
+      *) echo "UNREAD: whether sudoers $kind $p exists is unknown: $e" ;;
+    esac
+    gaps=$((gaps + 1))
+    continue
+  fi
+  if [ "$kind" = dir ]; then
+    if ! o=$(sudo ls -A -- "$p" 2>&1); then
+      echo "UNREAD: sudoers dir $p: $o"
+      gaps=$((gaps + 1))
+      continue
+    fi
+    skip=
+    while IFS= read -r f; do
+      case $f in
+        '') ;;
+        *.* | *~) skip+=" $f" ;;
+        *) todo+=${todo:+$'\n'}"file $p/$f" ;;
+      esac
+    done <<<"$o"
+    echo "sudoers dir $p${skip:+; skipped, as sudo skips them:$skip}"
+    continue
+  fi
+  if ! o=$(sudo cat -- "$p" 2>&1); then
+    echo "UNREAD: sudoers file $p: $o"
+    gaps=$((gaps + 1))
+    continue
+  fi
+  echo "== sudoers file $p"
+  while IFS= read -r line; do
+    if [[ $line =~ ^[[:space:]]*[#@](include|includedir)[[:space:]]+(.*[^[:space:]])[[:space:]]*$ ]]; then
+      k=file
+      if [ "${BASH_REMATCH[1]}" = includedir ]; then k=dir; fi
+      q=${BASH_REMATCH[2]}
+      if [[ $q == *[[:space:]\"\\%]* ]]; then
+        echo "UNREAD: $p: \"$line\": a quoted, escaped or %h path, which P7a does not follow"
+        gaps=$((gaps + 1))
+        continue
+      fi
+      case $q in /*) ;; *) q=${p%/*}/$q ;; esac
+      q=${q%/}
+      echo "$p includes $k $q"
+      todo+=${todo:+$'\n'}"$k $q"
+    elif ! [[ $line =~ ^[[:space:]]*(#([^0-9]|$)|$) ]]; then
+      printf '%s\n' "$line"
+      rules+=$line$'\n'
+    fi
+  done <<<"$o"
+done
+if [ "$gaps" -gt 0 ]; then
+  echo "UNREAD: $gaps sudoers source(s) above were not read, so the groups their rules name are unknown and not reviewed below"
+elif [ -z "$rules" ]; then
+  echo "empty: no sudo rule"
+fi
+# Rules from elsewhere: sudo.conf can load another policy plugin or point sudoers.so at another file
+# (sudoers_file=), and a sudoers: line in nsswitch.conf can add LDAP or SSSD to files.
+if [ ! -e /etc/sudo.conf ]; then
+  echo "absent: /etc/sudo.conf"
+elif ! o=$(cat /etc/sudo.conf 2>&1); then
+  echo "UNREAD: /etc/sudo.conf: $o"
+else
+  o=$(grep -E '^[[:space:]]*Plugin[[:space:]]' <<<"$o" | grep -vE '^[[:space:]]*Plugin[[:space:]]+sudoers_(policy|io|audit)[[:space:]]+sudoers\.so[[:space:]]*$')
+  if [ -n "$o" ]; then echo "REVIEW: /etc/sudo.conf: $o: a plugin or sudoers.so option that P7a does not read"; fi
+fi
+o=$(grep -iE '^[[:space:]]*sudoers[[:space:]]*:' /etc/nsswitch.conf 2>&1)
+case $? in
+  0)
+    if [ "$(grep -c . <<<"$o")" -ne 1 ] || ! grep -qxE '[[:space:]]*sudoers:[[:space:]]*files[[:space:]]*' <<<"$o"; then
+      echo "REVIEW: /etc/nsswitch.conf: $(tr '\n' ' ' <<<"$o"): sudo also takes rules from a source that P7a does not read"
+    fi
+    ;;
+  1) ;;
+  *) echo "UNREAD: the sudoers: line of /etc/nsswitch.conf is unknown: $o" ;;
+esac
+# The groups and other user lists that the rules name. A reference counts only if it starts an
+# item: at the start of a line, or after white space, ",", "=", "(", "!" or ":". Only %name and
+# %#GID are Unix groups; a netgroup (+name), a non-Unix group (%:name, %:#GID), a quoted or escaped
+# name, or any other form is REVIEW, never a partial group name.
+while read -r r; do
+  case $r in
+    '' | % | +) continue ;;
+    \"*) echo "REVIEW: the sudo rules name $r..., a quoted name, which P7a does not resolve"; continue ;;
+    *\\*) echo "REVIEW: the sudo rules name $r, an escaped name, which P7a does not resolve"; continue ;;
+    +*) echo "REVIEW: the sudo rules name $r, a netgroup or a + word, whose members P7 does not inventory"; continue ;;
+    %:*) echo "REVIEW: the sudo rules name $r, a non-Unix group of a group plugin, which P7 does not inventory"; continue ;;
+  esac
+  if [[ $r =~ ^%[A-Za-z_][A-Za-z0-9_.-]*\$?$ ]]; then
+    n=${r#%}
+  elif [[ $r =~ ^%#[0-9]+$ ]] && n=$(awk -F: -v gid="${r#%#}" '$3 == gid { print $1; exit }' /etc/group) && [ -n "$n" ]; then
+    :
+  else
+    echo "REVIEW: the sudo rules name $r, which P7a does not resolve to a group"
+    continue
+  fi
+  case " $groups " in *" $n "*) ;; *) groups="$groups $n" ;; esac
+done < <(grep -oE '(^|[[:space:],=(!:])"?[%+][^[:space:],=()!]*' <<<"$rules" | sed -E 's/^[[:space:],=(!:]//' | sort -u)
+echo "groups reviewed: $groups"
 # Exit status 2 is absent only if NSS asks no other source and /etc/group, read directly, has no
 # such group. A group's members are its listed members and the accounts whose primary group it is.
-for g in sudo admin docker adm systemd-journal; do
-  o=$(getent group "$g")
+# getent's output passes through awk before it reaches a variable, so a password field longer than
+# one character exists in the shell only as <set> or <locked>; the exit status is getent's.
+for g in $groups; do
+  why=
+  o=$(getent group "$g" | awk -F: -v OFS=: 'length($2) > 1 { $2 = ($2 ~ /^[!*]/) ? "<locked>" : "<set>" } { print }'; exit "${PIPESTATUS[0]}")
   rc=$?
   if [ "$rc" -eq 0 ]; then
     printf '%s\n' "$o"
@@ -653,12 +911,83 @@ for g in sudo admin docker adm systemd-journal; do
     else
       echo "UNREAD: no complete account list, so the accounts whose primary group is $g are not listed"
     fi
-  elif [ "$rc" -eq 2 ] && [ "$nss_local" = true ] && awk -F: -v g="$g" '$1 == g { found = 1 } END { exit found }' /etc/group; then
+  elif [ "$rc" -eq 2 ] && awk -F: -v g="$g" '$1 == g { found = 1 } END { exit found }' /etc/group && why=$(absent_ok group "$g"); then
     echo "absent: no group $g"
   else
-    echo "UNREAD: group $g: getent exited $rc, and no read confirms that the group is missing"
+    echo "UNREAD: group $g: getent exited $rc, and no read confirms that the group is missing${why:+: $why}"
   fi
 done
+# /etc/gshadow, as root, through an awk that prints, per group, only the state of the password
+# field, the administrators, the members and how they differ from /etc/group's: never a password
+# field or a whole line. Whether the file exists is asked first, so that a failed sudo does not
+# read as no file.
+e=$(sudo sh -c 'if [ -e /etc/gshadow ]; then echo present; else echo absent; fi' 2>&1)
+case $e in
+  present) gsf=/etc/gshadow ;;
+  absent) gsf=/dev/null; echo "absent: /etc/gshadow" ;;
+  *) gsf= ;;
+esac
+if [ -z "$gsf" ]; then
+  echo "UNREAD: whether /etc/gshadow exists is unknown: $e"
+elif ! gs=$(sudo awk -F: -v want="$groups" -v gfile=/etc/group '
+    function state(p) { if (p == "") return "empty"; if (p ~ /^[!*]/) return "locked"; return "set" }
+    function minus(a, b,   x, y, inb, i, n, m, out) {
+      n = split(a, x, ","); m = split(b, y, ",")
+      for (i = 1; i <= m; i++) inb[y[i]] = 1
+      out = ""
+      for (i = 1; i <= n; i++) if (x[i] != "" && !(x[i] in inb)) out = out (out == "" ? "" : ",") x[i]
+      return out == "" ? "-" : out
+    }
+    FILENAME == gfile { gc[$1]++; if (NF == 4) { gp[$1] = ($2 == "x") ? "x" : state($2); gm[$1] = $4 } else gbad[$1] = 1; next }
+    { sc[$1]++; if (NF == 4) { sp[$1] = state($2); sa[$1] = $3; sm[$1] = $4 } else sbad[$1] = 1 }
+    END {
+      n = split(want, w, " ")
+      for (i = 1; i <= n; i++) {
+        g = w[i]
+        if (gc[g] > 1 || gbad[g]) print "UNREAD", g, "/etc/group"
+        else if (sc[g] > 1 || sbad[g]) print "UNREAD", g, "/etc/gshadow"
+        else if (!gc[g] && !sc[g]) print "NOENTRY", g, "-"
+        else if (!gc[g]) print "ORPHAN", g
+        else if (!sc[g]) print "NOENTRY", g, gp[g]
+        else print "ENTRY", g, sp[g], (sa[g] == "" ? "-" : sa[g]), (sm[g] == "" ? "-" : sm[g]), minus(gm[g], sm[g]), minus(sm[g], gm[g])
+      }
+    }' /etc/group "$gsf" 2>&1); then
+  echo "UNREAD: /etc/gshadow could not be read: $gs"
+else
+  while read -r kind g a b c d f; do
+    case $kind in
+      ENTRY)
+        echo "gshadow $g: password $a; administrators: $b; members: $c"
+        if [ "$a" = set ]; then echo "REVIEW: gshadow $g: a group password is set, with which newgrp gives anyone the group"; fi
+        if [ "$b" != - ]; then echo "REVIEW: gshadow $g: administrators $b can change its password and members, and count as members"; fi
+        if [ "$d" != - ] || [ "$f" != - ]; then echo "REVIEW: gshadow $g: members only in /etc/group: $d; only in /etc/gshadow: $f"; fi
+        ;;
+      NOENTRY)
+        # Not in /etc/gshadow: NSS's own answer, from any source it asks (nss-systemd included), as
+        # root, through the same kind of awk; the exit status is getent's, through sudo.
+        x=$(sudo getent gshadow "$g" | awk -F: '{ print NF, (($2 == "") ? "empty" : ($2 ~ /^[!*]/) ? "locked" : "set"), (($3 == "") ? "-" : $3), (($4 == "") ? "-" : $4) }'; exit "${PIPESTATUS[0]}")
+        rc=$?
+        why=
+        re='^4 (empty|locked|set) [^ ]+ [^ ]+$'
+        if [ "$rc" -eq 0 ] && [[ $x =~ $re ]]; then
+          read -r _ s ad mem <<<"$x"
+          echo "REVIEW: gshadow $g: not in /etc/gshadow, but NSS returns an entry: password $s; administrators: $ad; members: $mem"
+        elif [ "$rc" -ne 2 ] || ! why=$(absent_ok gshadow "$g"); then
+          echo "UNREAD: gshadow $g: not in /etc/gshadow, and NSS gave no entry and no confirmed absence (getent exited $rc${why:+; $why})"
+        elif [ "$a" = - ]; then
+          echo "absent: gshadow $g: no entry, and no group $g in /etc/group"
+        elif [ "$a" = set ]; then
+          echo "REVIEW: gshadow $g: no entry, so newgrp uses /etc/group's password field, which is set"
+        else
+          echo "absent: gshadow $g: no entry; /etc/group's password field: $a"
+        fi
+        ;;
+      ORPHAN) echo "REVIEW: gshadow $g: an entry in /etc/gshadow for a group that /etc/group lacks" ;;
+      UNREAD) echo "UNREAD: gshadow $g: a duplicate or malformed entry in $a" ;;
+      *) echo "UNREAD: gshadow: an output line that P7a does not understand" ;;
+    esac
+  done <<<"$gs"
+fi
 o=$(sudo passwd -S -a 2>&1)
 rc=$?
 if [ "$rc" -ne 0 ]; then
@@ -682,13 +1011,6 @@ else
   done <<<"$db"
   echo "absent: $absent account(s) without an authorized-keys file"
 fi
-if o=$(sudo grep -rvhE '^[[:space:]]*(#|$)' /etc/sudoers /etc/sudoers.d 2>&1); then
-  printf '%s\n' "$o"
-elif [ $? -eq 1 ]; then
-  echo "empty: no sudo rule"
-else
-  echo "UNREAD: the sudo rules: $o"
-fi
 last -n 20 || echo "UNREAD: last failed"
 ```
 
@@ -704,12 +1026,208 @@ last -n 20 || echo "UNREAD: last failed"
   In each of these cases no account's keys are listed, and P7a prints `UNREAD` in their place. The
   `accounts:` line gives the count for the operator to compare.
 - **Groups:**
-  - `absent:` needs three things: `getent group` exits 2, `nss_sources` accepted the sources, and
-    `/etc/group`, read directly, has no such group (`awk` exits 0; 2 if it cannot read the file).
+  - `absent:` needs three things:
+    - `getent group` exits 2;
+    - `/etc/group`, read directly, has no such group (`awk` exits 0; 2 if it cannot read the
+      file);
+    - `absent_ok` confirms: the sources were accepted and, with `systemd` among them,
+      nss-systemd's services answer NoRecordFound.
+
     Anything else is `UNREAD`, because exit status 2 alone is also the answer of a failed source.
   - **The members** of a group are the accounts it lists and the accounts whose primary group it is
     (`primary group`), which `getent group` does not list. Without a complete account list, the
     second are `UNREAD`.
+  - **The groups reviewed** are `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, and every
+    group that the sudo rules name, as `%name` or `%#GID`.
+  - **Other references in the rules:** sudoers(5) also accepts these in a user list, a
+    `User_Alias` or a `Defaults:` list:
+    - netgroups (`+name`);
+    - non-Unix groups (`%:name`, `%:#GID`);
+    - names in double quotes, which hold their prefix, as in `"%domain users"`;
+    - escaped names, as in `\x20`.
+
+    Their members are not in P7's inventory, so each is `REVIEW`, never a partial group name:
+    - revision 7 read `"%domain users"` as the group `domain`;
+    - a `+` word that is no netgroup, such as `chmod +x` in a command, is listed too;
+    - a reference counts only where an item starts: at the start of a line, or after white space,
+      `,`, `=`, `(`, `!` or `:`.
+  - **Rules from elsewhere:** each of these is `REVIEW`, because P7a reads neither of those
+    sources:
+    - a `Plugin` line in `/etc/sudo.conf` other than the plain `sudoers_policy`, `sudoers_io`
+      or `sudoers_audit` with `sudoers.so`, for example one with `sudoers_file=`;
+    - a `sudoers:` line in `nsswitch.conf` other than exactly `sudoers: files`, for example
+      `files sss`.
+  - **The sudo rules are read as sudo reads them**
+    ([sudoers(5), Ubuntu 24.04](https://manpages.ubuntu.com/manpages/noble/man5/sudoers.5.html)):
+    - **Includes:** `/etc/sudoers` first, then every file that a `#include` or `@include` line
+      names, and every file of a directory that a `#includedir` or `@includedir` line names,
+      nested to any depth. A relative path is taken from the including file's directory. In a
+      directory, names that contain `.` or end in `~` are skipped and listed, as sudo skips them.
+    - **Comments:** a line starting with `#` is a comment, except an include directive, and `#`
+      followed by a digit, which is a user ID. Revision 6 dropped both kinds, for example
+      `#1000 ALL=(ALL) ALL`.
+    - **`/etc/sudoers.d` is always read**, as in revision 6, whether or not a line includes it. An
+      include that names it again finds it read already. This is why the stock
+      `@includedir /etc/sudoers.d` is covered.
+    - **Each reading is checked:**
+      - each source is first asked, through `sudo sh -c`, whether it is missing, a file or a
+        directory, so a failed `sudo` does not read as a missing file;
+      - a missing source is `absent:`;
+      - a source that cannot be read, or is not of the kind its directive names, is `UNREAD`;
+      - so is a path with quotes, a backslash or `%h`, which P7a does not follow;
+      - so is more than 256 sources;
+      - any such gap adds a closing `UNREAD`, because the groups that the unread rules name are
+        unknown. While one remains, G6 cannot pass.
+  - **A group's password field** in `/etc/group` is shown only when it is empty or one character
+    (`x`, `!`, `*`). Any other value appears as `<set>` or `<locked>`. `getent group`'s output
+    passes through that `awk` before it reaches a variable, and the exit status checked is
+    `getent`'s (`PIPESTATUS`). So the raw field is never held in a shell variable, printed,
+    stored or traced. It does pass, in `getent`'s output, to the `awk` process.
+- **`/etc/gshadow`** ([gshadow(5)](https://manpages.ubuntu.com/manpages/noble/man5/gshadow.5.html))
+  holds, per group, a password, administrators and members:
+  - **Why it matters:**
+    - administrators can change the group's password and members, and count as members;
+    - members, which should equal `/etc/group`'s, gain the group without a password;
+    - with a group password set, `newgrp` gives the group to anyone who knows it.
+  - **How it is read:** as root, through an `awk` that prints only derived values: the
+    password's state, the administrators, the members, and the members found only in
+    `/etc/group` or only in `/etc/gshadow`. No password field or whole line reaches the shell, its
+    variables or its trace.
+  - **What NSS adds:** `newgrp` asks NSS (`getsgnam`), not the file. nss-systemd can answer for a
+    group that `/etc/gshadow` lacks: it synthesizes `root` and `nobody`, and serves drop-in and
+    dynamic groups. So, for each reviewed group that `/etc/gshadow` lacks, P7a also runs
+    `sudo getent gshadow`, through the same kind of `awk`. For a group that `/etc/gshadow` holds,
+    NSS returns that same entry, because `nss_sources` requires `files` first.
+  - **The password's state:**
+    - `empty`: only members gain the group;
+    - `locked`: the field starts with `!` or `*`;
+    - `set`: anything else, including a value that is no valid hash, so that nothing is taken as
+      harmless unchecked.
+  - **The results:**
+    - each entry is printed with its state, administrators and members;
+    - `REVIEW` for a password that is `set`, for any administrator, for members that differ from
+      `/etc/group`'s, for an entry whose group `/etc/group` lacks, and for an entry that NSS
+      returns but `/etc/gshadow` lacks, with its state, administrators and members;
+    - `absent:` for a missing entry, or a missing file, only if `getent gshadow` exits 2 and
+      `absent_ok` confirms. With `systemd` among gshadow's sources, which is also the case when
+      only `group:` names it, that means nss-systemd's services answering NoRecordFound.
+      - `newgrp` then uses `/etc/group`'s password field, whose state is shown; `set` is
+        `REVIEW`.
+      - A group in neither file gets its own `absent:` line, and is never left out silently.
+      - Any other answer, such as a service that gives no answer, is `UNREAD`;
+    - `UNREAD` when the file's existence is unknown, when it cannot be read, or for a duplicate
+      entry or one without four fields, in `/etc/gshadow` or `/etc/group`.
+  - **Tested locally, not on the VPS** [LOCAL]: P7a under gawk and mawk (Ubuntu 26.04 under
+    WSL), with the real `getent`, `sh`, `grep` and `awk`, and fake `sudo`, `sshd`, `passwd` and
+    `last` scripts. Fixture `/etc/group`, `/etc/gshadow`, sudoers and `nsswitch.conf` files were
+    mounted in a private namespace for each case.
+    - Each case gave its expected line:
+      - an empty password; a locked one, also with a hash after the `!`;
+      - a set password: `REVIEW`;
+      - administrators, one known and one unknown: both listed, `REVIEW`;
+      - members equal to `/etc/group`'s; members that differ: `REVIEW`, with each side's extra
+        names;
+      - a missing entry: `absent:`, with `/etc/group`'s field; `REVIEW` when that field is set;
+      - a missing file: `absent:` for the file and each group;
+      - an unreadable file: `UNREAD`;
+      - three fields, five fields with a hash, a duplicate entry, a duplicate in `/etc/group`:
+        `UNREAD`;
+      - an entry without a group: `REVIEW`;
+      - sudo rules naming `%wheel`, `%#100`, `%ops` and `%:ADgroup`: the first three reviewed,
+        the last `REVIEW`;
+      - unreadable sudo rules, a failing `sudo`, an unknown existence of the file, and
+        `gshadow: files sss` with a missing entry: `UNREAD`.
+    - Every case with incomplete data had at least one `UNREAD` line, so G6 could not pass.
+    - **No dummy hash reached any output.** Three dummy hashes were in the fixtures: a set, a
+      locked and an `/etc/group` one. None appeared in stdout, stderr or any saved output of the
+      final blocks, also under `set -x`.
+    - A control without P7a's xtrace-off line printed the `/etc/group` hash in its trace, and
+      never a `/etc/gshadow` one.
+    - Revision 5's NSS cases gave the same results as in revision 5.
+  - **Tested locally, revision 7** [LOCAL], in the same way. `/etc` was an overlay that only each
+    case's namespace saw, so that include files and nss-systemd drop-ins could be added.
+    - **Sudoers includes:**
+      - `#include` and `@include` of a file outside `/etc/sudoers.d`; `#includedir` and
+        `@includedir` of a directory outside it; a relative include whose file includes a relative
+        directory, whose file includes another file. Each was read, and the groups its rules name
+        were reviewed, `%#GID` included. Revision 6, the control, reviewed none of them.
+      - In a directory, `old.bak` and `x~` were skipped and listed.
+      - The stock `@includedir /etc/sudoers.d` was found read already.
+      - A file that includes itself was read once.
+      - A `#1000 ALL=…` line was listed as a rule. Revision 6 dropped it.
+      - Missing included files and directories were `absent:`.
+    - **Unresolved includes:** each of these gave `UNREAD` and the closing `UNREAD`, so G6 could
+      not pass:
+      - an unreadable file, or an unreadable directory;
+      - `%h`, a quoted path, an escaped path;
+      - a directory named by `@include`;
+      - a relative self-include, which stopped at 256 sources.
+    - **NSS gshadow:** with `/etc/gshadow` lacking `root`, which nss-systemd synthesizes:
+      - `group: files systemd` without a `gshadow:` line, and `gshadow: files systemd`, both gave
+        `REVIEW` for NSS's entry. Revision 6 printed `absent:`;
+      - `gshadow: files` gave `absent:`;
+      - an nss-systemd drop-in group with a dummy hash gave `REVIEW … password set`, beside the
+        `REVIEW` of `nss_sources`;
+      - `gshadow: files s6nomodule`, `files hesiod` and `systemd files` gave `REVIEW` and
+        `UNREAD`.
+    - **Hashes:** no dummy hash reached any output, also under `set -x`. That held also without
+      P7a's xtrace-off line, whose trace now shows `getent group`'s output as `<set>`.
+    - **Earlier results:** revision 6's 19 cases gave the same verdicts; only the messages about
+      reading the sudo rules changed. Revision 5's NSS cases and the hand-over's 22 cases gave the
+      same results.
+    - **Versions:**
+      - The VPS runs glibc 2.39 and systemd 255.
+      - Ubuntu 24.04 ships the classic sudo 1.9.15, whose sudoers(5) these rules follow. The VPS's
+        sudo was never read.
+      - The local system ran glibc 2.43, systemd 259 and sudo-rs. sudo itself was faked.
+  - **Tested locally, revision 8** [LOCAL], in the same way, with the real `varlinkctl` and
+    nss-systemd. PID 1's `io.systemd.DynamicUser` was either the real one, or a fake service on a
+    tmpfs that only the case's namespace saw.
+    - **Missing entries, a provider that answers:** each gave `absent:`, also for a group in
+      neither file, which revision 7 left out silently:
+      - `gshadow: files`, where no provider check applies;
+      - `group: files systemd` without a `gshadow:` line;
+      - `gshadow: files systemd`;
+      - the real PID 1, and the fake, answering NoRecordFound.
+    - **A record that nss-systemd returns:** the fake service's dynamic group, with a dummy hash,
+      gave `REVIEW … password set`.
+    - **A provider that does not confirm:** each gave `UNREAD` for every group and gshadow entry
+      concerned, never `absent:`, and so G6 could not pass:
+      - a stale socket, with no listener;
+      - no socket;
+      - a service that answers ServiceNotAvailable;
+      - a record without `service`, which nss-systemd refuses, so `getent` and the service
+        disagree;
+      - a `varlinkctl` that is not executable.
+
+      Revision 7, the control, printed `absent:` for the first three. So did revision 5's NSS
+      suite, with the four accepted service names present as plain files, not sockets.
+    - **P9:** a missing account gave `absent:` with the real PID 1, and `UNREAD` with a stale
+      socket, where revision 7 printed `absent:`.
+    - **Sudoers references:** each of these gave `REVIEW`, and the group set stayed without a
+      partial name:
+      - a netgroup in a user specification, in a `User_Alias`, and in an included file, also in
+        `Defaults:+name`;
+      - `"%domain users"`, which revision 7 reviewed as the group `domain`;
+      - `%domain\x20users`;
+      - `%:ADgroup` and `%:#5000`;
+      - `chmod +x` in a command, the expected false positive;
+      - `sudo.conf` with `sudoers_file=`, and `sudoers: files sss`.
+
+      These passed without a `REVIEW` line: `%wheel`, `%#100` and `!%docker`; plain `Plugin`
+      lines; `sudoers: files`. An unreadable `nsswitch.conf` gave `UNREAD`.
+    - **P9's trace:** under `set -x`, an `authorized_keys` line with a dummy comment gave its
+      `key:` fingerprint line. Neither the key's base64 data nor the whole line appeared in the
+      output. Revision 7's P9 printed the whole line twice, in 157 trace lines. `ssh-keygen -l`
+      prints the comment after the fingerprint by design.
+    - **Hashes:** none of the five dummy hashes, including the one in the fake service's record,
+      reached any output. That also held without P7a's xtrace-off line (1,376 trace lines).
+    - **Earlier results:**
+      - revision 7's 38 cases gave the same verdicts, apart from the new `absent:` lines and
+        reasons;
+      - revision 5's NSS cases gave the same, except the plain-file services above;
+      - the hand-over's 22 cases gave the same;
+      - gawk and mawk differed only in `awk`'s own error text.
 - **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
   and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
   `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
@@ -857,6 +1375,8 @@ fi
   manager it cannot reach is `UNREAD`.
 - **What P7a to P7c show:**
   - every account with UID 0 or in a privileged group, the sudo rules and the recent logins;
+  - for each privileged group, its administrators, members and password state in
+    `/etc/gshadow`, never the password field;
   - which accounts have a usable password, and every key that sshd accepts for any account, by its
     fingerprint and options;
   - every cron line, periodic script, user crontab and `at` job, with its command;
@@ -893,17 +1413,20 @@ ss -6 -Hltn
 the one that will open the tunnel, and needs P7's helpers:
 
 ```bash
+# No shell trace: keys_of reads each authorized_keys file into a variable, and a trace would print
+# its lines, which §5 never prints.
+{ set +x; } 2>/dev/null
 u=<user>
 nss_sources
 if ssh_context; then
   pw=$(getent passwd "$u")
   rc=$?
-  h= id=
+  h= id= why=
   IFS=: read -r _ _ id _ _ h _ <<<"$pw"
-  if [ "$rc" -eq 2 ] && [ "$nss_local" = true ] && awk -F: -v u="$u" '$1 == u { found = 1 } END { exit found }' /etc/passwd; then
+  if [ "$rc" -eq 2 ] && awk -F: -v u="$u" '$1 == u { found = 1 } END { exit found }' /etc/passwd && why=$(absent_ok passwd "$u"); then
     echo "absent: no account $u"
   elif [ "$rc" -ne 0 ] || [ -z "$h" ]; then
-    echo "UNREAD: account $u: getent passwd exited $rc, and no complete entry or confirmed absence was read"
+    echo "UNREAD: account $u: getent passwd exited $rc, and no complete entry or confirmed absence was read${why:+: $why}"
   elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
     grep -E '^(allowtcpforwarding|disableforwarding|permitopen|permitlisten) ' <<<"$cfg"
     keys_of "$u" "$h" "$id" "$cfg"
@@ -921,10 +1444,17 @@ else
 fi
 ```
 
-- **The account:** `absent:` only when `getent passwd <user>` exits 2, `nss_sources` accepted
-  NSS's sources, and `/etc/passwd`, read directly, has no such account. `UNREAD:` for anything
-  else, or an entry without a home. An entry that `getent` returns is used as it is: sshd sees the
-  same entry.
+- **No shell trace:** P9 turns xtrace off first, as P7a does. `keys_of` reads each
+  `authorized_keys` file into a variable, and a trace would print its lines, which §5 never
+  prints.
+- **The account:** `absent:` only when three things hold:
+  - `getent passwd <user>` exits 2;
+  - `/etc/passwd`, read directly, has no such account;
+  - `absent_ok` confirms: the sources were accepted and, with `systemd` among them,
+    nss-systemd's services answer NoRecordFound.
+
+  `UNREAD:` for anything else, or an entry without a home. An entry that `getent` returns is used
+  as it is: sshd sees the same entry.
 - **The context is this session's.** `ssh_context` passes the client's address as `addr` (and as
   `host` under `UseDNS no`), and the server's address and port as `laddr` and `lport`. Earlier
   revisions passed the VPS's own hostname as `host`, which no `Match Host` would compare with.
@@ -1046,8 +1576,56 @@ fi
 
    ```bash
    sha=<sha>
-   sudo install -o deploy -g "$(id -gn deploy)" -m 0644 ~/"nimuairy-observability-$sha.tar" "$(getent passwd deploy | cut -d: -f6)/"
+   # Copies the archive into deploy's home only after deploy's entry and home are confirmed: a failed
+   # or empty lookup must never make the destination "/", the current directory or an empty path.
+   handover() {
+     local f=nimuairy-observability-$1.tar pw rc colons name uid gid home real
+     pw=$(getent passwd deploy)
+     rc=$?
+     colons=${pw//[^:]/}
+     if [ "$rc" -ne 0 ]; then echo "STOP: getent passwd deploy exited $rc"; return 1; fi
+     if [ -z "$pw" ] || [[ $pw == *$'\n'* ]]; then echo "STOP: getent passwd deploy did not return exactly one entry"; return 1; fi
+     if [ "${#colons}" -ne 6 ]; then echo "STOP: deploy's entry does not have the seven fields of passwd(5)"; return 1; fi
+     IFS=: read -r name _ uid gid _ home _ <<<"$pw"
+     if [ "$name" != deploy ]; then echo "STOP: the entry is for \"$name\", not deploy"; return 1; fi
+     if ! [[ $uid =~ ^[0-9]+$ && $gid =~ ^[0-9]+$ ]] || [ "$uid" -eq 0 ] || [ "$gid" -eq 0 ]; then
+       echo "STOP: deploy's UID \"$uid\" and GID \"$gid\" are not both numbers other than 0"
+       return 1
+     fi
+     if [ -z "$home" ]; then echo "STOP: deploy has no home directory"; return 1; fi
+     if [[ $home != /* ]]; then echo "STOP: deploy's home \"$home\" is not an absolute path"; return 1; fi
+     if ! real=$(realpath -e -- "$home" 2>&1) || [ ! -d "$real" ]; then echo "STOP: deploy's home $home is not an existing directory"; return 1; fi
+     if [ "$real" = / ]; then echo "STOP: deploy's home $home is /"; return 1; fi
+     if [ ! -f ~/"$f" ]; then echo "STOP: no archive ~/$f"; return 1; fi
+     if ! sudo install -o "$uid" -g "$gid" -m 0644 ~/"$f" "$real/$f"; then echo "STOP: install failed"; return 1; fi
+     echo "ok: $real/$f, owner $uid:$gid, mode 0644"
+   }
+   handover "$sha"
    ```
+
+   - **Every check comes before `install`**, and each failure prints `STOP` and returns:
+     - `getent` must exit 0 with exactly one entry of seven fields, for the name `deploy`;
+     - the UID and GID must be numbers other than 0;
+     - the home must be absolute and resolve (`realpath -e`) to an existing directory other than
+       `/`, also through `..` or a symbolic link;
+     - the archive must exist.
+   - **The destination is a file name in the resolved home**, never a bare directory, so no
+     fallback to `/`, the current directory or an empty path exists. The owner and group are the
+     entry's own UID and primary GID, so that a second lookup cannot disagree with the first. This
+     is the same owner and group as before: `deploy` and its primary group.
+   - **Tested locally, not on the VPS** [LOCAL]: Ubuntu 26.04 under WSL, with fake `getent`, `id`,
+     `install` and `sudo`, and the real `realpath`, directories and archive.
+     - A valid entry made one `install` call: owner and group 1001, mode 0644, the file in the
+       home. A failing `install` gave `STOP`.
+     - These 20 cases each gave `STOP`, and no `install` call:
+       - `getent` exiting 2, 1, or 3 with an entry;
+       - empty output with exit 0; two entries; six or eight fields; another name;
+       - a UID that is no number; UID 0; GID 0;
+       - an empty or relative home; a home of `/`, `//` or `/tmp/..`, or a symbolic link to `/`;
+       - a home that does not exist, or is a file;
+       - a missing archive.
+     - `id` was never called.
+     - The control: revision 5's line, with `getent` failing, gave `install` the destination `/`.
 
 4. **Check and extract** as `deploy` with the guide's blocks: the `sha256sum` and the listing
    first, then the extraction, which writes `REVISION`.
@@ -1324,16 +1902,19 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   2. the accounts with a login shell, and which accounts have a usable password;
   3. every `key:` line, of every account: its fingerprint, compared with the trusted keys' own
      (P7a), and its options; every `REVIEW:` line about another source of keys or certificates;
-  4. the members of `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, those the group lists
-     and those whose primary group it is, and every sudo rule;
-  5. the recent logins of `last`;
-  6. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
+  4. the members of `sudo`, `admin`, `docker`, `adm`, `systemd-journal` and every group the sudo
+     rules name: those the group lists, those whose primary group it is, and those of
+     `/etc/gshadow`; every sudo rule;
+  5. for the same groups, from `/etc/gshadow`: every administrator, every member that differs
+     from `/etc/group`'s, and every password that is `set`, by its state only;
+  6. the recent logins of `last`;
+  7. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
      `/etc/cron.hourly`, `daily`, `weekly` and `monthly`, with each script's package or, for a script
      from no package, its content; every user crontab; every queued `at` job's script;
-  7. every running service and every timer with the service it starts, of the system manager and of
+  8. every running service and every timer with the service it starts, of the system manager and of
      every user manager, with its package and user, or its whole definition where it does not come
      only from a package;
-  8. every listener with its process, and every container (P3).
+  9. every listener with its process, and every container (P3).
 - **The marker words** (§5): `absent:` and `empty:` lines say that there is nothing to review in that
   source. `UNREAD:` says that the source is unknown, and `REVIEW:` that it is not shown.
 - **Expected (PASS):** no `UNREAD:` line; every `REVIEW:` line resolved; and every entry
@@ -1344,20 +1925,60 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     containers, cloudflared's outbound connection;
   - the operator's own administration: their accounts, keys and changes.
 
-  The operator records "G6 PASS" with the date. The lists themselves are not recorded (§5).
-- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, an account list that failed,
-  lacks UID 0 or lacks an entry of `/etc/passwd`, a group lookup that failed or a missing group that
-  no read confirms, a key file that cannot be read or whose existence is unknown, a key that
-  `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:` line not yet
-  resolved, such as an `AuthorizedKeysCommand` whose source is not yet reviewed; or an entry not
-  yet attributed, such as a script or unit from no package whose purpose is not yet clear. The
-  order of §4.1 waits until every source is read and every entry attributed.
+  The `/etc/gshadow` inventory must also be complete: `/etc/gshadow` read, or confirmed
+  `absent:`, and no `UNREAD:` line for it. For each reviewed group that the file lacks, NSS must
+  have answered `getent gshadow`. Every administrator, every member that differs from
+  `/etc/group`'s, and every entry that NSS returns from outside the file must be attributed like
+  any other entry.
+
+  The sudo rules must be complete: every included file and directory read, or confirmed
+  `absent:`, with no `UNREAD:` line for any of them.
+
+  Some `REVIEW:` lines about the sudo rules name members or rules that P7 does not list:
+  - a netgroup;
+  - a non-Unix, quoted or escaped name;
+  - a sudo plugin, or a `sudoers:` source.
+
+  Such a line is resolved only after two steps. The operator lists, from that source itself, its
+  members or the rules it adds, and attributes each like any other entry. Until then, G6 does not
+  pass.
+
+  **A group password that is `set` is never taken as harmless.** G6 passes only after the
+  operator has recorded a decision for it, with the group's name and without the hash:
+  - keep it, with the reason and who knows it;
+  - or remove it in a separate change with its own consent, outside S6, then G6 again.
+
+  The operator records "G6 PASS" with the date, and these decisions. The lists themselves are not
+  recorded (§5).
+- **INCONCLUSIVE:**
+  - an `UNREAD:` line, for example:
+    - a failed command;
+    - an account list that failed, lacks UID 0 or lacks an entry of `/etc/passwd`;
+    - a group lookup that failed, or a missing group that no read confirms;
+    - a key file that cannot be read or whose existence is unknown, or a key that `ssh-keygen`
+      cannot read;
+    - a user manager that cannot be reached;
+    - sudo rules that cannot be read, or a sudoers include that P7a does not follow;
+    - an `/etc/gshadow` that cannot be read or holds a duplicate or malformed entry, or a group
+      that `/etc/gshadow` lacks and for which NSS gave no confirmed answer;
+    - an nss-systemd service that does not confirm a missing account or group;
+  - a `REVIEW:` line not yet resolved, for example:
+    - an `AuthorizedKeysCommand` whose source is not yet reviewed;
+    - a netgroup, or a non-Unix, quoted or escaped name, in the sudo rules;
+    - a sudo plugin or `sudoers:` source that P7a does not read;
+    - a group password that is `set` without a recorded decision;
+  - an entry not yet attributed, such as a script or unit from no package whose purpose is not
+    yet clear.
+
+  The order of §4.1 waits until every source is read and every entry attributed.
 - **NSS's sources** (`nss_sources`): while they are not accepted, the account list stays `UNREAD`,
   so G6 cannot pass. A host whose accounts or groups also come from another source, an nss-systemd
   record or nscd needs an inventory of that source, which this contract does not have. Adding one
   is a change to this contract.
 - **STOP:** an entry the operator considers unknown or untrusted: a UID 0 account other than
-  `root`; an unknown member of `sudo`, `admin` or `docker`; a key whose fingerprint matches no
+  `root`; an unknown member of `sudo`, `admin`, `docker` or a group the sudo rules name, including a
+  member found only in `/etc/gshadow`; an unknown or untrusted administrator of any reviewed group;
+  a group password that nobody the operator knows set up; a key whose fingerprint matches no
   trusted key, a usable password or a sudo rule the operator did not set up; an `at` job, a
   certificate authority or a key command the operator did not set up; a `MODIFIED` package file; a
   job, service, timer, user unit, listener, login or container of unknown origin.
@@ -2730,6 +3351,7 @@ Accepted together with this contract:
 | U7: Compose on the VPS applies `!reset` | S4b §12.1 | G4 | Open |
 | U8: no untrusted users or services on the host | S4b §12.1 | G6 | Open |
 | NSS takes accounts and groups only from `/etc/passwd`, `/etc/group` and nss-systemd's dynamic users; no nscd | This contract | P7 (`nss_sources`), G6 | Open. Ubuntu 26.04 under WSL has `files systemd`; the VPS's `/etc/nsswitch.conf` was never read |
+| `varlinkctl` runs on the VPS, and PID 1's `io.systemd.DynamicUser` answers NoRecordFound for a missing name | This contract | P7 (`userdb_none`), G6 | Open. Ubuntu 24.04's `systemd` package ships `varlinkctl`; the local systemd 259 answered so. Without either, every missing account or group is `UNREAD` |
 | U9: the LXC maps UIDs 10001, 472 and 473 | S4b §12.1 | G7, V11, V12 | Open |
 | U10: the extraction leaves the files readable | S4b §12.1 | G8 | Open |
 | U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open |
