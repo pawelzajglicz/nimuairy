@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 8). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 10). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -119,6 +119,39 @@ Revisions:
       read is `REVIEW` as well;
     - G6 passes only after the operator lists and attributes their members (§6, G6);
   - P9 turns xtrace off first, as P7a does, before `keys_of` reads any `authorized_keys` file (§6).
+- **9** (2026-11-16), the full review of revision 8:
+  - **P7a's `getent | awk` pipelines**, for groups and for NSS gshadow, keep both exit statuses.
+    A failed `awk` is `UNREAD`. With `getent` at 0, the result must be one well-formed line named
+    as asked, or it is `UNREAD`. The raw password field still never reaches a variable (§6);
+  - **a new helper, `path_kind`**, decides what each file-system source of P7 is, as root,
+    through `test`. A missing path is `absent:` only when its deepest existing ancestor can be
+    searched; anything that cannot be inspected is `UNREAD`. Directories are listed as root
+    (§6);
+  - **P7b's cron reads take grep's status inside `sudo`**, as do the user crontabs. So a failed
+    `sudo` is `UNREAD`, never "no line". The periodic directories are listed before
+    `run-parts --test`, which exits 0 also for a directory it cannot read (§6);
+  - **a new helper, `pkg_file`**, checks a cron script or unit file against dpkg as dpkg 1.22.6
+    works. dpkg's MD5 sum must be recorded for that very file, `--verify` must print nothing for
+    it, and `--audit` nothing for its package. Otherwise the file is `MODIFIED`, `REVIEW` (shown
+    in full) or `UNREAD`; dpkg's check is described as the integrity check it is (§6, G6);
+  - **P7c reviews socket and path activation** for every manager: active and enabled socket and
+    path units, with the units their `Triggers=` name (§6, G6);
+  - **P10 checks the tools** of P7, P9 and §7.3 as the admin account and as root, through
+    `sudo`. A missing one is `MISSING:` and blocks G6 or §7.3 (§6).
+- **10** (2026-11-16), the review of revision 9:
+  - **`pkg_file` checks the exit status of every parser** it runs: the diversion check, the
+    owner line, the MD5 sum and conffile searches, the rpm-format check and the search for the
+    file's own `--verify` line. A failure is `UNREAD`. Revision 9 left the last of these
+    unchecked: a failing `awk` there made a modified file verified. The status line is split off
+    with bash's parameter expansion, not `tail` and `sed`; the file is verified only if a package
+    of it passed (§6);
+  - **P7c's lists are split with bash's `read`**, with duplicates dropped in an associative
+    array. These are `review_activation`'s socket and path units, and next to it the timer list
+    and the list of user managers, which had the same flaw. A failing `awk`, `grep` or `sort`
+    could make an inventory look empty; now no external parser is involved, each line must be
+    understood, and `empty:` needs every listing read (§6);
+  - **`unit_review` checks `systemctl show -p User`'s status:** a failed query is `UNREAD`,
+    never a user's name (§6).
 
 ## 1. Purpose and scope
 
@@ -353,8 +386,8 @@ and a resolution that changes state needs its own consent (§11).
   records facts such as "a public IPv6 address exists", not the address.
 - **None of these commands has run on the VPS.** Each block passes `bash -n`. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
-  against the real `getent`, and P7a against fixture `/etc/gshadow`, sudoers and nss-systemd files,
-  in a namespace (P7a);
+  against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
+  database and fake `systemctl` data, in a namespace (P7a);
   and §7.3's hand-over against fakes (§7.3). Nothing else did.
   The first run of each block on the VPS is itself evidence, and its output is reviewed before the
   next step.
@@ -503,7 +536,7 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
 conclusion does.
 
-**P7 helpers.** Five functions that P7a and P9 use. **Admin, read-only.** Define them again in each
+**P7 helpers.** Seven functions that P7a to P7c and P9 use. **Admin, read-only.** Define them again in each
 new shell:
 
 ```bash
@@ -546,14 +579,19 @@ keys_of() {
     f=${f//%U/$id}
     f=${f//$'\001'/%}
     case $f in /*) ;; *) f=$h/$f ;; esac
-    # Not "sudo test -e": a failed sudo would look like a missing file.
-    e=$(sudo sh -c 'if [ -e "$1" ]; then echo present; else echo absent; fi' sh "$f" 2>&1)
+    # Not "sudo test -e": a failed sudo, or a path that cannot be inspected, would look missing.
+    e=$(path_kind "$f")
     case $e in
       absent) continue ;;
-      present) found=1 ;;
+      file) found=1 ;;
+      unknown:*)
+        found=1
+        echo "UNREAD: $u: whether $f exists is unknown: ${e#unknown: }"
+        continue
+        ;;
       *)
         found=1
-        echo "UNREAD: $u: whether $f exists is unknown: $e"
+        echo "REVIEW: $u: $f is a $e, not a file, so sshd reads no key from it now"
         continue
         ;;
     esac
@@ -601,8 +639,14 @@ nss_sources() {
     if [[ $lines == *systemd* ]]; then nss_sys+=" $db"; fi
   done
   for d in /etc/userdb /run/userdb /run/host/userdb /usr/local/lib/userdb /usr/lib/userdb /run/systemd/userdb; do
-    [ -e "$d" ] || continue
-    if ! o=$(ls -A "$d" 2>&1); then
+    o=$(path_kind "$d")
+    case $o in
+      absent) continue ;;
+      directory) ;;
+      unknown:*) echo "UNREAD: $d: ${o#unknown: }"; ok=false; continue ;;
+      *) echo "REVIEW: $d is a $o, not a directory"; ok=false; continue ;;
+    esac
+    if ! o=$(sudo ls -A -- "$d" 2>&1); then
       echo "UNREAD: $d: $o"
       ok=false
       continue
@@ -613,10 +657,12 @@ nss_sources() {
       ok=false
     fi
   done
-  if [ -e /var/run/nscd/socket ]; then
-    echo "REVIEW: nscd runs, so getent may answer from its cache"
-    ok=false
-  fi
+  o=$(path_kind /var/run/nscd/socket)
+  case $o in
+    absent) ;;
+    unknown:*) echo "UNREAD: /var/run/nscd/socket: ${o#unknown: }"; ok=false ;;
+    *) echo "REVIEW: nscd's socket exists ($o), so getent may answer from its cache"; ok=false ;;
+  esac
   if $ok; then
     nss_local=true
     echo "nss: accounts and groups from /etc/passwd, /etc/group and dynamic users only"
@@ -654,6 +700,124 @@ absent_ok() {
   case " ${nss_sys-} " in
     *" $1 "*) if [ "$1" = passwd ]; then userdb_none user "$2"; else userdb_none group "$2"; fi ;;
   esac
+}
+# What path $1 is, asked as root: absent, broken-link, directory, file, socket or other. [ -e ] is
+# false also for a path that cannot be inspected, so a path that does not exist is absent only when
+# its deepest existing ancestor is a directory that root can search; anything else, a failed sudo
+# included, prints "unknown: <reason>". No error message is parsed: stat's wording differs
+# between implementations.
+path_kind() {
+  local o
+  o=$(sudo sh -c '
+    p=$1
+    if [ -L "$p" ] && [ ! -e "$p" ]; then echo broken-link; exit 0; fi
+    if [ -e "$p" ]; then
+      if [ -d "$p" ]; then echo directory; elif [ -S "$p" ]; then echo socket; elif [ -f "$p" ]; then echo file; else echo other; fi
+      exit 0
+    fi
+    a=$p
+    while [ "$a" != / ] && ! { [ -e "$a" ] || [ -L "$a" ]; }; do a=${a%/*}; [ -n "$a" ] || a=/; done
+    if [ -d "$a" ] && [ -x "$a" ]; then echo absent; else echo "unknown: $a cannot be searched"; fi' sh "$1" 2>&1)
+  case $o in
+    absent | broken-link | directory | file | socket | other | unknown:*) echo "$o" ;;
+    *) echo "unknown: $o" ;;
+  esac
+}
+# Whether file $1 comes from a package, and dpkg's database vouches for its content. dpkg 1.22.6
+# (Ubuntu 24.04) checks only a file's MD5 sum, and only where its database records one. --verify
+# prints a line only for a file that fails, and exits 0 also then. --audit reports missing control
+# data, and exits 0 too. So the file counts as verified only if four things hold: dpkg-query -S
+# names its owner, an MD5 sum is recorded for this very file (md5sums, or a conffile's hash),
+# --verify prints no line for it, and --audit prints nothing. Prints one line, never the content.
+# Returns 0 if verified, 1 if no package owns the file, 2 otherwise (MODIFIED, REVIEW or UNREAD).
+pkg_file() {
+  local f=$1 q o rc owners pkg m has st line aud worst=0 nver=0
+  local -a cand=("$f")
+  # usrmerge: dpkg's database may record /lib/... for /usr/lib/...
+  if [[ $f == /usr/* ]]; then cand+=("${f#/usr}"); fi
+  for q in "${cand[@]}"; do
+    o=$(LC_ALL=C dpkg-query -S -- "$q" 2>&1)
+    rc=$?
+    if [ "$rc" -ne 1 ] || [[ $o != *"no path found matching pattern"* ]]; then break; fi
+  done
+  if [ "$rc" -eq 1 ] && [[ $o == *"no path found matching pattern"* ]]; then return 1; fi
+  if [ "$rc" -ne 0 ]; then echo "UNREAD: $f: dpkg-query -S failed (exit $rc): $o"; return 2; fi
+  # Every parser's status is checked below: one that fails, and prints nothing, must not read as
+  # "no diversion", "no difference" or "no MD5 sum". Splitting and joining use bash itself.
+  grep -qE '^(local )?diversion ' <<<"$o"
+  case $? in
+    0) echo "REVIEW: $f: diverted (dpkg-divert): ${o//$'\n'/ }"; return 2 ;;
+    1) ;;
+    *) echo "UNREAD: $f: the check for a diversion failed"; return 2 ;;
+  esac
+  if ! owners=$(awk -v p="$q" '{ i = index($0, ": "); if (i > 0 && substr($0, i + 2) == p) print substr($0, 1, i - 1) }' <<<"$o"); then
+    echo "UNREAD: $f: dpkg-query -S's answer could not be parsed"
+    return 2
+  fi
+  if [ -z "$owners" ] || [[ $owners == *$'\n'* ]]; then echo "UNREAD: $f: dpkg-query -S named no single owner line: ${o//$'\n'/ }"; return 2; fi
+  for pkg in ${owners//,/ }; do
+    if ! [[ $pkg =~ ^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?$ ]]; then echo "UNREAD: $f: \"$pkg\" is no package name"; return 2; fi
+    if ! m=$(LC_ALL=C dpkg-query --control-list "$pkg" 2>&1); then echo "UNREAD: $f: dpkg-query --control-list $pkg failed: $m"; return 2; fi
+    has=
+    if [[ $'\n'$m$'\n' == *$'\n'md5sums$'\n'* ]]; then
+      if ! m=$(LC_ALL=C dpkg-query --control-show "$pkg" md5sums 2>&1); then echo "UNREAD: $f: the md5sums of $pkg: $m"; return 2; fi
+      awk -v p="${q#/}" 'substr($0, 33, 2) == "  " && substr($0, 35) == p && substr($0, 1, 32) ~ /^[0-9a-f]+$/ { found = 1 } END { exit !found }' <<<"$m"
+      case $? in
+        0) has=md5sums ;;
+        1) ;;
+        *) echo "UNREAD: $f: the md5sums of $pkg could not be parsed"; return 2 ;;
+      esac
+    fi
+    if [ -z "$has" ]; then
+      if ! m=$(LC_ALL=C dpkg-query -W -f='${Conffiles}\n' "$pkg" 2>&1); then echo "UNREAD: $f: the conffiles of $pkg: $m"; return 2; fi
+      awk -v p="$q" '$1 == p && length($2) == 32 && $2 ~ /^[0-9a-f]+$/ { found = 1 } END { exit !found }' <<<"$m"
+      case $? in
+        0) has=conffile ;;
+        1) ;;
+        *) echo "UNREAD: $f: the conffiles of $pkg could not be parsed"; return 2 ;;
+      esac
+    fi
+    o=$(sudo sh -c 'LC_ALL=C dpkg --verify --verify-format=rpm "$1" 2>&1; echo "dpkg exit status $?"' sh "$pkg" 2>&1)
+    st=${o##*$'\n'}
+    o=${o%"$st"}
+    o=${o%$'\n'}
+    if [ "$st" != "dpkg exit status 0" ]; then echo "UNREAD: $f: dpkg --verify $pkg failed: $st ${o//$'\n'/ }"; return 2; fi
+    if [ -n "$o" ]; then
+      awk '{ a = substr($0, 1, 9) } !((a == "missing  " || (length(a) == 9 && a ~ /^[?.A-Za-z0-9]+$/)) && substr($0, 10, 1) == " " && substr($0, 11, 1) ~ /^[ c]$/ && substr($0, 12, 2) == " /") { bad = 1 } END { exit bad }' <<<"$o"
+      case $? in
+        0) ;;
+        1) echo "UNREAD: $f: dpkg --verify $pkg printed a line in no rpm format: ${o//$'\n'/ }"; return 2 ;;
+        *) echo "UNREAD: $f: dpkg --verify $pkg's output could not be parsed"; return 2 ;;
+      esac
+    fi
+    if ! line=$(awk -v p="$q" '{ r = substr($0, 13) } r == p || index(r, p " (") == 1' <<<"$o"); then
+      echo "UNREAD: $f: dpkg --verify $pkg's output could not be searched for this file"
+      return 2
+    fi
+    if [[ $line == *$'\n'* ]]; then echo "UNREAD: $f: dpkg --verify $pkg names it more than once: ${line//$'\n'/ }"; return 2; fi
+    if ! aud=$(LC_ALL=C dpkg --audit "$pkg" 2>&1); then echo "UNREAD: $f: dpkg --audit $pkg failed: $aud"; return 2; fi
+    if [ "${line:0:9}" = "missing  " ]; then
+      echo "UNREAD: $f: dpkg reports its file of $pkg missing: $line"
+      return 2
+    elif [ -n "$line" ] && [ "${line:2:1}" = 5 ]; then
+      echo "MODIFIED: $f: package $pkg: $line"
+      worst=2
+    elif [ -n "$line" ]; then
+      echo "REVIEW: $f: package $pkg: dpkg could not check it: $line"
+      worst=2
+    elif [ -n "$aud" ]; then
+      echo "REVIEW: $f: package $pkg: dpkg --audit reports: ${aud//$'\n'/ }"
+      worst=2
+    elif [ -z "$has" ]; then
+      echo "REVIEW: $f: package $pkg records no MD5 sum for it, so dpkg cannot check its content"
+      worst=2
+    else
+      echo "$f: from package $pkg; its MD5 sum is recorded ($has) and dpkg --verify reports no difference"
+      nver=$((nver + 1))
+    fi
+  done
+  if [ "$worst" -eq 0 ] && [ "$nver" -eq 0 ]; then echo "UNREAD: $f: no package of it was checked"; return 2; fi
+  return "$worst"
 }
 ```
 
@@ -735,6 +899,65 @@ absent_ok() {
   - **`absent_ok`** is the condition for every `absent:` about an account or a group in P7a and P9:
     NSS's sources accepted and, for a database with `systemd` among its sources, `userdb_none`
     confirming. Otherwise the entry is `UNREAD`, with the reason.
+- **`path_kind`** decides what a file-system source is, as root, through `test`:
+  - it prints `absent`, `broken-link`, `directory`, `file`, `socket` or `other`;
+  - a path that does not exist is `absent` only when its deepest existing ancestor is a
+    directory that root can search (`[ -x ]`, which asks access(2)). Then the missing name truly
+    does not exist there;
+  - a failed `sudo`, an ancestor that cannot be searched, or one that is no directory is
+    `unknown: <reason>`, which the caller reports as `UNREAD`;
+  - it parses no error message: GNU `stat` and uutils' `stat`, which Ubuntu 26.04 ships, word "No
+    such file or directory" differently [LOCAL].
+
+  `[ -e ]` and `[ -d ]` are false also for a path that cannot be inspected, so P7 no longer uses
+  them as proof. Directories are listed as root, with `sudo ls -A`, whose failure is `UNREAD`.
+  P7 uses `path_kind` for every source it reads:
+  - nss-systemd's directories and nscd's socket in `nss_sources`;
+  - each `authorized_keys` path in `keys_of`;
+  - the sudoers files and directories;
+  - `/etc/sudo.conf` and `/etc/gshadow`;
+  - P7b's cron files and directories and the user crontabs;
+  - `/var/lib/systemd/linger`.
+
+  A broken link, or a source of the wrong kind, is `REVIEW` or `UNREAD`, never `absent:`.
+  `userdb_none`'s own checks already fail closed: a missing socket or a failed call is `UNREAD`.
+- **`pkg_file`** decides whether a cron script or a unit file comes from a package whose record
+  vouches for its content. It follows dpkg 1.22.6, Ubuntu 24.04's version
+  ([dpkg(1)](https://manpages.ubuntu.com/manpages/noble/man1/dpkg.1.html),
+  [dpkg-query(1)](https://manpages.ubuntu.com/manpages/noble/man1/dpkg-query.1.html),
+  [`verify.c`](https://github.com/guillemj/dpkg/blob/1.22.6/src/main/verify.c),
+  [`enquiry.c`](https://github.com/guillemj/dpkg/blob/1.22.6/src/main/enquiry.c)).
+  - **What dpkg can vouch for:** `dpkg --verify` checks only a file's MD5 sum against the one
+    its database records, and only where it records one. dpkg(1) calls it "only an integrity check
+    and should not be considered as any kind of security verification". A root who changes a file
+    can also change the record.
+  - **Why silence proves nothing:** `--verify` prints a line only for a file that fails a check,
+    and exits 0 also then; its exit status is non-zero only for a package that is not installed.
+    A file without a recorded MD5 sum gets no line at all, like one that passed. `--audit`
+    prints missing or wrong control data, for example a package without `md5sums`, and also
+    exits 0.
+  - **So it needs four facts:**
+    1. `dpkg-query -S` names the owner, also through `/usr`'s alias for `/lib`. A diversion is
+       `REVIEW`, an error `UNREAD`.
+    2. An MD5 sum is recorded for this very file, in the package's `md5sums`
+       (`dpkg-query --control-list` and `--control-show`) or as a conffile's hash.
+    3. `dpkg --verify --verify-format=rpm`, run as root, exits 0, prints only lines in the rpm
+       format, and none for this file.
+    4. `dpkg --audit` prints nothing for the package.
+  - **The results:**
+    - all four hold: verified;
+    - a `5` in the third column: `MODIFIED`;
+    - any other line for the file, or audit output, or no recorded MD5 sum: `REVIEW`;
+    - `missing`, or any failed command: `UNREAD`.
+  - **Every parser counts as a command.** An `awk` or `grep` that fails prints nothing, and
+    nothing is exactly what "no diversion", "no line for this file" or "no MD5 sum" look like. So:
+    - `pkg_file` checks the exit status of each of them, and a failure is `UNREAD`;
+    - `dpkg --verify`'s status line is split off, and lines are joined, with bash's own
+      parameter expansion, not `tail`, `sed` or `tr`;
+    - a file is verified only if at least one package of it was checked and passed.
+
+    A file that is not verified, or comes from no package, is shown in full, so that the
+    operator can attribute it from its content.
 
 **P7a. Accounts, privileges and keys. Admin, read-only:**
 
@@ -792,14 +1015,15 @@ while [ -n "$todo" ]; do
     gaps=$((gaps + 1))
     break
   fi
-  e=$(sudo sh -c 'if [ ! -e "$1" ]; then echo absent; elif [ -d "$1" ]; then echo dir; elif [ -f "$1" ]; then echo file; else echo other; fi' sh "$p" 2>&1)
+  e=$(path_kind "$p")
+  if [ "$e" = directory ]; then e=dir; fi
   if [ "$e" = absent ]; then
     echo "absent: sudoers $kind $p"
     continue
   elif [ "$e" != "$kind" ]; then
     case $e in
-      dir | file | other) echo "UNREAD: sudoers $kind $p is a $e, which is not read as a $kind" ;;
-      *) echo "UNREAD: whether sudoers $kind $p exists is unknown: $e" ;;
+      unknown:*) echo "UNREAD: whether sudoers $kind $p exists is unknown: ${e#unknown: }" ;;
+      *) echo "UNREAD: sudoers $kind $p is a $e, which is not read as a $kind" ;;
     esac
     gaps=$((gaps + 1))
     continue
@@ -854,9 +1078,12 @@ elif [ -z "$rules" ]; then
 fi
 # Rules from elsewhere: sudo.conf can load another policy plugin or point sudoers.so at another file
 # (sudoers_file=), and a sudoers: line in nsswitch.conf can add LDAP or SSSD to files.
-if [ ! -e /etc/sudo.conf ]; then
+e=$(path_kind /etc/sudo.conf)
+if [ "$e" = absent ]; then
   echo "absent: /etc/sudo.conf"
-elif ! o=$(cat /etc/sudo.conf 2>&1); then
+elif [ "$e" != file ]; then
+  echo "UNREAD: /etc/sudo.conf: ${e#unknown: }"
+elif ! o=$(sudo cat -- /etc/sudo.conf 2>&1); then
   echo "UNREAD: /etc/sudo.conf: $o"
 else
   o=$(grep -E '^[[:space:]]*Plugin[[:space:]]' <<<"$o" | grep -vE '^[[:space:]]*Plugin[[:space:]]+sudoers_(policy|io|audit)[[:space:]]+sudoers\.so[[:space:]]*$')
@@ -898,12 +1125,18 @@ echo "groups reviewed: $groups"
 # Exit status 2 is absent only if NSS asks no other source and /etc/group, read directly, has no
 # such group. A group's members are its listed members and the accounts whose primary group it is.
 # getent's output passes through awk before it reaches a variable, so a password field longer than
-# one character exists in the shell only as <set> or <locked>; the exit status is getent's.
+# one character exists in the shell only as <set> or <locked>. Both exit statuses, getent's and
+# awk's, are kept from PIPESTATUS, and an entry counts only as one line of four fields named $g.
 for g in $groups; do
   why=
-  o=$(getent group "$g" | awk -F: -v OFS=: 'length($2) > 1 { $2 = ($2 ~ /^[!*]/) ? "<locked>" : "<set>" } { print }'; exit "${PIPESTATUS[0]}")
-  rc=$?
-  if [ "$rc" -eq 0 ]; then
+  r=$(getent group "$g" | awk -F: -v OFS=: 'length($2) > 1 { $2 = ($2 ~ /^[!*]/) ? "<locked>" : "<set>" } { print }'; echo "exit ${PIPESTATUS[0]} ${PIPESTATUS[1]}")
+  read -r _ rc arc <<<"${r##*$'\n'}"
+  o=$(sed '$d' <<<"$r")
+  if [ "$arc" != 0 ]; then
+    echo "UNREAD: group $g: the awk that hides its password field exited $arc, so getent's answer (exit $rc) is unknown"
+  elif [ "$rc" = 0 ] && { [ "$(grep -c . <<<"$o")" -ne 1 ] || [ "$(awk -F: '{ print NF }' <<<"$o")" != 4 ] || [ "${o%%:*}" != "$g" ]; }; then
+    echo "UNREAD: group $g: getent exited 0 without one well-formed entry named $g"
+  elif [ "$rc" = 0 ]; then
     printf '%s\n' "$o"
     if $accounts; then
       m=$(awk -F: -v gid="$(cut -d: -f3 <<<"$o")" '$4 == gid { printf "%s%s", sep, $1; sep = " " }' <<<"$db")
@@ -911,7 +1144,7 @@ for g in $groups; do
     else
       echo "UNREAD: no complete account list, so the accounts whose primary group is $g are not listed"
     fi
-  elif [ "$rc" -eq 2 ] && awk -F: -v g="$g" '$1 == g { found = 1 } END { exit found }' /etc/group && why=$(absent_ok group "$g"); then
+  elif [ "$rc" = 2 ] && [ -z "$o" ] && awk -F: -v g="$g" '$1 == g { found = 1 } END { exit found }' /etc/group && why=$(absent_ok group "$g"); then
     echo "absent: no group $g"
   else
     echo "UNREAD: group $g: getent exited $rc, and no read confirms that the group is missing${why:+: $why}"
@@ -921,11 +1154,11 @@ done
 # field, the administrators, the members and how they differ from /etc/group's: never a password
 # field or a whole line. Whether the file exists is asked first, so that a failed sudo does not
 # read as no file.
-e=$(sudo sh -c 'if [ -e /etc/gshadow ]; then echo present; else echo absent; fi' 2>&1)
+e=$(path_kind /etc/gshadow)
 case $e in
-  present) gsf=/etc/gshadow ;;
+  file) gsf=/etc/gshadow ;;
   absent) gsf=/dev/null; echo "absent: /etc/gshadow" ;;
-  *) gsf= ;;
+  *) gsf= e=${e#unknown: } ;;
 esac
 if [ -z "$gsf" ]; then
   echo "UNREAD: whether /etc/gshadow exists is unknown: $e"
@@ -964,15 +1197,20 @@ else
         ;;
       NOENTRY)
         # Not in /etc/gshadow: NSS's own answer, from any source it asks (nss-systemd included), as
-        # root, through the same kind of awk; the exit status is getent's, through sudo.
-        x=$(sudo getent gshadow "$g" | awk -F: '{ print NF, (($2 == "") ? "empty" : ($2 ~ /^[!*]/) ? "locked" : "set"), (($3 == "") ? "-" : $3), (($4 == "") ? "-" : $4) }'; exit "${PIPESTATUS[0]}")
-        rc=$?
-        why=
-        re='^4 (empty|locked|set) [^ ]+ [^ ]+$'
-        if [ "$rc" -eq 0 ] && [[ $x =~ $re ]]; then
-          read -r _ s ad mem <<<"$x"
+        # root, through the same kind of awk. Both exit statuses are kept: getent's (through sudo)
+        # and awk's; an entry counts only as one line of four fields named $g.
+        r=$(sudo getent gshadow "$g" | awk -F: '{ print NF, $1, (($2 == "") ? "empty" : ($2 ~ /^[!*]/) ? "locked" : "set"), (($3 == "") ? "-" : $3), (($4 == "") ? "-" : $4) }'; echo "exit ${PIPESTATUS[0]} ${PIPESTATUS[1]}")
+        read -r _ rc arc <<<"${r##*$'\n'}"
+        x=$(sed '$d' <<<"$r")
+        nf= name= s= ad= mem= extra= why=
+        read -r nf name s ad mem extra <<<"$x"
+        if [ "$arc" != 0 ]; then
+          echo "UNREAD: gshadow $g: the awk that hides its password field exited $arc, so NSS's answer (exit $rc) is unknown"
+        elif [ "$rc" = 0 ] && [ "$(grep -c . <<<"$x")" -eq 1 ] && [ "$nf" = 4 ] && [ "$name" = "$g" ] && [[ $s =~ ^(empty|locked|set)$ ]] && [ -n "$mem" ] && [ -z "$extra" ]; then
           echo "REVIEW: gshadow $g: not in /etc/gshadow, but NSS returns an entry: password $s; administrators: $ad; members: $mem"
-        elif [ "$rc" -ne 2 ] || ! why=$(absent_ok gshadow "$g"); then
+        elif [ "$rc" = 0 ]; then
+          echo "UNREAD: gshadow $g: getent gshadow exited 0 without one well-formed entry named $g"
+        elif [ "$rc" != 2 ] || [ -n "$x" ] || ! why=$(absent_ok gshadow "$g"); then
           echo "UNREAD: gshadow $g: not in /etc/gshadow, and NSS gave no entry and no confirmed absence (getent exited $rc${why:+; $why})"
         elif [ "$a" = - ]; then
           echo "absent: gshadow $g: no entry, and no group $g in /etc/group"
@@ -1027,7 +1265,8 @@ last -n 20 || echo "UNREAD: last failed"
   `accounts:` line gives the count for the operator to compare.
 - **Groups:**
   - `absent:` needs three things:
-    - `getent group` exits 2;
+    - `getent group` exits 2, and the `awk` that its output passes through exits 0 with nothing
+      printed;
     - `/etc/group`, read directly, has no such group (`awk` exits 0; 2 if it cannot read the
       file);
     - `absent_ok` confirms: the sources were accepted and, with `systemd` among them,
@@ -1080,9 +1319,17 @@ last -n 20 || echo "UNREAD: last failed"
         unknown. While one remains, G6 cannot pass.
   - **A group's password field** in `/etc/group` is shown only when it is empty or one character
     (`x`, `!`, `*`). Any other value appears as `<set>` or `<locked>`. `getent group`'s output
-    passes through that `awk` before it reaches a variable, and the exit status checked is
-    `getent`'s (`PIPESTATUS`). So the raw field is never held in a shell variable, printed,
-    stored or traced. It does pass, in `getent`'s output, to the `awk` process.
+    passes through that `awk` before it reaches a variable. So the raw field is never held in a
+    shell variable, printed, stored or traced. It does pass, in `getent`'s output, to the `awk`
+    process.
+  - **Both exit statuses count**, in this lookup and in the NSS gshadow lookup below:
+    - the command substitution appends `getent`'s and `awk`'s statuses from `PIPESTATUS`, so
+      neither can hide the other;
+    - an `awk` that fails is `UNREAD`, whatever `getent` returned;
+    - with `getent` at 0, the result must be one line of four fields whose name is the group
+      asked for, or it is `UNREAD`;
+    - with `getent` at 2, `absent:` also needs `awk` to have printed nothing;
+    - any other status is `UNREAD`.
 - **`/etc/gshadow`** ([gshadow(5)](https://manpages.ubuntu.com/manpages/noble/man5/gshadow.5.html))
   holds, per group, a password, administrators and members:
   - **Why it matters:**
@@ -1228,6 +1475,127 @@ last -n 20 || echo "UNREAD: last failed"
       - revision 5's NSS cases gave the same, except the plain-file services above;
       - the hand-over's 22 cases gave the same;
       - gawk and mawk differed only in `awk`'s own error text.
+  - **Tested locally, revision 9** [LOCAL], Ubuntu 26.04 under WSL. Each case ran in its own
+    user and mount namespace, over a copy of `/etc` bound over the real one, and tmpfs over
+    `/usr/local/lib`, `/usr/lib/systemd/system`, `/var/lib/systemd`, `/var/spool/cron` and, for
+    nscd, `/run`.
+    - **What was real and what was fake:**
+      - **real:** `getent`, nss-systemd and PID 1's service, `varlinkctl`, `run-parts`, `ls`,
+        `ssh-keygen`, gawk and mawk;
+      - **real, on a fixture database (`DPKG_ADMINDIR`):** dpkg and dpkg-query 1.23.7;
+      - **fakes:** `sudo`, `sshd`, `passwd`, `last`, `systemctl` and `loginctl`, the last two
+        driven by fixture data;
+      - **wrappers** around `getent`, `awk`, `ls`, `dpkg` and `dpkg-query` forced single
+        failures, and otherwise ran the real tool.
+    - **Pipelines** (13 cases): each gave its expected line:
+      - a failing `awk` after `getent` at 0 and at 2: `UNREAD`;
+      - `getent` at 3: `UNREAD`;
+      - a malformed record, a record for another name, or no output with exit 0: `UNREAD`,
+        for groups and for NSS gshadow;
+      - a valid NSS gshadow record with a dummy hash: `REVIEW … password set`.
+    - **File-system sources:** each uncertain state gave `UNREAD` or `REVIEW`, never `absent:`
+      or `empty:`:
+      - an unreadable directory, a failed listing, a parent that cannot be searched, a failed
+        inspection (for a userdb directory, `/etc/gshadow` and `/etc/sudoers`), a failed `sudo`:
+        `UNREAD`;
+      - a broken link (userdb, `authorized_keys`), a socket at nscd's path: `REVIEW`.
+
+      Missing paths gave `absent:`, and empty directories `empty:` or no line. The linger
+      directory gave `absent:`, `empty:`, `lingering:` or `UNREAD`, as it was missing, empty,
+      present or unreadable.
+    - **P7b** (9 cases):
+      - a failed `sudo`, exiting 1 or 127, gave `UNREAD` for every source, never `empty:`;
+      - comments only gave `empty: no line…`;
+      - no `/etc/crontab` and an empty `/etc/cron.d` gave `absent:` and `empty:`;
+      - an unreadable cron file, and an `/etc/cron.d` that cannot be listed, gave `UNREAD`;
+      - an unreadable periodic directory gave `UNREAD`. Before the listing was added,
+        `run-parts --test` had made it a false `empty:`.
+
+      The first draft's crontab read did not run at all, because `set --` came before reading
+      `$1` and `$2`; the tests found it.
+    - **`pkg_file`**, with the real dpkg:
+      - MD5 sum recorded and matching, through `md5sums`, a conffile hash, and the `/usr/lib`
+        file that dpkg records under `/lib`: verified;
+      - a changed file: `MODIFIED`;
+      - a missing one: `UNREAD`;
+      - an unreadable one (`?????????`): `REVIEW`;
+      - no MD5 sum recorded for the file, while another file of the package verified: `REVIEW`;
+      - `--audit` reporting a missing `md5sums`: `REVIEW`;
+      - a diversion: `REVIEW`;
+      - no owner: shown in full;
+      - a failed `--verify`, `--audit`, `--control-list` or `-S`, or a `--verify` line in no rpm
+        format: `UNREAD`, for every file.
+
+      P7b's cron scripts and P7c's unit files used the same helper.
+    - **P7c** (10 cases): every active or enabled socket and path unit was reviewed, with every
+      unit its `Triggers=` named, also for the user manager:
+      - a socket that starts two services;
+      - an `Accept=yes` socket with its template;
+      - an enabled socket and path that were not active;
+      - disabled and static units left out.
+
+      A failed `Triggers` query, a target that cannot be found, an unreadable definition, and a
+      failed system or user listing were `UNREAD`. No activation unit at all gave `empty:`.
+    - **P9:** a key gave its fingerprint line, also under `set -x`, without the key's data.
+    - **P10** (4 cases): a missing `varlinkctl` for the account, and a missing `install` for
+      root's PATH, were each `MISSING:`; a failed `sudo` was `UNREAD`; absent `at` and `atq`
+      were reported as optional.
+    - **Hashes and keys:** no dummy hash and no key data reached any output, under gawk or mawk,
+      with or without `set -x`. Without P7a's xtrace-off line, the trace (about 1,500 lines)
+      shows the captures as `docker:<set>:…` with both exit statuses.
+    - **Earlier results:**
+      - revision 8's suite gave the same, except two cases:
+        - a failing `sudo` now also makes nss-systemd's directories `UNREAD`;
+        - one fake keyed on the old existence check's text no longer applied. Its revision 9
+          equivalent, a failed inspection of `/etc/gshadow`, gave `UNREAD`.
+      - revision 5's NSS suite gave the same, apart from the reworded nscd message;
+      - the hand-over's 22 cases gave the same.
+
+      Under gawk and mawk the revision 9 suite gave identical output.
+    - **From source only, not reproduced:**
+      - dpkg 1.22.6 (Ubuntu 24.04), read in `verify.c` and `enquiry.c`; locally, dpkg 1.23.7
+        behaved the same;
+      - classic sudo;
+      - GNU coreutils: the local system has uutils, whose `stat` wording first made
+        `path_kind` print `unknown` for missing paths, so `path_kind` parses no message now;
+      - real `systemctl` output for `list-unit-files` and `show -p Triggers` on systemd 255;
+      - the VPS itself.
+  - **Tested locally, revision 10** [LOCAL], with the same harness. Pass-through wrappers made
+    one parser at a time fail, printing nothing and exiting 2, while dpkg's data and
+    `systemctl`'s lists stayed valid. Revision 9's blocks ran the same cases as the control.
+    - **`pkg_file`** (10 files per case), with the real dpkg:
+      - **the search for the file's own `--verify` line:** revision 9 reported the modified,
+        the missing and the unreadable file as verified; revision 10 gives `UNREAD`;
+      - **`sed '$d'`:** revision 9 reported the same three files as verified; revision 10 no
+        longer runs `sed`, and gives `MODIFIED`, `UNREAD` and `REVIEW`;
+      - **the diversion check:** revision 9 took a failure for "not diverted"; revision 10 gives
+        `UNREAD`;
+      - **the MD5 sum and conffile searches:** revision 9 gave `REVIEW` ("no MD5 sum");
+        revision 10 gives `UNREAD`;
+      - **the owner line and the rpm-format check:** `UNREAD` in both;
+      - **`tail -n 1`:** revision 9 gave `UNREAD`; revision 10 no longer runs `tail`.
+
+      Unforced, both revisions gave the same verdicts.
+    - **P7c** (system and user manager):
+      - **`awk` for the unit names and states together, `grep .`, or `sort -u`:** revision 9
+        printed `empty: … no active or enabled socket or path unit` for both managers, and with
+        `grep` or `sort` also `empty: no user manager to review`. Revision 10 reviewed all 20
+        units;
+      - **one of those `awk` calls:** revision 9 silently left out 2 or 9 units;
+      - **the timer `awk`:** revision 9 silently skipped the timer and its service;
+      - **the user list's `awk`:** revision 9 printed `empty: no user manager to review`;
+      - in each of these, revision 10's output was the same as unforced;
+      - **malformed lines** in the socket, unit-file and timer lists: revision 10 gives `UNREAD`
+        for each line, where revision 9 took the garbage for unit names;
+      - **a failing `show -p User`:** revision 9 printed `User=Failed to get property…`;
+        revision 10 gives `UNREAD`;
+      - **a system without any unit:** `empty:` in both.
+    - **Earlier results:**
+      - revision 9's whole suite, run on revision 10's blocks, gave the same verdicts in all 59
+        artifacts, and in P7c the same set of reviewed units;
+      - P7c now reviews units in their listing order, not sorted;
+      - messages are now joined into one line by bash, not `tr`;
+      - under gawk and mawk both suites gave identical output.
 - **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
   and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
   `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
@@ -1249,34 +1617,105 @@ last -n 20 || echo "UNREAD: last failed"
 **P7b. Scheduled work, with the commands it runs. Admin, read-only:**
 
 ```bash
-if o=$(sudo grep -vHE '^[[:space:]]*(#|$)' /etc/crontab /etc/cron.d/* 2>&1); then
-  printf '%s\n' "$o"
-elif [ $? -eq 1 ]; then
-  echo "empty: no line in /etc/crontab or /etc/cron.d"
-else
-  echo "UNREAD: /etc/crontab or /etc/cron.d: $o"
+# /etc/crontab and /etc/cron.d, read as root. The file list is expanded, and grep's exit status
+# taken, inside sudo: a failed sudo also exits 1, like grep without a match.
+k1=$(path_kind /etc/crontab)
+k2=$(path_kind /etc/cron.d)
+case $k1 in file) ;; absent) echo "absent: /etc/crontab" ;; *) echo "UNREAD: /etc/crontab: ${k1#unknown: }" ;; esac
+case $k2 in directory) ;; absent) echo "absent: /etc/cron.d" ;; *) echo "UNREAD: /etc/cron.d: ${k2#unknown: }" ;; esac
+if { [ "$k1" = file ] || [ "$k1" = absent ]; } && { [ "$k2" = directory ] || [ "$k2" = absent ]; }; then
+  o=$(sudo sh -c '
+    k1=$1 k2=$2
+    set --
+    if [ "$k1" = file ]; then set -- /etc/crontab; fi
+    if [ "$k2" = directory ]; then
+      if ! ls -A /etc/cron.d >/dev/null; then echo "grep not run: /etc/cron.d cannot be listed"; exit 0; fi
+      for f in /etc/cron.d/*; do if [ -e "$f" ] || [ -L "$f" ]; then set -- "$@" "$f"; fi; done
+    fi
+    if [ "$#" -eq 0 ]; then echo "grep not run: no file"; exit 0; fi
+    grep -vHE "^[[:space:]]*(#|\$)" "$@" 2>&1
+    echo "grep exit status $?"' sh "$k1" "$k2" 2>&1)
+  st=$(tail -n 1 <<<"$o")
+  o=$(sed '$d' <<<"$o")
+  case $st in
+    "grep exit status 0") printf '%s\n' "$o" ;;
+    "grep exit status 1") echo "empty: no line in /etc/crontab or /etc/cron.d" ;;
+    "grep not run: no file") ;;
+    *) echo "UNREAD: /etc/crontab or /etc/cron.d: $st $o" ;;
+  esac
 fi
 for d in /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
-  if [ ! -d "$d" ]; then
-    echo "absent: $d"
-  elif o=$(run-parts --test "$d" 2>&1); then
-    echo "$d runs: ${o:-nothing}" | tr '\n' ' '
-    echo
-  else
-    echo "UNREAD: $d: $o"
-  fi
+  k=$(path_kind "$d")
+  case $k in
+    absent) echo "absent: $d" ;;
+    directory)
+      # run-parts --test exits 0, and prints nothing, also for a directory it cannot read.
+      if ! o=$(sudo ls -A -- "$d" 2>&1); then
+        echo "UNREAD: $d: $o"
+      elif [ -z "$o" ]; then
+        echo "empty: $d: no file"
+      elif ! o=$(sudo run-parts --test "$d" 2>&1); then
+        echo "UNREAD: $d: $o"
+      elif [ -z "$o" ]; then
+        echo "empty: $d: run-parts would run none of its files"
+      else
+        echo "$d runs: $(tr '\n' ' ' <<<"$o")"
+      fi
+      ;;
+    *) echo "UNREAD: $d: ${k#unknown: }" ;;
+  esac
 done
-for f in /etc/cron.d/* /etc/cron.hourly/* /etc/cron.daily/* /etc/cron.weekly/* /etc/cron.monthly/*; do
-  [ -f "$f" ] || continue
-  if p=$(dpkg -S "$f" 2>/dev/null); then
-    m=$(dpkg -V "${p%%:*}" 2>/dev/null | grep -F " $f")
-    echo "$f: from package ${p%%:*}${m:+; MODIFIED: $m}"
-  else
-    echo "== $f: from no package. Its content:"
-    sudo cat "$f" || echo "UNREAD: $f"
-  fi
+# Every entry of these directories, listed as root, with its package check (pkg_file), or its
+# content where no package vouches for it.
+for d in /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly; do
+  [ "$(path_kind "$d")" = directory ] || continue
+  if ! names=$(sudo ls -A -- "$d" 2>&1); then echo "UNREAD: $d: $names"; continue; fi
+  if [ -z "$names" ]; then echo "empty: $d: no file"; continue; fi
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    f=$d/$n
+    k=$(path_kind "$f")
+    case $k in
+      file)
+        pkg_file "$f"
+        case $? in
+          0) ;;
+          1) echo "== $f: from no package. Its content:"; sudo cat -- "$f" || echo "UNREAD: $f" ;;
+          *) echo "== $f: its content:"; sudo cat -- "$f" || echo "UNREAD: $f" ;;
+        esac
+        ;;
+      unknown:*) echo "UNREAD: $f: ${k#unknown: }" ;;
+      *) echo "REVIEW: $f is a $k, not a file" ;;
+    esac
+  done <<<"$names"
 done
-sudo sh -c 'd=/var/spool/cron/crontabs; [ -d "$d" ] || { echo "absent: $d: no user crontabs"; exit 0; }; [ -r "$d" ] || { echo "UNREAD: $d"; exit 1; }; n=0; for f in "$d"/*; do [ -f "$f" ] || continue; n=$((n + 1)); echo "== crontab of ${f##*/}"; grep -vE "^[[:space:]]*(#|\$)" "$f"; done; echo "user crontabs: $n"'
+# User crontabs, each read as root with grep's exit status from inside sudo.
+d=/var/spool/cron/crontabs
+k=$(path_kind "$d")
+case $k in
+  absent) echo "absent: $d: no user crontabs" ;;
+  directory)
+    if ! names=$(sudo ls -A -- "$d" 2>&1); then
+      echo "UNREAD: $d: $names"
+    elif [ -z "$names" ]; then
+      echo "empty: $d: no user crontab"
+    else
+      while IFS= read -r n; do
+        echo "== crontab of $n"
+        o=$(sudo sh -c 'grep -vE "^[[:space:]]*(#|\$)" -- "$1" 2>&1; echo "grep exit status $?"' sh "$d/$n" 2>&1)
+        st=$(tail -n 1 <<<"$o")
+        o=$(sed '$d' <<<"$o")
+        case $st in
+          "grep exit status 0") printf '%s\n' "$o" ;;
+          "grep exit status 1") echo "empty: crontab of $n: no line" ;;
+          *) echo "UNREAD: crontab of $n: $st $o" ;;
+        esac
+      done <<<"$names"
+      echo "user crontabs: $(grep -c . <<<"$names")"
+    fi
+    ;;
+  *) echo "UNREAD: $d: ${k#unknown: }" ;;
+esac
 if ! command -v atq >/dev/null; then
   echo "absent: at is not installed, so no at job"
 elif ! q=$(sudo atq 2>&1); then
@@ -1294,32 +1733,116 @@ fi
 
 - **`at -c <id>`** prints the script that the job will run, its environment included. It can hold
   secrets, and stays with the operator.
+- **A failed `sudo` never reads as no cron line.** `sudo` exits 1 when it fails, as `grep` does
+  without a match. So `/etc/cron.d`'s file list is expanded, and grep's status taken, inside
+  `sudo sh -c`; the same holds for each user crontab.
+  - Only grep's own 1 after a successful read is `empty:`.
+  - An error, or a missing status line, is `UNREAD`.
+  - `/etc/crontab` and `/etc/cron.d` are first checked with `path_kind`, so a missing one is
+    `absent:` and one that cannot be inspected `UNREAD`.
+- **The periodic directories:**
+  - each is checked with `path_kind`, then listed as root, and only then given to
+    `run-parts --test`, as root;
+  - the listing comes first because `run-parts --test` exits 0 and prints nothing also for a
+    directory it cannot read (debianutils 5.23.1) [LOCAL];
+  - a directory whose listing fails is `UNREAD`;
+  - one with no file, or from which `run-parts` would run none, is `empty:`.
+- **Each entry of `/etc/cron.d` and the periodic directories** is listed as root and checked with
+  `pkg_file`. Every entry is reported, not only regular files:
+  - one that is no regular file is `REVIEW`;
+  - one that cannot be inspected is `UNREAD`;
+  - a file that no package vouches for is shown in full.
 
 **P7c. Services, timers and user managers, with their definitions; listeners. Admin, read-only:**
 
 ```bash
-# Prints where unit $2 of the manager $1 comes from: its package, user and any modification; or, if it
-# does not come only from a package, its whole definition. $1 is "system", or a user's name.
+# Prints where unit $2 of the manager $1 comes from: its package file, checked by pkg_file, and its
+# user; or, unless one verified package file is its whole definition, that whole definition. $1 is
+# "system", or a user's name.
 unit_review() {
-  local m=$1 u=$2 f d p mod
+  local m=$1 u=$2 f d usr
   local -a sc=(systemctl)
   if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
-  f=$("${sc[@]}" show -p FragmentPath --value "$u")
-  d=$("${sc[@]}" show -p DropInPaths --value "$u")
-  p=
-  if [ -n "$f" ]; then p=$(dpkg -S "$f" 2>/dev/null || dpkg -S "${f#/usr}" 2>/dev/null); fi
-  if [ -n "$p" ] && [ -z "$d" ]; then
-    mod=$(dpkg -V "${p%%:*}" 2>/dev/null | grep -F "${f#/usr}")
-    echo "$m $u: from package ${p%%:*} ($f), User=$("${sc[@]}" show -p User --value "$u")${mod:+; MODIFIED: $mod}"
-  else
-    echo "== $m $u: not only from a package (${f:-no unit file}${d:+; drop-ins: $d}). Its definition:"
-    "${sc[@]}" cat --no-pager "$u" || echo "UNREAD: $m $u: no definition could be read"
+  if ! f=$("${sc[@]}" show -p FragmentPath --value "$u" 2>&1) || ! d=$("${sc[@]}" show -p DropInPaths --value "$u" 2>&1); then
+    echo "UNREAD: $m $u: systemctl show failed: $f $d"
+    return
   fi
+  if [ -n "$f" ] && [ -z "$d" ] && pkg_file "$f"; then
+    # The user it runs as is part of the review: a failed query is UNREAD, not a user's name.
+    if ! usr=$("${sc[@]}" show -p User --value "$u" 2>&1) || [[ $usr == *$'\n'* ]]; then
+      echo "UNREAD: $m $u: the user it runs as is unknown: ${usr//$'\n'/ }"
+      return
+    fi
+    echo "$m $u: its unit file is $f, User=$usr"
+    return
+  fi
+  echo "== $m $u: not only from a verified package file (${f:-no unit file}${d:+; drop-ins: $d}). Its definition:"
+  "${sc[@]}" cat --no-pager "$u" || echo "UNREAD: $m $u: no definition could be read"
+}
+# The socket and path units of manager $1 that can start other units: those active now, and those
+# whose unit file is enabled, in any state but disabled, static, masked or bad. Each is reviewed with
+# the units that it starts, as systemd's Triggers= names them. A socket with Accept=yes starts
+# instances of the template named after it. The listings are split with bash's own read, so no
+# external parser can fail and leave the list empty; every line must name a unit of the type asked,
+# or the listing is UNREAD. "empty:" needs every listing read and understood.
+review_activation() {
+  local m=$1 ty out line u st t a x bad=0
+  local -a sc=(systemctl) units=()
+  local -A seen=()
+  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  for ty in socket path; do
+    if ! out=$("${sc[@]}" list-units --type="$ty" --state=active --no-pager --no-legend --plain 2>&1); then
+      echo "UNREAD: $m: its active $ty units: $out"
+      bad=1
+      continue
+    fi
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      read -r u _ <<<"$line"
+      if [[ $u != ?*."$ty" ]]; then echo "UNREAD: $m: a line of its active $ty units that P7c does not understand: $line"; bad=1; continue; fi
+      if [ -z "${seen[$u]-}" ]; then seen[$u]=1; units+=("$u"); fi
+    done <<<"$out"
+  done
+  if ! out=$("${sc[@]}" list-unit-files --type=socket,path --no-pager --no-legend --plain 2>&1); then
+    echo "UNREAD: $m: its socket and path unit files: $out"
+    bad=1
+  else
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      read -r u st _ <<<"$line"
+      if [[ $u != ?*.socket && $u != ?*.path ]] || [ -z "$st" ]; then echo "UNREAD: $m: a line of its unit files that P7c does not understand: $line"; bad=1; continue; fi
+      case $st in disabled | static | masked | masked-runtime | bad) continue ;; esac
+      if [ -z "${seen[$u]-}" ]; then seen[$u]=1; units+=("$u"); fi
+    done <<<"$out"
+  fi
+  if [ "${#units[@]}" -eq 0 ]; then
+    if [ "$bad" -eq 0 ]; then echo "empty: $m: no active or enabled socket or path unit"; fi
+    return
+  fi
+  for u in "${units[@]}"; do
+    unit_review "$m" "$u"
+    if ! t=$("${sc[@]}" show -p Triggers --value "$u" 2>&1); then
+      echo "UNREAD: $m $u: the units it starts are unknown: $t"
+      continue
+    fi
+    if [ -z "$t" ] && [[ $u == *.socket ]] && a=$("${sc[@]}" show -p Accept --value "$u" 2>&1) && [ "$a" = yes ]; then
+      t=${u%.socket}@.service
+    fi
+    if [ -z "$t" ]; then
+      echo "UNREAD: $m $u: no unit that it starts was found"
+      continue
+    fi
+    for x in $t; do
+      if [[ $x != ?*.?* ]]; then echo "UNREAD: $m $u: \"$x\" in its Triggers= is no unit name"; continue; fi
+      echo "$m $u starts $x"
+      unit_review "$m" "$x"
+    done
+  done
 }
 # The running services and the timers, with the services they start, of manager $1.
 review_manager() {
-  local m=$1 out u t s
-  local -a sc=(systemctl)
+  local m=$1 out u line
+  local -a sc=(systemctl) w
   if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
   if ! out=$("${sc[@]}" list-units --type=service --state=running --no-pager --no-legend --plain 2>&1); then
     echo "UNREAD: $m: its running services: $out"
@@ -1333,34 +1856,58 @@ review_manager() {
   elif [ -z "$out" ]; then
     echo "empty: $m: no timer"
   else
-    while read -r t s; do
-      unit_review "$m" "$t"
-      unit_review "$m" "$s"
-    done < <(awk '{ print $(NF-1), $NF }' <<<"$out")
+    # The last two words of each line are the timer and the unit it starts; split with read, so
+    # that no parser can fail and skip the timers.
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      read -ra w <<<"$line"
+      if [ "${#w[@]}" -lt 2 ] || [[ ${w[${#w[@]}-2]} != ?*.timer ]]; then echo "UNREAD: $m: a line of its timers that P7c does not understand: $line"; continue; fi
+      unit_review "$m" "${w[${#w[@]}-2]}"
+      unit_review "$m" "${w[${#w[@]}-1]}"
+    done <<<"$out"
   fi
+  review_activation "$m"
 }
 review_manager system
-# User managers: those that linger, which run without a login, and those that run now.
-if [ ! -e /var/lib/systemd/linger ]; then
-  linger=
-  echo "absent: /var/lib/systemd/linger: no user lingers"
-elif ! linger=$(ls -A /var/lib/systemd/linger 2>&1); then
-  echo "UNREAD: /var/lib/systemd/linger: $linger"
-  linger=
-elif [ -z "$linger" ]; then
-  echo "empty: no user lingers"
-else
-  echo "lingering: $(tr '\n' ' ' <<<"$linger")"
-fi
+# User managers: those that linger, which run without a login, and those that run now. The two lists
+# are split with read and joined in bash, so that no parser can fail and leave them empty;
+# "empty:" needs both read.
+linger= umbad=0
+k=$(path_kind /var/lib/systemd/linger)
+case $k in
+  absent) echo "absent: /var/lib/systemd/linger: no user lingers" ;;
+  directory)
+    if ! linger=$(sudo ls -A -- /var/lib/systemd/linger 2>&1); then
+      echo "UNREAD: /var/lib/systemd/linger: $linger"
+      linger= umbad=1
+    elif [ -z "$linger" ]; then
+      echo "empty: no user lingers"
+    else
+      echo "lingering: ${linger//$'\n'/ }"
+    fi
+    ;;
+  *) echo "UNREAD: /var/lib/systemd/linger: ${k#unknown: }"; umbad=1 ;;
+esac
 if ! active=$(loginctl list-users --no-legend 2>&1); then
   echo "UNREAD: loginctl list-users: $active"
-  active=
+  active= umbad=1
 fi
-users=$( { printf '%s\n' "$linger"; awk '{ print $2 }' <<<"$active"; } | grep . | sort -u)
-if [ -z "$users" ]; then
+unset um
+declare -A um=()
+umlist=()
+while IFS= read -r u; do
+  if [ -n "$u" ] && [ -z "${um[$u]-}" ]; then um[$u]=1; umlist+=("$u"); fi
+done <<<"$linger"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  read -r _ u _ <<<"$line"
+  if [ -z "$u" ]; then echo "UNREAD: loginctl list-users: a line that P7c does not understand: $line"; umbad=1; continue; fi
+  if [ -z "${um[$u]-}" ]; then um[$u]=1; umlist+=("$u"); fi
+done <<<"$active"
+if [ "${#umlist[@]}" -gt 0 ]; then
+  for u in "${umlist[@]}"; do review_manager "$u"; done
+elif [ "$umbad" -eq 0 ]; then
   echo "empty: no user manager to review"
-else
-  while read -r u; do review_manager "$u"; done <<<"$users"
 fi
 if o=$(sudo ss -Hltunp 2>&1); then
   printf '%s\n' "${o:-empty: no listener}"
@@ -1382,12 +1929,46 @@ fi
   - every cron line, periodic script, user crontab and `at` job, with its command;
   - every running service and timer of the system and of every user manager, with its unit file, or
     its whole definition where it does not come only from a package;
+  - every active or enabled socket and path unit of those managers, with the units it starts;
   - every listener with its process.
-- **Package files are checked, not trusted:** `dpkg -V` reports a cron script or unit file that
-  differs from its package (`MODIFIED`).
-- `dpkg -S` may not find a unit under `/usr/lib` that its package records under `/lib`; the
-  function tries both. A unit it still cannot place is shown in full, so the review sees more,
-  not less.
+- **Socket and path activation:**
+  - **Why:** a service that does not run during P7c can still be started later by a socket or a
+    path unit, and a listener in `ss` does not show the unit behind it.
+  - **What `review_activation` lists,** for the system manager and every user manager:
+    - the active socket and path units;
+    - those whose unit file is enabled, in any state but `disabled`, `static`, `masked` or
+      `bad`.
+  - **What it reviews:** each such unit, with every unit it starts, as `systemctl show -p
+    Triggers` names them. A socket with `Accept=yes` has no `Triggers`, and starts instances of
+    the template named after it ([systemd.socket(5)](https://manpages.ubuntu.com/manpages/noble/man5/systemd.socket.5.html)).
+  - **What is `UNREAD`:**
+    - a failed listing;
+    - a failed query of a unit's targets;
+    - a unit whose targets cannot be found;
+    - a definition that cannot be read.
+  - It is not a review of every inactive unit: other types and other disabled units are not
+    listed.
+- **No parser in P7c can turn a failed inventory into `empty:`.**
+  - **How the lists are built:** `review_activation`'s listings, the timer list and the list of
+    user managers are split with bash's own `read`, and duplicates are dropped with an
+    associative array, not with `awk`, `grep` or `sort`. Each line must name a unit of the type
+    asked, a timer, or a user; a line that does not is `UNREAD`.
+  - **When `empty:` is printed:** only after every listing that feeds it was read and
+    understood.
+  - **`unit_review`'s `User=`** comes from `systemctl show`, whose status is checked: a failed
+    query is `UNREAD`, never a user's name in the listing.
+- **Package files are checked with `pkg_file`, not trusted:**
+  - a cron script or unit file counts as the package's only when dpkg records its MD5 sum and
+    finds no difference;
+  - a changed file is `MODIFIED`;
+  - one that dpkg cannot check is `REVIEW`, shown in full;
+  - an error is `UNREAD`.
+
+  dpkg's MD5 check is an integrity check against its own database, not a security
+  verification (`pkg_file`, above).
+- **`systemctl show`'s status** is checked in `unit_review`: a failed query is `UNREAD`, never a
+  unit "without a unit file". `pkg_file` also finds a unit under `/usr/lib` that its package
+  records under `/lib`.
 - Every member of `docker` is root-equivalent
   ([S4b §4.4](S4b_DESIGN_CONTRACT.md#44-what-the-port-policy-protects-and-what-it-does-not)).
 
@@ -1504,6 +2085,28 @@ sudo -n -l >/dev/null 2>&1 && echo 'deploy: passwordless sudo' || echo 'deploy: 
   STOP.
 - `sudo -n -l` decides who runs the optional log-size and volume-ownership reads (V12, V14).
 
+**The tools of P7, P9 and §7.3. Admin, read-only**, in the admin session that runs them:
+
+```bash
+# Each tool where it runs: as this account, and as root through sudo, whose PATH may differ.
+for t in bash sudo getent awk grep sed sort tr cut cat tail varlinkctl dpkg dpkg-query systemctl loginctl ssh-keygen last realpath; do
+  if v=$(command -v "$t") && [ -x "$v" ]; then printf 'admin: %-11s %s\n' "$t" "$v"; else echo "MISSING: $t, as this account"; fi
+done
+if ! o=$(sudo sh -c 'for t in "$@"; do if v=$(command -v "$t") && [ -x "$v" ]; then echo "root: $t $v"; else echo "MISSING: $t, as root through sudo"; fi; done' sh sh ls cat grep awk getent dpkg sshd systemctl ss passwd run-parts install 2>&1); then
+  echo "UNREAD: the tools as root: $o"
+else
+  printf '%s\n' "$o"
+fi
+for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is optional: P7b then lists no at job"; done
+```
+
+- **Expected:** no `MISSING:` and no `UNREAD:` line.
+- **What a gap blocks:**
+  - a missing tool of P7 or P9, or an `UNREAD:` here, leaves G6 INCONCLUSIVE, because the listing that needs it cannot be complete;
+  - a missing `getent`, `realpath`, `sudo` or root's `install` stops §7.3's hand-over before its checks;
+  - `at` and `atq` are optional, and their absence is reported as such.
+- **Which account:** P7 and P9 run as the admin account. Some of their commands run directly (for example `varlinkctl`, `dpkg-query`, `systemctl`, `ssh-keygen`), others as root through `sudo` (for example `sh` for `path_kind`, `ls`, `dpkg --verify`, `run-parts`, `systemctl --user -M`). Each set is checked where it runs, since root's PATH under `sudo` (`secure_path`) may differ from the account's. `deploy`'s own tools are the block above.
+
 ### Preflight record (template)
 
 | # | Fact | Expected | Read | ok / STOP |
@@ -1523,6 +2126,7 @@ sudo -n -l >/dev/null 2>&1 && echo 'deploy: passwordless sudo' || echo 'deploy: 
 | P9 | Forwarding for the D2 account(s), in this session's context | Allowed for the tunnel account and its key; every `Match` that the context cannot represent reviewed; only the verdict is recorded | | |
 | P10 | `deploy`, environment, tools, sudo | As expected above | | |
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
+| P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
 ## 7. S6.2 — Delivering the files and host configuration
 
@@ -1911,15 +2515,18 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   7. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
      `/etc/cron.hourly`, `daily`, `weekly` and `monthly`, with each script's package or, for a script
      from no package, its content; every user crontab; every queued `at` job's script;
-  8. every running service and every timer with the service it starts, of the system manager and of
-     every user manager, with its package and user, or its whole definition where it does not come
-     only from a package;
+  8. every running service and every timer with the service it starts, and every active or enabled
+     socket and path unit with every unit it starts, of the system manager and of every user
+     manager, with its package and user, or its whole definition where no verified package file is
+     all of it;
   9. every listener with its process, and every container (P3).
 - **The marker words** (§5): `absent:` and `empty:` lines say that there is nothing to review in that
   source. `UNREAD:` says that the source is unknown, and `REVIEW:` that it is not shown.
 - **Expected (PASS):** no `UNREAD:` line; every `REVIEW:` line resolved; and every entry
   attributed to one of:
-  - the operating system or one of its packages, with no `MODIFIED` file;
+  - the operating system or one of its packages, with no `MODIFIED` file. A cron script or unit
+    file counts as the package's only when `pkg_file` verified it. One that `pkg_file` gives as
+    `REVIEW` is attributed from its content, shown in full;
   - the application: the `deploy` account and the key the deploy workflow uses, the backup cron
     entry ([README, Database backups](../README.md#database-backups)), the four application
     containers, cloudflared's outbound connection;
@@ -1962,8 +2569,17 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     - an `/etc/gshadow` that cannot be read or holds a duplicate or malformed entry, or a group
       that `/etc/gshadow` lacks and for which NSS gave no confirmed answer;
     - an nss-systemd service that does not confirm a missing account or group;
+    - a source whose existence or kind `path_kind` could not establish, or a directory that
+      cannot be listed;
+    - a failed `getent | awk` pipeline, or a malformed answer;
+    - a package check that failed, or a file that dpkg reports missing;
+    - a socket or path unit whose targets cannot be queried or found, or a failed listing;
+    - a `MISSING:` tool in P10's admin check;
   - a `REVIEW:` line not yet resolved, for example:
     - an `AuthorizedKeysCommand` whose source is not yet reviewed;
+    - a package file that dpkg cannot check: no MD5 sum recorded, a diversion, `--audit` output,
+      or a check it could not do;
+    - a source that is a broken link, or not of the kind expected;
     - a netgroup, or a non-Unix, quoted or escaped name, in the sudo rules;
     - a sudo plugin or `sudoers:` source that P7a does not read;
     - a group password that is `set` without a recorded decision;
