@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-15: draft for review (revision 3). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 4). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -44,6 +44,21 @@ Revisions:
     readout. The sampler refuses a container named twice (§10.3);
   - P9 evaluates `sshd -T -C` with the session's real connection context, and lists the `Match`
     and `Include` lines that the context may not represent (§6).
+- **4** (2026-11-16), the third review of PR #129:
+  - P7a's enumeration fails closed (§6):
+    - `getent passwd` is read once and checked. A failed enumeration, or one without a UID 0
+      account, is `UNREAD`, and no account's keys are listed as complete.
+    - `getent group` tells a missing group (exit status 2, `absent`) from a failed lookup
+      (`UNREAD`).
+    - `passwd -S -a` must list `root`.
+    - `keys_of` no longer reads a failed `sudo` as a missing key file.
+    - P9 tells a missing account from a failed lookup;
+  - the blocks that expand the Grafana password turn Bash's xtrace off first: §7.5's creation and
+    V7's data source health. §10.2 starts the production check without `SHELLOPTS` and
+    `BASH_ENV`, through which a child Bash could start with xtrace on (§7.5, §10.1, §10.2);
+  - the readout wrapper reads a stable snapshot, the log's first bytes as `stat` counts them, and
+    takes the reading time after it. A line appended during the readout is not read, and a
+    snapshot that ends inside a record is INCONCLUSIVE (§10.3).
 
 ## 1. Purpose and scope
 
@@ -257,6 +272,10 @@ and a resolution that changes state needs its own consent (§11).
   with `sudo` (D2); all others run as `deploy`.
 - **The shell.** Bash, interactive, without `set -e`. The blocks report each failure with `STOP` and
   do not rely on errexit.
+- **No shell trace around the password.** With `set -x`, Bash prints each command after expansion,
+  the password included. The blocks that expand it turn xtrace off themselves (§7.5, V7). §10.2
+  keeps the production check's own Bash from inheriting xtrace. Neither protects against a reader
+  with root or `ptrace` rights, which can read a process's memory anyway.
 - **Every production Compose command names exactly two files, in this order**:
   `docker compose -f observability/compose.yaml -f observability/compose.prod.yaml <command>`, run
   in `/var/nimuairy-observability`. Never `observability/compose.test.yaml`, `-p` or
@@ -446,7 +465,7 @@ ssh_context() {
 # one "key:" line per key with its fingerprint and its forwarding options, never the key itself.
 # Returns 2 when no authorized-keys file exists.
 keys_of() {
-  local u=$1 h=$2 id=$3 cfg=$4 value p f content line fp opts n keys found=0 k v
+  local u=$1 h=$2 id=$3 cfg=$4 value p f content line fp opts n keys found=0 k v e
   local -a paths
   for k in authorizedkeyscommand authorizedprincipalsfile authorizedprincipalscommand trustedusercakeys; do
     v=$(awk -v k="$k" '$1 == k { $1 = ""; sub(/^ +/, ""); print }' <<<"$cfg")
@@ -462,8 +481,17 @@ keys_of() {
     f=${f//%U/$id}
     f=${f//$'\001'/%}
     case $f in /*) ;; *) f=$h/$f ;; esac
-    sudo test -e "$f" || continue
-    found=1
+    # Not "sudo test -e": a failed sudo would look like a missing file.
+    e=$(sudo sh -c 'if [ -e "$1" ]; then echo present; else echo absent; fi' sh "$f" 2>&1)
+    case $e in
+      absent) continue ;;
+      present) found=1 ;;
+      *)
+        found=1
+        echo "UNREAD: $u: whether $f exists is unknown: $e"
+        continue
+        ;;
+    esac
     if ! content=$(sudo cat "$f" 2>&1); then echo "UNREAD: $u: $f: $content"; continue; fi
     n=0
     keys=0
@@ -494,6 +522,9 @@ keys_of() {
   `%u`, `%U` and `%%` expanded and relative paths taken under the home. Each key appears as its
   SHA-256 fingerprint (`ssh-keygen -l`), with its file, line number and forwarding options, never as
   the key itself. A line that `ssh-keygen` cannot read is `UNREAD`.
+- **Whether a key file exists** is asked through `sudo sh -c`, which answers `present` or `absent`.
+  Any other answer, for example a failed `sudo`, is `UNREAD`. `sudo test -e` could not tell a
+  missing file from a failed `sudo`, and would have counted the second as no keys.
 - **Other sources of keys:** an `AuthorizedKeysCommand`, `AuthorizedPrincipalsFile`,
   `AuthorizedPrincipalsCommand` or `TrustedUserCAKeys` other than `none` is `REVIEW`. The keys or
   certificates it admits are not in the listing, so the operator reviews that source itself.
@@ -502,25 +533,56 @@ keys_of() {
 
 ```bash
 ssh_context
-getent passwd | awk -F: '$3 == 0 { print "uid 0:", $1 }'
-getent passwd | awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }'
-for g in sudo admin docker adm systemd-journal; do getent group "$g" || echo "absent: no group $g"; done
-if o=$(sudo passwd -S -a 2>&1); then
+# Every account, read once. A failed enumeration, or one without UID 0, is UNREAD, never a complete
+# list: every later listing that needs the accounts says so.
+db=$(getent passwd)
+rc=$?
+accounts=false
+if [ "$rc" -ne 0 ]; then
+  echo "UNREAD: getent passwd failed with exit status $rc: no account is listed"
+elif [ -z "$db" ]; then
+  echo "empty: getent passwd returned no account"
+  echo "UNREAD: no account with UID 0 was listed, so the account database was not read completely"
+elif ! awk -F: '$3 == 0 { found = 1 } END { exit !found }' <<<"$db"; then
+  echo "UNREAD: no account with UID 0 was listed, so the account database was not read completely"
+else
+  accounts=true
+  echo "accounts: $(grep -c . <<<"$db")"
+  awk -F: '$3 == 0 { print "uid 0:", $1 }' <<<"$db"
+  awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }' <<<"$db"
+fi
+# getent's exit status 2 means that the group does not exist; any other failure is no answer.
+for g in sudo admin docker adm systemd-journal; do
+  o=$(getent group "$g")
+  rc=$?
+  case $rc in
+    0) printf '%s\n' "$o" ;;
+    2) echo "absent: no group $g" ;;
+    *) echo "UNREAD: getent group $g failed with exit status $rc" ;;
+  esac
+done
+o=$(sudo passwd -S -a 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  echo "UNREAD: passwd -S -a failed with exit status $rc: $o"
+elif ! awk '$1 == "root" { found = 1 } END { exit !found }' <<<"$o"; then
+  echo "UNREAD: passwd -S -a listed no root, so its list is not complete"
+else
   u=$(awk '$2 == "P" { printf "%s%s", sep, $1; sep = " " }' <<<"$o")
   echo "usable password: ${u:-none}"
-else
-  echo "UNREAD: passwd -S -a failed: $o"
 fi
 absent=0
-if [ -n "$ctx" ]; then
+if ! $accounts; then
+  echo "UNREAD: no complete account list, so no account's keys are listed"
+elif [ -z "$ctx" ]; then
+  echo "UNREAD: no connection context, so no account's keys are listed"
+else
   while IFS=: read -r u _ id _ _ h _; do
     if ! cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then echo "UNREAD: $u: sshd -T failed: $cfg"; continue; fi
     keys_of "$u" "$h" "$id" "$cfg"
     if [ $? -eq 2 ]; then absent=$((absent + 1)); fi
-  done < <(getent passwd)
+  done <<<"$db"
   echo "absent: $absent account(s) without an authorized-keys file"
-else
-  echo "UNREAD: no connection context, so no account's keys are listed"
 fi
 if o=$(sudo grep -rvhE '^[[:space:]]*(#|$)' /etc/sudoers /etc/sudoers.d 2>&1); then
   printf '%s\n' "$o"
@@ -532,6 +594,18 @@ fi
 last -n 20 || echo "UNREAD: last failed"
 ```
 
+- **The account list is read once, and checked:**
+  - `getent passwd` failing is `UNREAD`;
+  - an empty result is reported `empty:` and then `UNREAD:`, because a list without UID 0 cannot be
+    complete;
+  - so is a list without UID 0.
+
+  In each of these cases no account's keys are listed, and P7a prints `UNREAD` in their place. The
+  `accounts:` line gives the count for the operator to compare.
+- **Groups:** `getent group` exits 2 for a group that does not exist (`absent:`). Any other failure is
+  `UNREAD`.
+- **`passwd -S -a`** must succeed and list `root`. Otherwise its list of usable passwords is
+  `UNREAD`.
 - **Every account's keys are listed, not only those with a login shell.** An account with
   `nologin` can still authenticate, for example to forward a port with `ssh -N`.
 - **To compare the fingerprints** with the keys the operator trusts, **Local:**
@@ -705,10 +779,14 @@ the one that will open the tunnel, and needs P7's helpers:
 ```bash
 u=<user>
 if ssh_context; then
+  pw=$(getent passwd "$u")
+  rc=$?
   h= id=
-  IFS=: read -r _ _ id _ _ h _ < <(getent passwd "$u")
-  if [ -z "${h-}" ]; then
-    echo "UNREAD: no account $u"
+  IFS=: read -r _ _ id _ _ h _ <<<"$pw"
+  if [ "$rc" -eq 2 ]; then
+    echo "absent: no account $u"
+  elif [ "$rc" -ne 0 ] || [ -z "$h" ]; then
+    echo "UNREAD: getent passwd $u failed with exit status $rc"
   elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
     grep -E '^(allowtcpforwarding|disableforwarding|permitopen|permitlisten) ' <<<"$cfg"
     keys_of "$u" "$h" "$id" "$cfg"
@@ -726,6 +804,8 @@ else
 fi
 ```
 
+- **The account:** `absent:` when `getent passwd <user>` exits 2, which means that there is no such
+  account; `UNREAD:` for any other failure, or an entry without a home.
 - **The context is this session's.** `ssh_context` passes the client's address as `addr` (and as
   `host` under `UseDNS no`), and the server's address and port as `laddr` and `lport`. Earlier
   revisions passed the VPS's own hostname as `host`, which no `Match Host` would compare with.
@@ -932,6 +1012,9 @@ fi
 Then, in the same shell. The password is pasted at the two silent prompts, never on a command line:
 
 ```bash
+# No shell trace while the password is in a variable: under set -x, Bash would print the
+# expanded comparisons and printf's argument. The braces keep "set +x" itself out of the trace.
+{ set +x; } 2>/dev/null
 set +o history
 if [ ! -d "$d" ] || [ -e "$f" ] || [ -e "$f.new" ]; then
   echo "STOP: $d is missing, or $f or $f.new exists"
@@ -954,6 +1037,13 @@ set -o history
   `$(< file)`, which would drop one anyway.
 - `set +o history` keeps the session out of the history even if the password is pasted at the
   wrong prompt by mistake.
+- **`{ set +x; } 2>/dev/null` comes first.**
+  - Under xtrace, Bash would print `[[`'s and `[`'s expanded operands and `printf`'s argument: the
+    password, both entries and the temporary file's content, on stderr.
+  - The subshells inherit the setting, so the trace stays off throughout, also on each `STOP` path.
+  - The block does not turn xtrace on again.
+  - Tested with dummy passwords, in `bash -x` and with xtrace exported in `SHELLOPTS`: neither stdout
+    nor stderr held a password. Revision 3's block printed it 4 times.
 - Afterwards G5 checks the file without printing it.
 
 ### 7.6 State after S6.2
@@ -1135,8 +1225,10 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   - the operator's own administration: their accounts, keys and changes.
 
   The operator records "G6 PASS" with the date. The lists themselves are not recorded (§5).
-- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, a key file that cannot be read,
-  a key that `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:` line not
+- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, an account list that failed or
+  lacks UID 0, a group lookup that failed, a key file that cannot be read or whose existence is
+  unknown, a key that `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:`
+  line not
   yet resolved, such as an `AuthorizedKeysCommand` whose source is not yet reviewed; or an entry not
   yet attributed, such as a script or unit from no package whose purpose is not yet clear. The
   order of §4.1 waits until every source is read and every entry attributed.
@@ -1565,6 +1657,7 @@ docker network inspect -f '{{.Name}} driver={{.Driver}} internal={{.Internal}} p
 The same data source health from the VPS, as `deploy`, without printing the password:
 
 ```bash
+{ set +x; } 2>/dev/null
 cd /var/nimuairy-observability
 for ds in prometheus loki tempo; do
   printf 'user = "admin:%s"\n' "$(< observability/secrets/grafana_admin_password)" |
@@ -1573,7 +1666,8 @@ done
 ```
 
 `printf` is a builtin, so the password is in no process's arguments; curl reads it from stdin, as
-the production check does. Each data source must print `"status":"OK"`.
+the production check does. Each data source must print `"status":"OK"`. The first line turns xtrace
+off: under it, Bash would print `printf`'s expanded argument, the password, once per data source.
 
 **V8, Prometheus targets. VPS, read-only:**
 
@@ -1718,13 +1812,22 @@ Expected: `json-file {}`, no rotation, as recorded before (D5).
 **VPS, changes no container, but logs in to Grafana:**
 
 ```bash
+{ set +x; } 2>/dev/null
 cd /var/nimuairy-observability
 date -u +%FT%TZ
-env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES bash scripts/observability-prod-check.sh runtime; echo "exit=$? at $(date -u +%FT%TZ)"
+env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES -u SHELLOPTS -u BASH_ENV bash scripts/observability-prod-check.sh runtime; echo "exit=$? at $(date -u +%FT%TZ)"
 ```
 
 - **Preconditions:** V1 to V5 passed; nobody has logged in to Grafana yet, so the check's failed
   login is the only one.
+- **No inherited trace.** The check reads the password into a variable and hands it to `curl` with
+  `printf`, so a trace would print it. A child Bash does not inherit `set -x` as such, but it starts
+  with xtrace on when `SHELLOPTS` holds `xtrace` in the environment, or when `BASH_ENV` names a file
+  that turns it on.
+  - `env -u SHELLOPTS -u BASH_ENV` removes both, and `{ set +x; }` turns the parent's trace off.
+  - Tested with the repository's script, a fake `docker` and a dummy password, with both variants
+    set in the parent. Revision 3's command printed the password 4 times in each; this one printed
+    it in neither.
 - **Expected:** every line `ok` or `info`, `All checks passed`, exit 0:
   - P-R1: the bindings are exactly `{grafana 127.0.0.1:3000->3000/tcp}`, and no container uses the
     host network;
@@ -2188,32 +2291,69 @@ it in each new shell:
 # another process that got the same PID.
 running() { kill -0 "$1" 2>/dev/null && tr '\0' ' ' 2>/dev/null <"/proc/$1/cmdline" | grep -q 's6-sampler\.sh'; }
 # The readout of log $1 from the sampler with PID $2, over at least $3 s, for exactly the entities $4.
-# It passes only when the sampler runs before and after the readout and the readout's coverage passes.
+# It reads a snapshot: the log's first $size bytes, which the sampler, appending only, never changes,
+# so lines appended during the readout are not read. The reading time is taken after the snapshot's
+# size, so no sample in the snapshot lies after it. It passes only when the sampler runs before and
+# after the readout and the readout's coverage passes.
 s6_readout() {
-  local rc
+  local size last end
+  local -a st
   if ! running "$2"; then
     echo "INCONCLUSIVE: no s6-sampler.sh runs as PID $2"
-  elif [ ! -s "$1" ]; then
+    return
+  fi
+  if ! size=$(stat -c %s "$1" 2>/dev/null) || [ "$size" -eq 0 ]; then
     echo "INCONCLUSIVE: $1 is missing or empty"
+    return
+  fi
+  last=$(tail -c +"$size" "$1" | head -c 1 | od -An -tx1)
+  if [ "${last// /}" != 0a ]; then
+    echo "INCONCLUSIVE: the snapshot of $1 ends inside a record; read it again"
+    return
+  fi
+  end=$(date -u +%s)
+  head -c "$size" "$1" | awk -v end="$end" -v min_span="$3" -v expect="$4" -f ~/s6-readout.awk
+  st=("${PIPESTATUS[@]}")
+  if [ "${st[0]}" -ne 0 ]; then
+    echo "INCONCLUSIVE: the snapshot of $1 could not be read"
+  elif [ "$(stat -c %s "$1" 2>/dev/null || echo 0)" -lt "$size" ]; then
+    echo "INCONCLUSIVE: $1 became shorter during the readout"
+  elif ! running "$2"; then
+    echo "INCONCLUSIVE: the sampler $2 stopped during the readout"
+  elif [ "${st[1]}" -ne 0 ]; then
+    echo "INCONCLUSIVE: the readout exited ${st[1]}"
   else
-    awk -v end="$(date -u +%s)" -v min_span="$3" -v expect="$4" -f ~/s6-readout.awk "$1"
-    rc=$?
-    if ! running "$2"; then
-      echo "INCONCLUSIVE: the sampler $2 stopped during the readout"
-    elif [ "$rc" -ne 0 ]; then
-      echo "INCONCLUSIVE: the readout exited $rc"
-    else
-      echo "PASS: COVERAGE PASS, and the sampler $2 still runs"
-    fi
+    echo "PASS: COVERAGE PASS on a snapshot of $size bytes, and the sampler $2 still runs"
   fi
 }
 pre=lxc-root,postgres-nimuairy,backend-nimuairy,frontend-nimuairy,cloudflared-nimuairy
 window=lxc-root,prometheus,loki,tempo,alloy,docker-socket-proxy,grafana,postgres-nimuairy,backend-nimuairy,frontend-nimuairy,cloudflared-nimuairy
 ```
 
-- **It passes only when** the sampler runs before and after the readout, the log exists and is not
-  empty, and the readout exits 0, so the coverage passed for exactly the expected entities.
-  Anything else prints `INCONCLUSIVE` and its reason.
+- **It passes only when** all of these hold. Anything else prints `INCONCLUSIVE` and its reason:
+  - the sampler runs before and after the readout;
+  - the log exists and is not empty;
+  - the snapshot ends with a complete record, and could be read in full;
+  - the log did not become shorter;
+  - the readout exits 0, so the coverage passed for exactly the expected entities.
+- **It reads a snapshot, without copying the log.**
+  - The sampler only appends (`>>`), so the log's first `size` bytes, as `stat` counts them before
+    the readout, do not change. The wrapper reads exactly those bytes (`head -c`).
+  - The reading time `end` is taken after `size`. Every sample in the snapshot was written before
+    `size` was read, so none lies after `end`. A line appended during the readout is outside the
+    snapshot, so it cannot appear as a sample from the future, which used to turn a complete window
+    INCONCLUSIVE.
+  - A snapshot whose last byte is not a newline ends inside a record: INCONCLUSIVE, and reading
+    again is enough.
+  - The sampler keeps running; nothing stops it to read its log.
+- **Tested against concurrent appends** (WSL, mawk and gawk):
+  - a stable log passes;
+  - a log that ends inside a record is INCONCLUSIVE;
+  - a complete line appended during the readout, dated 60 s ahead, leaves the result `PASS`, where
+    revision 3's wrapper turned INCONCLUSIVE;
+  - a sampler that stops during the readout, a log that becomes shorter, and a snapshot that cannot
+    be read are INCONCLUSIVE;
+  - a live sampler appending every second, read 40 times, passed all 40.
 - **"Runs" means** that `kill -0` finds the PID, which sends no signal, and that the PID's command
   line names `s6-sampler.sh`. A PID that another process reused does not pass.
 - **`$pre` and `$window`** are the expected entity sets for the pre-start log and for the window.
