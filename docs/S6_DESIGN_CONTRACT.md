@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 11). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 12). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -171,6 +171,15 @@ Revisions:
     - P7b lists `run-parts`' scripts without `tr`;
     - P9 reads its forwarding settings with `sshd_value`, and its `Match` and `Include` lines with
       grep's status from inside `sudo`.
+- **12** (2026-11-16), the review of revision 11: two lookups of P9 are checked (§5):
+  - **`ssh_context` under `UseDNS yes`:** `getent hosts` is read in bash, with its status:
+    - exit 0 with one named entry gives the name;
+    - exit 2 gives the address, as a `REVIEW`, since a failed lookup also exits 2;
+    - anything else is `UNREAD`.
+
+    Before, any failure silently became the address.
+  - **P9's account:** `getent passwd` must return exactly one entry of seven fields, named as
+    asked, with a numeric UID and a home. Before, only the home was checked.
 
 ## 1. Purpose and scope
 
@@ -570,7 +579,7 @@ sudo -v
 # The connection context of this SSH session, for sshd -T -C (sshd(8)): addr and host are the
 # client's address and resolved name, laddr and lport the server's address and port.
 ssh_context() {
-  local caddr laddr lport cfg usedns name
+  local caddr laddr lport cfg usedns name o rc n
   ctx=
   if [ -z "${SSH_CONNECTION-}" ]; then echo "UNREAD: SSH_CONNECTION is empty: not an SSH session"; return 1; fi
   read -r caddr _ laddr lport <<<"$SSH_CONNECTION"
@@ -578,9 +587,21 @@ ssh_context() {
   if ! usedns=$(sshd_value usedns "$cfg"); then echo "UNREAD: sshd -T printed no usedns"; return 1; fi
   name=$caddr
   if [ "$usedns" = yes ]; then
-    name=$(getent hosts "$caddr" | awk '{ print $2; exit }')
-    name=${name:-$caddr}
-    echo "REVIEW: UseDNS yes: host=$name comes from getent; sshd also confirms the name forward, so a Match Host may see another name"
+    # getent exits 2 both for an address without a name and for a lookup that failed, so exit 2
+    # is never taken for "no name". Any other failure, or output without one named entry, is UNREAD.
+    o=$(getent hosts "$caddr")
+    rc=$?
+    n=
+    read -r _ n _ <<<"$o"
+    if [ "$rc" -eq 0 ] && [ -n "$n" ] && [[ $o != *$'\n'* ]]; then
+      name=$n
+      echo "REVIEW: UseDNS yes: host=$name comes from getent; sshd also confirms the name forward, so a Match Host may see another name"
+    elif [ "$rc" -eq 2 ]; then
+      echo "REVIEW: UseDNS yes: getent found no name for $caddr, which a failed lookup also gives; host=$caddr assumes there is none, as sshd uses the address then"
+    else
+      echo "UNREAD: UseDNS yes: getent hosts $caddr exited $rc without one named entry, so the host for Match is unknown"
+      return 1
+    fi
   fi
   ctx="host=$name,addr=$caddr,laddr=$laddr,lport=$lport"
   echo "context: UseDNS ${usedns:-unknown}; $ctx"
@@ -881,8 +902,13 @@ pkg_file() {
   port, then the server's address and port. `sshd -T -C` takes them as `addr`, `laddr` and `lport`,
   and `host` as the client's resolved name ([P9](#p9-ssh-forwarding-for-the-copy-and-the-tunnel)).
   With `UseDNS no`, OpenSSH's default, sshd uses the address in place of a name, so `host` is the
-  address. With `UseDNS yes` the name comes from `getent`, which may differ from sshd's own lookup:
-  `REVIEW`.
+  address. With `UseDNS yes` the name comes from `getent hosts`, which may differ from sshd's own
+  lookup: `REVIEW`. And:
+  - **Exit 2** is "no name" or a failed lookup alike, since `getent` exits 2 whenever no entry comes
+    back. `host` is then the address, as sshd uses it when it finds no name: `REVIEW`, never a
+    confirmed absence of a name.
+  - **Any other failure**, or output without exactly one entry with a name, is `UNREAD`, and no
+    context is built.
 - **`keys_of`** lists every key of the account's effective `AuthorizedKeysFile` paths, with `%h`,
   `%u`, `%U` and `%%` expanded and relative paths taken under the home. Each key appears as its
   SHA-256 fingerprint (`ssh-keygen -l`), with its file, line number and forwarding options, never as
@@ -1776,6 +1802,22 @@ last -n 20 || echo "UNREAD: last failed"
         - in P9, the `Match` line of the fixture's new `sshd_config` is listed, and all four
           forwarding settings are printed;
       - under gawk and mawk, every suite gave the same output.
+  - **Tested locally, revision 12** [LOCAL], with the same harness and revision 11's blocks as the
+    control. A fake `getent` answered one lookup; P9 ran for an account with a key.
+    - **`UseDNS yes`, `getent hosts`:**
+      - **one named entry:** both revisions use the name, with a `REVIEW`;
+      - **exit 2:** both use the address; revision 12's `REVIEW` says that a failed lookup also
+        gives it;
+      - **exit 3; exit 0 without output; an entry without a name; two entries:** revision 11
+        used the address, or the first name, with only its general `REVIEW`; revision 12 gives
+        `UNREAD` and builds no context.
+    - **`getent passwd`, exit 0:**
+      - **two entries; an entry named otherwise; six fields; a UID that is not a number:**
+        revision 11 listed the account's key from the entry; revision 12 gives `UNREAD`;
+      - **the real entry:** both revisions list the key.
+    - **The earlier suites, rerun:** the suites of revisions 9 to 11 gave revision 11's results,
+      unchanged. Their four P9 cases have a valid account and `UseDNS no`. Under gawk and mawk,
+      every suite gave the same output.
 - **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
   and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
   `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
@@ -2197,12 +2239,14 @@ nss_sources
 if ssh_context; then
   pw=$(getent passwd "$u")
   rc=$?
-  h= id= why=
-  IFS=: read -r _ _ id _ _ h _ <<<"$pw"
+  pu= h= id= why=
+  # One entry of seven fields, named $u, with a numeric UID (keys_of expands %U with it) and a home.
+  colons=${pw//[^:]/}
+  IFS=: read -r pu _ id _ _ h _ <<<"$pw"
   if [ "$rc" -eq 2 ] && awk -F: -v u="$u" '$1 == u { found = 1 } END { exit found }' /etc/passwd && why=$(absent_ok passwd "$u"); then
     echo "absent: no account $u"
-  elif [ "$rc" -ne 0 ] || [ -z "$h" ]; then
-    echo "UNREAD: account $u: getent passwd exited $rc, and no complete entry or confirmed absence was read${why:+: $why}"
+  elif [ "$rc" -ne 0 ] || [[ $pw == *$'\n'* ]] || [ "${#colons}" -ne 6 ] || [ "$pu" != "$u" ] || ! [[ $id =~ ^[0-9]+$ ]] || [ -z "$h" ]; then
+    echo "UNREAD: account $u: getent passwd exited $rc without one well-formed entry named $u, and no absence was confirmed${why:+: $why}"
   elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
     # The forwarding settings, read with sshd_value: a missing one is UNREAD, never silence.
     for k in allowtcpforwarding disableforwarding permitopen permitlisten; do
@@ -2240,8 +2284,9 @@ esac
   - `absent_ok` confirms: the sources were accepted and, with `systemd` among them,
     nss-systemd's services answer NoRecordFound.
 
-  `UNREAD:` for anything else, or an entry without a home. An entry that `getent` returns is used
-  as it is: sshd sees the same entry.
+  `UNREAD:` for anything else. With exit 0, `getent` must return exactly one entry of seven
+  fields, named `<user>`, with a numeric UID and a home; any other output is `UNREAD`. Such an
+  entry is used as it is: sshd sees the same entry.
 - **The context is this session's.** `ssh_context` passes the client's address as `addr` (and as
   `host` under `UseDNS no`), and the server's address and port as `laddr` and `lport`. Earlier
   revisions passed the VPS's own hostname as `host`, which no `Match Host` would compare with.
