@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 4). Nothing in it has been run on the VPS.**
+**Status, 2026-11-16: draft for review (revision 5). Nothing in it has been run on the VPS.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -49,7 +49,7 @@ Revisions:
     - `getent passwd` is read once and checked. A failed enumeration, or one without a UID 0
       account, is `UNREAD`, and no account's keys are listed as complete.
     - `getent group` tells a missing group (exit status 2, `absent`) from a failed lookup
-      (`UNREAD`).
+      (`UNREAD`). Revision 5 corrects this: exit status 2 alone is no proof.
     - `passwd -S -a` must list `root`.
     - `keys_of` no longer reads a failed `sudo` as a missing key file.
     - P9 tells a missing account from a failed lookup;
@@ -59,6 +59,19 @@ Revisions:
   - the readout wrapper reads a stable snapshot, the log's first bytes as `stat` counts them, and
     takes the reading time after it. A line appended during the readout is not read, and a
     snapshot that ends inside a record is INCONCLUSIVE (§10.3).
+- **5** (2026-11-16), a review note on revision 4:
+  - `getent`'s exit status 2 is no proof that an account or a group is missing. glibc's `getent`
+    exits 2 whenever no entry was returned, also when a source failed, and 0 after any enumeration.
+    A new helper, `nss_sources`, accepts NSS's sources only if accounts and groups come from
+    `/etc/passwd` and `/etc/group`, then at most from nss-systemd without records of its own
+    beyond dynamic users, and nscd does not run. `absent:` now needs that, and a direct read of
+    the file; anything else is `UNREAD` (§5, §6);
+  - P7a's account list is complete only if it also holds every entry of `/etc/passwd`, read
+    directly, and `nss_sources` accepted the sources. An nss-systemd drop-in account was missing
+    from `getent passwd`'s list, and a drop-in membership from `getent group` [LOCAL, systemd 259]
+    (§6, G6);
+  - P7a lists, for each privileged group, the accounts whose primary group it is, which
+    `getent group` does not list (§6, G6).
 
 ## 1. Purpose and scope
 
@@ -262,7 +275,9 @@ and a resolution that changes state needs its own consent (§11).
   P9's verdict are shared, and an entry the operator wants discussed is shared with its secrets,
   addresses and names removed.
 - **The words of P7 and P9.** A line starting `absent:` says that the source does not exist, such
-  as an account without an authorized-keys file. `empty:` says that the source was read and holds
+  as an account without an authorized-keys file. For an account or a group, `absent:` also needs
+  NSS's sources confirmed (`nss_sources`, P7), because `getent` gives the same answer for a missing
+  entry and a failed source. `empty:` says that the source was read and holds
   nothing. `UNREAD:` says that a command failed or a source could not be read, so nothing about it
   is known. `REVIEW:` names something that the listing cannot show on its own, such as keys from an
   `AuthorizedKeysCommand`.
@@ -290,7 +305,8 @@ and a resolution that changes state needs its own consent (§11).
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
 - **None of these commands has run on the VPS.** Each block passes `bash -n`. The sampler, the
-  readout and a few helpers also ran against simulated input, locally (§10.3); nothing else did.
+  readout and a few helpers also ran against simulated input, locally (§10.3), and P7a and P9
+  against the real `getent` in a namespace (P7a); nothing else did.
   The first run of each block on the VPS is itself evidence, and its output is reviewed before the
   next step.
 - **STOP** means: take no further step of S6, report the output, and resolve the cause explicitly.
@@ -438,7 +454,7 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
 conclusion does.
 
-**P7 helpers.** Two functions that P7a and P9 use. **Admin, read-only.** Define them again in each
+**P7 helpers.** Three functions that P7a and P9 use. **Admin, read-only.** Define them again in each
 new shell:
 
 ```bash
@@ -510,6 +526,45 @@ keys_of() {
   done
   [ "$found" -eq 1 ] || return 2
 }
+# Whether NSS takes accounts and groups only from what P7a and P9 read themselves: /etc/passwd and
+# /etc/group ("files") first, then at most nss-systemd ("systemd") without records of its own beyond
+# dynamic users. getent exits 2 whenever no source returned an entry, also when a source failed, so
+# "absent" needs nss_local=true and a direct read of the file.
+nss_sources() {
+  local conf db lines d o ok=true
+  nss_local=false
+  if ! conf=$(cat /etc/nsswitch.conf 2>&1); then echo "UNREAD: /etc/nsswitch.conf: $conf"; return 1; fi
+  for db in passwd group initgroups; do
+    lines=$(grep -iE "^[[:space:]]*$db[[:space:]]*:" <<<"$conf")
+    echo "nss: ${lines:-no $db line}"
+    if [ "$db" = initgroups ] && [ -z "$lines" ]; then continue; fi
+    if [ "$(grep -c . <<<"$lines")" -ne 1 ] || ! grep -qE "^[[:space:]]*$db:[[:space:]]*files([[:space:]]+systemd)?[[:space:]]*\$" <<<"$lines"; then
+      echo "REVIEW: NSS $db: not exactly one line \"$db: files\" or \"$db: files systemd\", so another source may answer"
+      ok=false
+    fi
+  done
+  for d in /etc/userdb /run/userdb /run/host/userdb /usr/local/lib/userdb /usr/lib/userdb /run/systemd/userdb; do
+    [ -e "$d" ] || continue
+    if ! o=$(ls -A "$d" 2>&1); then
+      echo "UNREAD: $d: $o"
+      ok=false
+      continue
+    fi
+    if [ "$d" = /run/systemd/userdb ]; then o=$(grep -vxE 'io\.systemd\.(DynamicUser|Multiplexer|NameServiceSwitch|DropIn)' <<<"$o"); fi
+    if [ -n "$o" ]; then
+      echo "REVIEW: $d: records or services of nss-systemd that P7a does not read: $(tr '\n' ' ' <<<"$o")"
+      ok=false
+    fi
+  done
+  if [ -e /var/run/nscd/socket ]; then
+    echo "REVIEW: nscd runs, so getent may answer from its cache"
+    ok=false
+  fi
+  if $ok; then
+    nss_local=true
+    echo "nss: accounts and groups from /etc/passwd, /etc/group and dynamic users only"
+  fi
+}
 ```
 
 - **`ssh_context`** takes the session's connection from `SSH_CONNECTION`: the client's address and
@@ -528,13 +583,41 @@ keys_of() {
 - **Other sources of keys:** an `AuthorizedKeysCommand`, `AuthorizedPrincipalsFile`,
   `AuthorizedPrincipalsCommand` or `TrustedUserCAKeys` other than `none` is `REVIEW`. The keys or
   certificates it admits are not in the listing, so the operator reviews that source itself.
+- **`nss_sources`** decides whether a missing account or group can be confirmed at all:
+  - **`getent` cannot tell a missing entry from a failed source.** Its exit status is 2 whenever
+    the lookup returned no entry, and 0 after any enumeration, even one in which a source failed
+    ([glibc 2.39, `nss/getent.c`](https://github.com/bminor/glibc/blob/glibc-2.39/nss/getent.c)).
+    It also exits 2 for a group that exists when `/etc/group` cannot be read [LOCAL, glibc 2.43].
+  - **The sources it accepts:** exactly one `passwd:` and one `group:` line, each `files` or
+    `files systemd`, and an `initgroups:` line, if there is one, of the same form. Any other form,
+    such as another source, an action in brackets, a comment after the sources or a second line
+    for the same database, is `REVIEW`. glibc takes the later of two lines, and a missing line
+    gives a default that depends on glibc's build.
+  - **nss-systemd's own records:** nss-systemd also answers from JSON drop-ins in `/etc/userdb`,
+    `/run/userdb`, `/run/host/userdb`, `/usr/local/lib/userdb` and `/usr/lib/userdb`, and from the
+    services in `/run/systemd/userdb`
+    ([systemd v255, `userdb-dropin.h`](https://github.com/systemd/systemd/blob/v255/src/shared/userdb-dropin.h),
+    [`userdb.c`](https://github.com/systemd/systemd/blob/v255/src/shared/userdb.c)). With systemd
+    259, a drop-in account was found by name but not listed by `getent passwd`, and a
+    `.membership` drop-in added a group that `id` showed and `getent group` did not [LOCAL]. Any
+    entry in these directories is `REVIEW`. The services accepted are PID 1's
+    `io.systemd.DynamicUser` and systemd-userdbd's `io.systemd.Multiplexer`,
+    `io.systemd.NameServiceSwitch` and `io.systemd.DropIn`, which add nothing beyond dynamic users,
+    the files and the drop-ins.
+  - **Dynamic users** exist only while a unit with `DynamicUser=` runs, and P7c lists every running
+    unit.
+  - **nscd**, if it runs, can answer from its cache: `REVIEW`.
+  - With every source accepted, it sets `nss_local=true`. Otherwise no account or group is
+    confirmed missing, and P7a's account list is not complete.
 
 **P7a. Accounts, privileges and keys. Admin, read-only:**
 
 ```bash
 ssh_context
-# Every account, read once. A failed enumeration, or one without UID 0, is UNREAD, never a complete
-# list: every later listing that needs the accounts says so.
+nss_sources
+# Every account, read once. The list is complete only if it holds every entry of /etc/passwd and
+# UID 0, and NSS asks no other source. Otherwise it is UNREAD, and every later listing that needs
+# the accounts says so. getent exits 0 after an enumeration even if a source failed.
 db=$(getent passwd)
 rc=$?
 accounts=false
@@ -543,23 +626,38 @@ if [ "$rc" -ne 0 ]; then
 elif [ -z "$db" ]; then
   echo "empty: getent passwd returned no account"
   echo "UNREAD: no account with UID 0 was listed, so the account database was not read completely"
+elif ! missing=$(printf '%s\n' "$db" | awk -F: 'NR == FNR { seen[$1] = 1; next } /^[ \t]*(#|$)/ { next } !($1 in seen) { print $1 }' - /etc/passwd); then
+  echo "UNREAD: /etc/passwd could not be read, so the account list cannot be checked against it"
+elif [ -n "$missing" ]; then
+  echo "UNREAD: getent passwd did not list these entries of /etc/passwd: $(tr '\n' ' ' <<<"$missing")"
 elif ! awk -F: '$3 == 0 { found = 1 } END { exit !found }' <<<"$db"; then
   echo "UNREAD: no account with UID 0 was listed, so the account database was not read completely"
+elif [ "$nss_local" != true ]; then
+  echo "UNREAD: nss_sources did not accept NSS's sources (above), so accounts may come from a source that this list does not show"
 else
   accounts=true
   echo "accounts: $(grep -c . <<<"$db")"
   awk -F: '$3 == 0 { print "uid 0:", $1 }' <<<"$db"
   awk -F: '$7 !~ /(nologin|false|sync)$/ { print "login shell:", $1, $3, $7 }' <<<"$db"
 fi
-# getent's exit status 2 means that the group does not exist; any other failure is no answer.
+# Exit status 2 is absent only if NSS asks no other source and /etc/group, read directly, has no
+# such group. A group's members are its listed members and the accounts whose primary group it is.
 for g in sudo admin docker adm systemd-journal; do
   o=$(getent group "$g")
   rc=$?
-  case $rc in
-    0) printf '%s\n' "$o" ;;
-    2) echo "absent: no group $g" ;;
-    *) echo "UNREAD: getent group $g failed with exit status $rc" ;;
-  esac
+  if [ "$rc" -eq 0 ]; then
+    printf '%s\n' "$o"
+    if $accounts; then
+      m=$(awk -F: -v gid="$(cut -d: -f3 <<<"$o")" '$4 == gid { printf "%s%s", sep, $1; sep = " " }' <<<"$db")
+      echo "primary group $g: ${m:-no account}"
+    else
+      echo "UNREAD: no complete account list, so the accounts whose primary group is $g are not listed"
+    fi
+  elif [ "$rc" -eq 2 ] && [ "$nss_local" = true ] && awk -F: -v g="$g" '$1 == g { found = 1 } END { exit found }' /etc/group; then
+    echo "absent: no group $g"
+  else
+    echo "UNREAD: group $g: getent exited $rc, and no read confirms that the group is missing"
+  fi
 done
 o=$(sudo passwd -S -a 2>&1)
 rc=$?
@@ -598,12 +696,30 @@ last -n 20 || echo "UNREAD: last failed"
   - `getent passwd` failing is `UNREAD`;
   - an empty result is reported `empty:` and then `UNREAD:`, because a list without UID 0 cannot be
     complete;
-  - so is a list without UID 0.
+  - so is a list that lacks an entry of `/etc/passwd`, read directly, or when `/etc/passwd`
+    cannot be read;
+  - so is a list without UID 0;
+  - so is any list when `nss_sources` did not accept NSS's sources.
 
   In each of these cases no account's keys are listed, and P7a prints `UNREAD` in their place. The
   `accounts:` line gives the count for the operator to compare.
-- **Groups:** `getent group` exits 2 for a group that does not exist (`absent:`). Any other failure is
-  `UNREAD`.
+- **Groups:**
+  - `absent:` needs three things: `getent group` exits 2, `nss_sources` accepted the sources, and
+    `/etc/group`, read directly, has no such group (`awk` exits 0; 2 if it cannot read the file).
+    Anything else is `UNREAD`, because exit status 2 alone is also the answer of a failed source.
+  - **The members** of a group are the accounts it lists and the accounts whose primary group it is
+    (`primary group`), which `getent group` does not list. Without a complete account list, the
+    second are `UNREAD`.
+- **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
+  and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
+  `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
+  `sudo`, `sshd`, `passwd` and `last` were fakes.
+  - Revision 4's blocks printed `absent:` for every group when `/etc/group` could not be read, and
+    for a missing group or account behind a source that could not be loaded. They also gave a
+    complete account list without an nss-systemd drop-in account.
+  - Revision 5's give `UNREAD` or `REVIEW` in each of these cases, and `absent:` only with
+    accepted sources and readable files.
+  - The VPS runs glibc 2.39 and systemd 255, which may behave differently.
 - **`passwd -S -a`** must succeed and list `root`. Otherwise its list of usable passwords is
   `UNREAD`.
 - **Every account's keys are listed, not only those with a login shell.** An account with
@@ -778,15 +894,16 @@ the one that will open the tunnel, and needs P7's helpers:
 
 ```bash
 u=<user>
+nss_sources
 if ssh_context; then
   pw=$(getent passwd "$u")
   rc=$?
   h= id=
   IFS=: read -r _ _ id _ _ h _ <<<"$pw"
-  if [ "$rc" -eq 2 ]; then
+  if [ "$rc" -eq 2 ] && [ "$nss_local" = true ] && awk -F: -v u="$u" '$1 == u { found = 1 } END { exit found }' /etc/passwd; then
     echo "absent: no account $u"
   elif [ "$rc" -ne 0 ] || [ -z "$h" ]; then
-    echo "UNREAD: getent passwd $u failed with exit status $rc"
+    echo "UNREAD: account $u: getent passwd exited $rc, and no complete entry or confirmed absence was read"
   elif cfg=$(sudo sshd -T -C "user=$u,$ctx" 2>&1); then
     grep -E '^(allowtcpforwarding|disableforwarding|permitopen|permitlisten) ' <<<"$cfg"
     keys_of "$u" "$h" "$id" "$cfg"
@@ -804,8 +921,10 @@ else
 fi
 ```
 
-- **The account:** `absent:` when `getent passwd <user>` exits 2, which means that there is no such
-  account; `UNREAD:` for any other failure, or an entry without a home.
+- **The account:** `absent:` only when `getent passwd <user>` exits 2, `nss_sources` accepted
+  NSS's sources, and `/etc/passwd`, read directly, has no such account. `UNREAD:` for anything
+  else, or an entry without a home. An entry that `getent` returns is used as it is: sshd sees the
+  same entry.
 - **The context is this session's.** `ssh_context` passes the client's address as `addr` (and as
   `host` under `UseDNS no`), and the server's address and port as `laddr` and `lport`. Earlier
   revisions passed the VPS's own hostname as `host`, which no `Match Host` would compare with.
@@ -1205,7 +1324,8 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   2. the accounts with a login shell, and which accounts have a usable password;
   3. every `key:` line, of every account: its fingerprint, compared with the trusted keys' own
      (P7a), and its options; every `REVIEW:` line about another source of keys or certificates;
-  4. the members of `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, and every sudo rule;
+  4. the members of `sudo`, `admin`, `docker`, `adm` and `systemd-journal`, those the group lists
+     and those whose primary group it is, and every sudo rule;
   5. the recent logins of `last`;
   6. every line of `/etc/crontab` and `/etc/cron.d/*`; what `run-parts` would run from
      `/etc/cron.hourly`, `daily`, `weekly` and `monthly`, with each script's package or, for a script
@@ -1225,13 +1345,17 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   - the operator's own administration: their accounts, keys and changes.
 
   The operator records "G6 PASS" with the date. The lists themselves are not recorded (§5).
-- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, an account list that failed or
-  lacks UID 0, a group lookup that failed, a key file that cannot be read or whose existence is
-  unknown, a key that `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:`
-  line not
-  yet resolved, such as an `AuthorizedKeysCommand` whose source is not yet reviewed; or an entry not
+- **INCONCLUSIVE:** an `UNREAD:` line, for example a failed command, an account list that failed,
+  lacks UID 0 or lacks an entry of `/etc/passwd`, a group lookup that failed or a missing group that
+  no read confirms, a key file that cannot be read or whose existence is unknown, a key that
+  `ssh-keygen` cannot read, or a user manager that cannot be reached; a `REVIEW:` line not yet
+  resolved, such as an `AuthorizedKeysCommand` whose source is not yet reviewed; or an entry not
   yet attributed, such as a script or unit from no package whose purpose is not yet clear. The
   order of §4.1 waits until every source is read and every entry attributed.
+- **NSS's sources** (`nss_sources`): while they are not accepted, the account list stays `UNREAD`,
+  so G6 cannot pass. A host whose accounts or groups also come from another source, an nss-systemd
+  record or nscd needs an inventory of that source, which this contract does not have. Adding one
+  is a change to this contract.
 - **STOP:** an entry the operator considers unknown or untrusted: a UID 0 account other than
   `root`; an unknown member of `sudo`, `admin` or `docker`; a key whose fingerprint matches no
   trusted key, a usable password or a sudo rule the operator did not set up; an `at` job, a
@@ -2605,6 +2729,7 @@ Accepted together with this contract:
 | U3: an unreadable secret leaves the password empty | S4b §12.1 | Not tested | Not observed; the guard does not depend on it |
 | U7: Compose on the VPS applies `!reset` | S4b §12.1 | G4 | Open |
 | U8: no untrusted users or services on the host | S4b §12.1 | G6 | Open |
+| NSS takes accounts and groups only from `/etc/passwd`, `/etc/group` and nss-systemd's dynamic users; no nscd | This contract | P7 (`nss_sources`), G6 | Open. Ubuntu 26.04 under WSL has `files systemd`; the VPS's `/etc/nsswitch.conf` was never read |
 | U9: the LXC maps UIDs 10001, 472 and 473 | S4b §12.1 | G7, V11, V12 | Open |
 | U10: the extraction leaves the files readable | S4b §12.1 | G8 | Open |
 | U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open |
