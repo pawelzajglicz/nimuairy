@@ -1,12 +1,40 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-16: draft for review (revision 12). Nothing in it has been run on the VPS.**
+**Status, 2026-11-17: draft for review (revision 14). S6.1, the read-only preflight, has started:
+P7a, P7b and P7c have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
   consent at the point §4 names. Accepting or merging the contract is not such a consent.
-- No S6 step has started. Nothing has been delivered to the VPS, created there or started there,
-  and no VPS command has been run for S6.
+- **S6.1 has started:** P7a, P7b and P7c ran on the VPS, read-only, with P7's helpers. P7c's first
+  run found two defects of its procedure, and four read-only diagnostics followed. Revision 13
+  corrects both (§6). P7c then ran again, with revision 13's blocks.
+- **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
+  whose review is complete. The listings stay with the operator (P7); these are the review's
+  conclusions, not G6's:
+  - **P7a: run and reviewed.** The operator confirmed that the usable password is expected, the
+    SSH keys are trusted, the recent logins are recognized, `deploy`'s access to Docker is
+    intended, the sudo rules are verified and NSS's sources are complete. The operator then went
+    on to P7b;
+  - **P7b: run and reviewed; two entries are open.** It printed no `UNREAD:` and no `STOP`. The
+    job `app-backup` was recognized as the application's backup, `nimuairy-backup`
+    ([README, Database backups](../README.md#database-backups)). `pkg_file` gave `MODIFIED` for
+    `e2scrub_all` and for `sysstat`. Neither modification is explained or verified: both stay
+    open, as entries of G6's exception register (§8);
+  - **P7c: run twice; entries are open.** Its first run used revision 12's blocks. Its `UNREAD`
+    lines for the templates and for root's user manager came from the two defects. The second
+    run, with revision 13's blocks, showed four templates as `REVIEW`,
+    `container-getty@.service` as `MODIFIED`, and five units or drop-ins whose attribution is
+    open. These are entries of G6's exception register (§8). A finding of that run which the
+    register does not name is not excepted.
+- **The gates:** G6 has not been recorded, with any outcome. On 2026-11-17 the operator accepted
+  the risk of the open findings that G6's exception register names, so as to go on without waiting
+  for the hosting provider's answer (§8, G6). They stay unresolved. G6 can be recorded as
+  PASS WITH RECORDED EXCEPTIONS only when every requirement of G6 outside the register is met; the
+  conclusions above are not all of them. S6.1 is not complete, so the order of §4.1 stops before
+  C2.
+- **The deployment has not started:** nothing of the observability stack has been delivered to the
+  VPS, created there or started there.
 - The operator decisions D1 to D7 (§13.3) are open.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
@@ -180,6 +208,41 @@ Revisions:
     Before, any failure silently became the address.
   - **P9's account:** `getent passwd` must return exactly one entry of seven fields, named as
     asked, with a numeric UID and a home. Before, only the home was checked.
+- **13** (2026-11-17), the first run of P7a to P7c on the VPS, in S6.1 [VPS, USER-REPORTED]: two
+  defects of P7c's procedure. Both failed closed, as `UNREAD`, but each would have kept G6
+  INCONCLUSIVE on every run (§6):
+  - **the template of an `Accept=yes` socket:** P7c asked `systemctl show` about it, which cannot
+    query a template, since the manager loads only instances. `unit_review` now recognizes a
+    template by its name and shows its whole definition, read from disk by `systemctl cat`, as
+    `REVIEW`. No instance name is made up;
+  - **root's user manager:** `sudo systemctl --user -M root@` failed with "No medium found" while
+    that manager was running. Under `sudo`, `root@` is the caller's own user, whose bus sd-bus
+    finds through `$XDG_RUNTIME_DIR`, and `sudo`'s `env_reset` removes it. Root's manager is now
+    reached through `sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl --user`. Other users' are
+    reached as before, and a manager that cannot be reached is still `UNREAD`;
+  - **`unit_review` under `set -u`,** a third defect, found in the local tests, not on the VPS:
+    after a failed `systemctl show -p FragmentPath`, `d` stayed unset, so a shell with `nounset`
+    stopped at the `UNREAD` line. Its variables now start empty; the line is the same;
+  - **a limit that stays:** through `-M`, `systemctl cat` refuses to run, so another user's unit
+    whose whole definition must be shown is `UNREAD` (§6);
+  - P10 checks `env` as root, which P7c now runs through `sudo`. G6's criteria are unchanged;
+  - **the status** records how far P7's review has come: P7a reviewed; P7b reviewed, with
+    `MODIFIED` for `e2scrub_all` and `sysstat` unresolved; P7c's review open until revision 13's
+    P7c runs. G6 has not passed.
+- **14** (2026-11-17), the operator's acceptance of the risk of named, open G6 findings
+  [USER-REPORTED], so as to go on without waiting for the hosting provider's answer:
+  - **a new outcome of G6, PASS WITH RECORDED EXCEPTIONS,** for exactly the entries of G6's
+    exception register: P7b's two `MODIFIED` files; from P7c's second run, four templates
+    (`REVIEW`), `container-getty@.service` (`MODIFIED`), and five units and drop-ins whose
+    attribution is open. They stay unresolved, with their classifications. None is reclassified
+    as verified or trusted, and no other finding is waived (§8, G6);
+  - **C2 needs G6 first,** recorded as PASS or as PASS WITH RECORDED EXCEPTIONS. So G6 moves from
+    step 3 to step 1 of §4.1; S6.2 changes nothing that G6 reads (§4, §4.1, §7, §8);
+  - **the register is revisited when the provider answers,** on evidence and, where it applies, a
+    fresh read-only check. It never expires by itself (§8, G6);
+  - P7c's second run, with revision 13's blocks, is in the status. P7's output rule lets the names
+    of the register's entries into this contract (§5, §6). The exception authorizes no VPS
+    operation and gives no consent (§4).
 
 ## 1. Purpose and scope
 
@@ -334,7 +397,7 @@ These are accepted and are not reopened here.
   | Consent | Covers | Requires first |
   |---|---|---|
   | C1 | The read-only preflight of S6.1 | This contract accepted |
-  | C2 | Creating or changing files on the VPS in S6.2: `/var/nimuairy-observability`, the archive in `deploy`'s home, its extraction, `REVISION`, `observability/.env`, `observability/secrets/` | S6.1 recorded with no open STOP; D1 and D2 decided |
+  | C2 | Creating or changing files on the VPS in S6.2: `/var/nimuairy-observability`, the archive in `deploy`'s home, its extraction, `REVISION`, `observability/.env`, `observability/secrets/` | S6.1 recorded with no open STOP outside G6's exception register; G6 recorded as PASS, or as PASS WITH RECORDED EXCEPTIONS: every G6 finding outside the register resolved, and the register complete and accepted by the operator (§8, G6); D1 and D2 decided |
   | C5 | The sampling of §10.3: saving `~/s6-sampler.sh` and `~/s6-readout.awk` in `deploy`'s home, the readout's self-test, and running the sampler in the background, first before the start (G11, G13) and then for the window, with its logs in that home | G1 to G10 and G12 passed, with G9 resolved by D7 where G9 asked for it; D3 and D4 decided. C5 does not depend on G11 or G13: they depend on it |
   | C3a | The image `pull` of S6.4, step 4, and nothing else | G11 passed; then, immediately before the pull, G1 to G3 repeated and G13a passed |
   | C3b | The **first `docker compose up`** of S6.4, step 6 | The pull done with its readings, and G13b passed, R-p included. It is given only after G13b, for an `up` that starts within 15 min of G13b's reading; otherwise it lapses, and G13b runs again before a new C3b. Neither C3a nor any earlier statement stands in for it |
@@ -347,6 +410,11 @@ These are accepted and are not reopened here.
   ownership change of a volume.
 - **A failed or inconclusive gate blocks the consent that follows it** until it is resolved
   explicitly and the resolution is recorded.
+- **G6's recorded exceptions** (§8, G6) let the order go on past G6 only for the findings its
+  register names, as the operator accepted them. They waive no other finding and weaken no other
+  gate. They authorize no VPS operation and give no consent: C1, C2, C5, C3a, C3b and C4 are each
+  still given separately, the operator still runs every VPS command, and the agent never connects
+  to the VPS.
 - **S6 does not authorize S7.** It connects nothing to the stack and changes nothing in the
   application.
 - **Read-only checks** need no consent of their own, but they run only inside an S6 session that
@@ -358,9 +426,9 @@ Each step needs every step above it. No step needs a step below it, so the order
 
 | # | Step | Needs |
 |---|---|---|
-| 1 | C1, then the preflight P1 to P10 (S6.1) | This contract accepted |
+| 1 | C1, then the preflight P1 to P10 (S6.1), then G6: PASS, or PASS WITH RECORDED EXCEPTIONS (§8) | This contract accepted |
 | 2 | D1 and D2 decided, C2, then the delivery and the host configuration (S6.2) | 1 |
-| 3 | G1 to G10 and G12 (S6.3), read-only; G9 resolved by D7 where it asks for it | 2 |
+| 3 | G1 to G5, G7 to G10 and G12 (S6.3), read-only; G9 resolved by D7 where it asks for it. G6 has passed in step 1 | 2 |
 | 4 | D3 and D4 decided, then C5 | 3 |
 | 5 | Save the sampler and the readout, run the self-test, take R0's first reading, start the pre-start sampler (§10.3) | 4 |
 | 6 | G11, with the sampler running: timing, the release freeze, the self-test's result | 5 |
@@ -379,9 +447,9 @@ and a resolution that changes state needs its own consent (§11).
 - **Who runs what.** The operator runs every VPS command and sends the output back for review. The
   agent writes no VPS command into a shell.
 - **P7's and P9's output is the exception.** Their account, key, address, sudoers, cron, `at` and
-  service listings stay with the operator, who reviews them on the VPS. Only G6's conclusion and
-  P9's verdict are shared, and an entry the operator wants discussed is shared with its secrets,
-  addresses and names removed.
+  service listings stay with the operator, who reviews them on the VPS. Only G6's conclusion, with
+  the entries of its exception register (§8, G6), and P9's verdict are shared, and an entry the
+  operator wants discussed is shared with its secrets, addresses and names removed.
 - **The words of P7 and P9.** A line starting `absent:` says that the source does not exist, such
   as an account without an authorized-keys file. For an account or a group, `absent:` also needs
   NSS's sources confirmed (`nss_sources`, P7), because `getent` gives the same answer for a missing
@@ -419,7 +487,9 @@ and a resolution that changes state needs its own consent (§11).
   key material from `authorized_keys`; a password field or a whole line of `/etc/gshadow`.
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
-- **None of these commands has run on the VPS.** Each block passes `bash -n`. The sampler, the
+- **Of these commands, P7a to P7c have run on the VPS,** P7c twice, with P7's helpers, in S6.1
+  (revisions 13 and 14).
+  Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
   database and fake `systemctl` data, in a namespace (P7a);
@@ -569,7 +639,8 @@ none_of "TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345" \
 
 **The output stays with the operator** (§5). It lists accounts, keys, addresses and scheduled
 commands, which can contain secrets. It goes into no repository file, PR, issue or chat; only G6's
-conclusion does.
+conclusion does, with the names of the entries of G6's exception register (§8), never their
+content.
 
 **P7 helpers.** Eight functions that P7a to P7c and P9 use. **Admin, read-only.** Define them again in each
 new shell:
@@ -1818,6 +1889,61 @@ last -n 20 || echo "UNREAD: last failed"
     - **The earlier suites, rerun:** the suites of revisions 9 to 11 gave revision 11's results,
       unchanged. Their four P9 cases have a valid account and `UseDNS no`. Under gawk and mawk,
       every suite gave the same output.
+  - **Tested locally, revision 13** [LOCAL], with the same harness and revision 12's P7c and P10
+    as the control:
+    - **The fakes now behave as systemd 255 and `sudo` do:**
+      - `systemctl show` refuses a template, with systemd's message;
+      - `sudo` removes `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` from a session that has
+        them, as `env_reset` does;
+      - under it, `systemctl --user -M root@` fails with "No medium found";
+      - `systemctl --user` without `-M` reaches only the manager of the runtime directory it is
+        given;
+      - every call was logged.
+
+      The fake of revisions 9 to 12 answered `show` for a template, so their case "an
+      `Accept=yes` socket with its template" passed.
+    - **The template:**
+      - revision 12 gave the VPS's `UNREAD`;
+      - revision 13 gives one `REVIEW` line with the template's definition, and asks `show`
+        nothing about it. A definition that cannot be read is `UNREAD`;
+      - the test of the name agreed with the local systemd 259 for 10 names. Three were
+        templates (`apport-forward@.service`, `getty@.service`, `systemd-journald@.socket`), and
+        seven units, among them `getty@.x.service` and `getty@a@.service`.
+    - **Root's user manager,** listed by `loginctl` or by linger:
+      - revision 12 gave the VPS's five `UNREAD` lines;
+      - revision 13 reviewed its seven units, its template among them. Every call for root was
+        local, with `XDG_RUNTIME_DIR=/run/user/0`;
+      - with that manager not running, revision 13 gives five `UNREAD` lines, and no `empty:` or
+        `absent:`.
+    - **What did not change:**
+      - another user's manager, through `-M alice@`, gave the same lines and the same calls in
+        both revisions, in all 25 cases;
+      - every earlier P7c case gave revision 12's output apart from the template, every `UNREAD`
+        included;
+      - the suites of revisions 9 to 12, rerun with revision 13's blocks and fakes, gave revision
+        12's stored results in all 238 artifacts, apart from the template and P10's `env` line.
+        With every tool of root's list but `install` on root's PATH, only `install` is `MISSING:`;
+      - under gawk and mawk, every suite gave the same output.
+    - **`set -u`:** in revision 12, a failed `show -p FragmentPath` left `d` unset, and under
+      `set -u` the block stopped at `unit_review`'s `UNREAD` line. The operator's shell has no
+      `nounset` (§5), so the VPS printed the line. Revision 13 starts `f`, `d` and `usr` empty.
+      Revision 13's suite ran without `nounset`, as on the VPS, then once more under `set -u`:
+      - **`FragmentPath` failing** for the first unit reviewed: revision 12, and revision 13 before
+        this fix, stopped with "d: unbound variable" and printed nothing else. Revision 13 prints
+        the same `UNREAD` line as without `nounset`, then the rest of P7c;
+      - **`DropInPaths` failing:** the same `UNREAD` line, with the unit file's path, in both
+        revisions;
+      - **every case** gave the same output with and without `set -u`. The fix changed no output
+        in any earlier case, with or without `nounset`;
+      - the earlier suites ran under `set -u`, as before; there, revision 9's P7c, a control,
+        stopped at the template.
+    - **Not modelled:** the fake lets `cat` run through `-M`, which systemd refuses (§6). Where the
+      tests show a definition of alice's, the VPS would print `UNREAD`.
+    - **Real systemd, local** [LOCAL, systemd 259]: `apport-forward.socket` has `Accept=yes` and
+      an empty `Triggers`; `show` refused `apport-forward@.service`; `cat` printed it.
+    - **Not reproduced locally:** systemd 259 does not fail as 255 does. Without
+      `XDG_RUNTIME_DIR`, `-M <user>@` for the caller's own user goes through `systemd-run`
+      instead. Root's failure rests on 255's source [S] and on the VPS [VPS, USER-REPORTED].
 - **Tested locally, not on the VPS** [LOCAL]: P7a and P9 ran with the real `getent` of glibc 2.43
   and systemd 259 (Ubuntu 26.04 under WSL), under gawk and mawk, in user and mount namespaces whose
   `nsswitch.conf`, account files and nss-systemd directories were replaced for each case. Only
@@ -1997,9 +2123,23 @@ fi
 # user; or, unless one verified package file is its whole definition, that whole definition. $1 is
 # "system", or a user's name.
 unit_review() {
-  local m=$1 u=$2 f d usr
+  # Empty, not unset: after a failed show, d is never assigned, and the UNREAD line below must
+  # print under set -u too.
+  local m=$1 u=$2 f= d= usr=
   local -a sc=(systemctl)
-  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  # Under sudo, -M root@ names sudo's own user, whose bus sd-bus finds through $XDG_RUNTIME_DIR,
+  # and sudo's env_reset removes that. So root's manager is reached locally, through its runtime
+  # directory.
+  if [ "$m" = root ]; then sc=(sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl --user)
+  elif [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  # A template (foo@.service: "@" directly before the type) is a unit file, not a unit. The manager
+  # loads only its instances, so systemctl show cannot query it; systemctl cat reads it from disk.
+  # pkg_file does not check it: its whole definition is shown, as REVIEW.
+  if [[ $u == ?*@* && ${u#*@} == ."${u##*.}" ]]; then
+    echo "REVIEW: $m $u: a template, which pkg_file does not check. Its definition:"
+    "${sc[@]}" cat --no-pager "$u" || echo "UNREAD: $m $u: no definition could be read"
+    return
+  fi
   if ! f=$("${sc[@]}" show -p FragmentPath --value "$u" 2>&1) || ! d=$("${sc[@]}" show -p DropInPaths --value "$u" 2>&1); then
     echo "UNREAD: $m $u: systemctl show failed: $f $d"
     return
@@ -2026,7 +2166,8 @@ review_activation() {
   local m=$1 ty out line u st t a x bad=0
   local -a sc=(systemctl) units=()
   local -A seen=()
-  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  if [ "$m" = root ]; then sc=(sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl --user)
+  elif [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
   for ty in socket path; do
     if ! out=$("${sc[@]}" list-units --type="$ty" --state=active --no-pager --no-legend --plain 2>&1); then
       echo "UNREAD: $m: its active $ty units: $out"
@@ -2080,7 +2221,8 @@ review_activation() {
 review_manager() {
   local m=$1 out u line
   local -a sc=(systemctl) w
-  if [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
+  if [ "$m" = root ]; then sc=(sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl --user)
+  elif [ "$m" != system ]; then sc=(sudo systemctl --user -M "$m@"); fi
   if ! out=$("${sc[@]}" list-units --type=service --state=running --no-pager --no-legend --plain 2>&1); then
     echo "UNREAD: $m: its running services: $out"
   elif [ -z "$out" ]; then
@@ -2155,8 +2297,34 @@ fi
 
 - **User managers** run units without the system manager: those of lingering users even without a
   login, those of logged-in users while they are logged in. P7c reviews every manager that lingers
-  or runs now (`loginctl list-users`), through `systemctl --user -M <user>@`, which needs root. A
-  manager it cannot reach is `UNREAD`.
+  or runs now (`loginctl list-users`), as root through `sudo`. A manager it cannot reach is
+  `UNREAD`, never `absent:` or `empty:`, also when it does not run.
+  - **Another user's manager** is reached through `systemctl --user -M <user>@`.
+    - **A known limit, not solved in revision 13:** through `-M`, `systemctl cat` refuses to run,
+      with "Cannot remotely cat units."
+      ([`systemctl-edit.c`](https://github.com/systemd/systemd/blob/v255/src/systemctl/systemctl-edit.c):
+      `verb_cat`) [S; LOCAL, systemd 259]. So each unit of that manager that is not wholly one
+      verified package file, and each template, is `UNREAD`: "no definition could be read".
+      That fails closed, but keeps G6 INCONCLUSIVE while such a manager is listed. Root's
+      manager, reached without `-M`, is not affected.
+  - **Root's own** is reached through `sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl --user`,
+    without `-M`:
+    - **Why:** under `sudo`, `-M root@` names `sudo`'s own user. sd-bus 255 then opens that
+      user's bus from `$DBUS_SESSION_BUS_ADDRESS` or `$XDG_RUNTIME_DIR`, and fails with
+      `ENOMEDIUM` when neither is set
+      ([`sd-bus.c`](https://github.com/systemd/systemd/blob/v255/src/libsystemd/sd-bus/sd-bus.c):
+      `user_and_machine_equivalent`, `bus_set_address_user`) [S]. `sudo`'s `env_reset` removes
+      both;
+    - **on the VPS** [VPS, USER-REPORTED], P7c's first run gave "Failed to connect to bus: No
+      medium found" for each of root's five listings. Then `sudo printenv XDG_RUNTIME_DIR`
+      exited 1; `loginctl show-user root` gave `State=active` and `RuntimePath=/run/user/0`;
+      `user@0.service` was `active/running`; `sudo env XDG_RUNTIME_DIR=/run/user/0 systemctl
+      --user is-system-running` printed `running`;
+    - **without `-M`,** `systemctl --user` connects to `$XDG_RUNTIME_DIR/systemd/private`, the
+      manager's own socket
+      ([`bus-util.c`](https://github.com/systemd/systemd/blob/v255/src/shared/bus-util.c):
+      `bus_connect_user_systemd`) [S]. Where no manager runs, the connection fails, as it did
+      locally for a runtime directory without one [LOCAL, systemd 259]: `UNREAD`.
 - **What P7a to P7c show:**
   - every account with UID 0 or in a privileged group, the sudo rules and the recent logins;
   - for each privileged group, its administrators, members and password state in
@@ -2178,6 +2346,20 @@ fi
   - **What it reviews:** each such unit, with every unit it starts, as `systemctl show -p
     Triggers` names them. A socket with `Accept=yes` has no `Triggers`, and starts instances of
     the template named after it ([systemd.socket(5)](https://manpages.ubuntu.com/manpages/noble/man5/systemd.socket.5.html)).
+  - **A template is `REVIEW`, shown in full:**
+    - **Why:** `foo@.service` is a unit file, not a unit. The manager loads only its instances,
+      so `systemctl show` refuses the template's name: on the VPS [VPS, USER-REPORTED], and
+      locally with "Unit name … is neither a valid invocation ID nor unit name"
+      [LOCAL, systemd 259];
+    - **how:** `unit_review` recognizes a template by its name, with "@" directly before the
+      type, as systemd does. `systemctl cat` reads the template and its drop-ins from disk
+      ([`systemctl-util.c`](https://github.com/systemd/systemd/blob/v255/src/systemctl/systemctl-util.c):
+      `unit_find_paths`) [S]. No instance name is made up;
+    - **what G6 does with it:** `pkg_file` does not check the template, so it is a `REVIEW`
+      line, attributed from its content like a package file that dpkg cannot check (G6). A
+      definition that cannot be read is `UNREAD`;
+    - **an instance that runs** is a running service, reviewed with its template as its unit
+      file.
   - **What is `UNREAD`:**
     - a failed listing;
     - a failed query of a unit's targets;
@@ -2343,7 +2525,7 @@ sudo -n -l >/dev/null 2>&1 && echo 'deploy: passwordless sudo' || echo 'deploy: 
 for t in bash sudo getent awk grep sed sort tr cut cat tail varlinkctl dpkg dpkg-query systemctl loginctl ssh-keygen last realpath; do
   if v=$(command -v "$t") && [ -x "$v" ]; then printf 'admin: %-11s %s\n' "$t" "$v"; else echo "MISSING: $t, as this account"; fi
 done
-if ! o=$(sudo sh -c 'for t in "$@"; do if v=$(command -v "$t") && [ -x "$v" ]; then echo "root: $t $v"; else echo "MISSING: $t, as root through sudo"; fi; done' sh sh ls cat grep awk getent dpkg sshd systemctl ss passwd run-parts install 2>&1); then
+if ! o=$(sudo sh -c 'for t in "$@"; do if v=$(command -v "$t") && [ -x "$v" ]; then echo "root: $t $v"; else echo "MISSING: $t, as root through sudo"; fi; done' sh sh ls cat grep awk getent dpkg sshd systemctl env ss passwd run-parts install 2>&1); then
   echo "UNREAD: the tools as root: $o"
 else
   printf '%s\n' "$o"
@@ -2356,7 +2538,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
   - a missing tool of P7 or P9, or an `UNREAD:` here, leaves G6 INCONCLUSIVE, because the listing that needs it cannot be complete;
   - a missing `getent`, `realpath`, `sudo` or root's `install` stops §7.3's hand-over before its checks;
   - `at` and `atq` are optional, and their absence is reported as such.
-- **Which account:** P7 and P9 run as the admin account. Some of their commands run directly (for example `varlinkctl`, `dpkg-query`, `systemctl`, `ssh-keygen`), others as root through `sudo` (for example `sh` for `path_kind`, `ls`, `dpkg --verify`, `run-parts`, `systemctl --user -M`). Each set is checked where it runs, since root's PATH under `sudo` (`secure_path`) may differ from the account's. `deploy`'s own tools are the block above.
+- **Which account:** P7 and P9 run as the admin account. Some of their commands run directly (for example `varlinkctl`, `dpkg-query`, `systemctl`, `ssh-keygen`), others as root through `sudo` (for example `sh` for `path_kind`, `ls`, `dpkg --verify`, `run-parts`, `systemctl --user -M`, and `env` for root's user manager). Each set is checked where it runs, since root's PATH under `sudo` (`secure_path`) may differ from the account's. `deploy`'s own tools are the block above.
 
 ### Preflight record (template)
 
@@ -2372,7 +2554,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | Recorded as the baseline | | |
 | P5 | Stack volumes, networks, containers; the directory | None; does not exist | | |
 | P6 | Listeners on the stack's ports | None | | |
-| P7 | Accounts, privileges, scheduled work, services, timers, listeners | Reviewed by the operator for G6; only the conclusion is recorded | | |
+| P7 | Accounts, privileges, scheduled work, services, timers, listeners | Reviewed by the operator for G6; only the conclusion is recorded: G6 PASS, or PASS WITH RECORDED EXCEPTIONS with its register (§8) | | |
 | P8 | Global IPv6, UFW, IPv6 listeners | Recorded for G9 | | |
 | P9 | Forwarding for the D2 account(s), in this session's context | Allowed for the tunnel account and its key; every `Match` that the context cannot represent reviewed; only the verdict is recorded | | |
 | P10 | `deploy`, environment, tools, sudo | As expected above | | |
@@ -2381,7 +2563,8 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 
 ## 7. S6.2 — Delivering the files and host configuration
 
-**Consent:** C2. It needs S6.1 recorded without an open STOP, and D1 and D2 decided.
+**Consent:** C2. It needs S6.1 recorded without an open STOP outside G6's exception register, G6
+recorded as PASS or as PASS WITH RECORDED EXCEPTIONS (§8, G6), and D1 and D2 decided (§4).
 
 ### 7.1 The commit
 
@@ -2613,13 +2796,15 @@ set -o history
 
 **Rules:**
 - **The gates run in the order of §4.1:**
-  1. G1 to G10 and G12, before C5;
+  1. G6 after the preflight, before C2; G1 to G5, G7 to G10 and G12, before C5;
   2. G11, after C5, with the pre-start sampler running;
   3. G1 to G3 again, and G13a, immediately before the pull (C3a), because a day can pass between
      S6.2 and S6.4;
   4. G13b after the pull, before C3b.
 - **Each gate is PASS, FAIL or INCONCLUSIVE.** A failed or inconclusive gate blocks the next step of
-  §4.1 until it is resolved explicitly.
+  §4.1 until it is resolved explicitly. G6 says STOP where it finds an untrusted entry, and has one
+  more outcome, PASS WITH RECORDED EXCEPTIONS, for the entries of its exception register only
+  (G6). No other gate has it.
 - **The gates only read.** G11 and G13 read the pre-start sampler, which C5 starts. A gate's
   resolution that changes state has its own consent.
 
@@ -2749,6 +2934,7 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
 
 - **Command:** P7's helpers, then P7a, P7b and P7c, from inside an SSH session, and P3's container
   list.
+- **When:** after the preflight, before C2 (§4.1, step 1). S6.2 changes nothing that G6 reads.
 - **Why it matters:** the port reset is no boundary against processes on the host. Prometheus,
   Loki and Tempo have no authentication, and the host reaches every container address
   ([S4b §4.4](S4b_DESIGN_CONTRACT.md#44-what-the-port-policy-protects-and-what-it-does-not)).
@@ -2837,7 +3023,8 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   - an entry not yet attributed, such as a script or unit from no package whose purpose is not
     yet clear.
 
-  The order of §4.1 waits until every source is read and every entry attributed.
+  The order of §4.1 waits until every source is read and every entry attributed. Only the entries
+  of G6's exception register (below) may stay open, as PASS WITH RECORDED EXCEPTIONS says.
 - **NSS's sources** (`nss_sources`): while they are not accepted, the account list stays `UNREAD`,
   so G6 cannot pass. A host whose accounts or groups also come from another source, an nss-systemd
   record or nscd needs an inventory of that source, which this contract does not have. Adding one
@@ -2849,10 +3036,80 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   trusted key, a usable password or a sudo rule the operator did not set up; an `at` job, a
   certificate authority or a key command the operator did not set up; a `MODIFIED` package file; a
   job, service, timer, user unit, listener, login or container of unknown origin.
+- **PASS WITH RECORDED EXCEPTIONS** (revision 14), an outcome for the entries of G6's exception
+  register only, with the operator's explicit acceptance of their risk:
+  - **when:** everything that PASS requires holds outside the register: no `UNREAD:` line, every
+    `REVIEW:` line resolved, every entry attributed, every decision recorded, and no STOP. The
+    register is complete, as below, and the operator has accepted it;
+  - **what it means:** the operator goes on with S6 although the register's findings are open. It
+    does not mean that any of them is verified, trusted or resolved. Each keeps the classification
+    that the register records, and U8 stays open for them (§14);
+  - **what it cannot do:** waive any other finding. The register covers each entry as P7b's run
+    and P7c's second run showed it. A finding it does not name is an ordinary finding of G6, also
+    a further file or drop-in of a unit it names, and an INCONCLUSIVE or STOP finding of that kind
+    blocks as above. Adding an entry needs a new revision of this contract, with the operator's
+    acceptance;
+  - **where this contract requires G6 to have passed** (C2, C5, §4.1), this outcome counts for as
+    long as its register stands;
+  - **the record:** the operator records "G6 PASS WITH RECORDED EXCEPTIONS" with the date, the
+    revision of this contract whose register it accepts, and G6's decisions. The lists themselves
+    are not recorded (§5).
 - **Next allowed action:** on INCONCLUSIVE, the missing reading or the attribution, then G6 again.
   On STOP, a separate investigation outside S6, which may be a security incident. S6 does not
-  continue until a new G6 passes.
+  continue until a new G6 passes. For an entry of the exception register, its revisit (below)
+  decides instead; for every other finding, this rule stands.
 - **What it rests on:** the operator's judgement [USER-REPORTED], supported by the VPS listings.
+
+#### G6's exception register
+
+**Accepted by the operator on 2026-11-17**, the date of this amendment (revision 14)
+[USER-REPORTED]. The operator accepts the residual risk of the findings below in order to go on
+with S6, without waiting for the clarification that the operator awaits from the hosting
+provider, Mikrus. That risk is the one G6 guards against: if one of them is an untrusted change, a
+process on the host could read or change what the stack holds and does, since Prometheus, Loki and
+Tempo have no authentication and the host reaches every container address (G6, "Why it
+matters"). No answer from Mikrus is recorded here, and none is assumed.
+
+| # | Finding | From | Classification, as read | Under G6 without this register | Known | Not known |
+|---|---|---|---|---|---|---|
+| E1 | `e2scrub_all` | P7b | `MODIFIED` (`pkg_file`) | Blocks PASS; STOP if the operator considers it unknown or untrusted | `dpkg --verify` reports the package file changed | Who changed it, when, what and why. The modification is not explained or verified |
+| E2 | `sysstat` | P7b | `MODIFIED` (`pkg_file`) | Blocks PASS; STOP if the operator considers it unknown or untrusted | `dpkg --verify` reports the package file changed | Who changed it, when, what and why. The modification is not explained or verified |
+| E3 | `apport-forward@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
+| E4 | `lxd-installer@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
+| E5 | `systemd-sysext@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
+| E6 | `systemd-pcrextend@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
+| E7 | `/usr/lib/systemd/system/container-getty@.service` | P7c, second run | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file whose modification the operator does not recognize | `dpkg --verify` reports it changed. Its content resembles a normal systemd container getty unit, which does not show who modified it or why | Who modified it, and why. That Mikrus changed it is a hypothesis, not a confirmed fact |
+| E8 | `docker.service`: its drop-in `/etc/systemd/system/docker.service.d/mikrus-firewall.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | The drop-in's name and place | Its origin and purpose; its name proves neither |
+| E9 | `earlyoom.service` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | That P7c lists it | Its origin and purpose |
+| E10 | `systemd-journald.service`: its drop-in `nice.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | The drop-in's name | Its origin and purpose |
+| E11 | `systemd-logind.service`: its drop-in `dbus.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | The drop-in's name | Its origin and purpose |
+| E12 | `user@0.service`: its drop-ins | P7c, second run | Entries whose attribution is open | INCONCLUSIVE: entries not yet attributed; STOP if the operator considers their origin unknown | That P7c lists drop-ins of root's user manager's unit | Their origin and purpose. The register does not name them, so a later drop-in cannot be told from these |
+
+Nothing in this register describes an entry as malicious or untrusted, and nothing in it marks
+one as verified because its name or apparent purpose looks familiar.
+
+**What the register does not do:**
+- It authorizes no VPS operation, and gives none of C1, C2, C3a, C3b, C4 or C5 (§4).
+- It does not let the agent connect to the VPS or run any command there.
+- It authorizes no change, restore, restart or replacement of any file or service that it names.
+- The operator runs every VPS command, and gives each consent of §4 separately.
+
+**Its revisit, when Mikrus answers:**
+1. **Record** the provider's explanation and any evidence it gives, as a summary without secrets,
+   addresses or the host (§5, §12).
+2. **Decide, entry by entry,** which findings the answer actually addresses. An entry that it does
+   not address stays as it is.
+3. **Verify:** an answer is not proof of integrity. It needs evidence and, where it applies, a
+   fresh read-only check by the operator under §4, such as P7b or P7c again for that entry.
+4. **Close an entry** only when its finding is resolved and the evidence supports that, in a new
+   revision of this contract. The register keeps the entry, marked closed, with the evidence and
+   the date.
+5. **Stop:** if the provider cannot explain a modification, or the evidence points to an untrusted
+   change, that entry is STOP (G6). S6 halts at the step it has reached, pending a separate
+   investigation outside S6; any action on what S6 has created needs its own consent (§4, §11).
+6. **No expiry:** the register never expires, and time alone resolves nothing. Without an answer,
+   every entry stays open, and the register stays in this contract. S6.7 reports each entry's
+   state.
 
 ### G7. U9: identity mapping, before the start
 
@@ -4216,7 +4473,7 @@ Accepted together with this contract:
 | U1: a Linux engine refuses a missing bind source for a file secret | S4b §12.1 | Not tested: G5 makes sure the file exists, and S6 runs no negative experiment on production | Unverified; the guard does not depend on it |
 | U3: an unreadable secret leaves the password empty | S4b §12.1 | Not tested | Not observed; the guard does not depend on it |
 | U7: Compose on the VPS applies `!reset` | S4b §12.1 | G4 | Open |
-| U8: no untrusted users or services on the host | S4b §12.1 | G6 | Open |
+| U8: no untrusted users or services on the host | S4b §12.1 | G6 | Open. G6's exception register (§8) leaves it unverified for its entries; S6.7 does not record it closed while one stays open |
 | NSS takes accounts and groups only from `/etc/passwd`, `/etc/group` and nss-systemd's dynamic users; no nscd | This contract | P7 (`nss_sources`), G6 | Open. Ubuntu 26.04 under WSL has `files systemd`; the VPS's `/etc/nsswitch.conf` was never read |
 | `varlinkctl` runs on the VPS, and PID 1's `io.systemd.DynamicUser` answers NoRecordFound for a missing name | This contract | P7 (`userdb_none`), G6 | Open. Ubuntu 24.04's `systemd` package ships `varlinkctl`; the local systemd 259 answered so. Without either, every missing account or group is `UNREAD` |
 | U9: the LXC maps UIDs 10001, 472 and 473 | S4b §12.1 | G7, V11, V12 | Open |
@@ -4301,14 +4558,20 @@ Accepted together with this contract:
 
 ## 17. Acceptance checklist
 
-S6 has not started. Every item is open.
+S6.1, the read-only preflight, has started: P7a to P7c have run, and their review is not complete
+(the status at the top). G6 has not been recorded; the operator has accepted its exception register
+(§8, G6). The deployment of the observability stack has not started. Every item is open.
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
-- [ ] S6.1: the preflight record complete, without an open STOP.
+- [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
+- [ ] G6 PASS, or PASS WITH RECORDED EXCEPTIONS with its register accepted, recorded before C2
+      (§4.1, step 1).
+- [ ] G6's exception register in this contract, each entry with its state; revisited if Mikrus has
+      answered, each entry closed only on evidence (§8, G6).
 - [ ] S6.2: the archive from a verified commit (§7.1), extracted, `REVISION` written, `.env` and the
       secret created without the password appearing anywhere.
 - [ ] S6.3, in the order of §4.1:
-  - [ ] G1 to G10 and G12 PASS, recorded, before C5;
+  - [ ] G1 to G5, G7 to G10 and G12 PASS, recorded, before C5;
   - [ ] C5; the readout's self-test `ok` three times on the VPS; the pre-start sampler running;
         then G11 PASS;
   - [ ] G1 to G3 repeated, and G13a PASS on at least 30 min of the pre-start sampler, immediately
