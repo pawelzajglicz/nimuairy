@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-19: draft for review (revision 16). S6.1, the read-only preflight, has started:
+**Status, 2026-11-19: draft for review (revision 17). S6.1, the read-only preflight, has started:
 P7a, P7b and P7c have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
@@ -12,19 +12,24 @@ P7a, P7b and P7c have run on the VPS. The deployment of the observability stack 
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
-  - **P7a: run and reviewed; not everything G6 needs from it is recorded.** The operator confirmed
-    that the usable password is expected, the SSH keys are trusted, the recent logins are
-    recognized, `deploy`'s access to Docker is intended, the sudo rules are verified and NSS's
-    sources are complete. The operator then went on to P7b. Further read-only findings followed
-    (§8, G6's review record):
+  - **P7a: run and reviewed; one entry is not attributed.** The operator confirmed that the SSH
+    keys are trusted, the recent logins are recognized, `deploy`'s access to Docker is intended,
+    the sudo rules are verified and NSS's sources are complete. The operator then went on to P7b.
+    Further read-only findings followed (§8, G6's review record):
     - the accounts with UID 0 and NSS's sources;
     - a supplementary script's summary of the groups and `/etc/gshadow`, which is not P7a's
       block, and `visudo -c`;
-    - a set group password for `systemd-journal`, of unknown origin, which the operator decided
-      on 2026-11-17 to leave unchanged. On 2026-11-19 the operator accepted its risk as E13 of
-      G6's exception register (§8). Its origin stays unknown.
+    - the password field of the `systemd-journal` group: `set` in the supplementary script's
+      classification of 2026-11-17, `locked` in P7a's of 2026-11-19, since the two rules differ.
+      Its origin is unknown. The operator decided on 2026-11-17 to leave it unchanged, and on
+      2026-11-19 accepted its risk as E13 of G6's exception register (§8);
+    - P7a's own output of 2026-11-19 (revision 17): no `UNREAD:` line, no `REVIEW:` line, and no
+      `absent:` line about a group or a gshadow entry. `root` and `deploy`, the only accounts with
+      a login shell, both have a usable password, which the operator set. The earlier record named
+      one.
 
-    Not recorded: that P7a's own output had no `UNREAD:` line and no unresolved `REVIEW:` line;
+    Not attributed: `syslog`'s membership of `adm`. Its origin stays unresolved, and it is no entry
+    of the exception register;
   - **P7b: run and reviewed; two entries are open.** It printed no `UNREAD:` and no `STOP`. The
     job `app-backup` was recognized as the application's backup, `nimuairy-backup`
     ([README, Database backups](../README.md#database-backups)). `pkg_file` gave `MODIFIED` for
@@ -44,12 +49,15 @@ P7a, P7b and P7c have run on the VPS. The deployment of the observability stack 
 - **The gates:** G6 has not been recorded, with any outcome. On 2026-11-17 the operator accepted
   the risk of the open findings E1 to E12 that G6's exception register names, so as to go on
   without waiting for the hosting provider's answer (§8, G6). On 2026-11-19 the operator
-  separately accepted that of E13, the set password field of the `systemd-journal` group, whose
-  origin is unknown. They stay unresolved. G6 can be recorded as PASS WITH RECORDED EXCEPTIONS
-  only when every requirement of G6 outside the register is met. The evidence recorded so far does
-  not show that. G6's review record (§8) lists what is missing:
+  separately accepted that of E13, the password field of the `systemd-journal` group, `set` as the
+  supplementary script classified it on 2026-11-17, whose origin is unknown. They stay unresolved.
+  P7a's reading of 2026-11-19 shows E13's field as `locked`, which raises none of G6's conditions
+  for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
+  EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
+  so far does not show that. G6's review record (§8) lists what is missing:
   - the rest of the preflight, which G6 follows;
-  - P7a's and P7c's own results outside the register.
+  - from P7a, the attribution of `syslog`'s membership of `adm`;
+  - P7c's own results outside the register.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. S6.1 is not complete, so the order of §4.1 stops before C2.
@@ -290,6 +298,30 @@ Revisions:
     disclosed or recorded;
   - **G6 still has no outcome:** every other gap in G6's review record stands. E13 authorizes no
     VPS operation and gives no consent (§4).
+- **17** (2026-11-19), P7a's own output, and the two classifications of one password field
+  [VPS, USER-REPORTED]. No procedure, no criterion and no entry of the exception register changes;
+  E13's description is made precise:
+  - **P7a's output of 2026-11-19,** in G6's review record (§8): no `UNREAD:` line, no `REVIEW:`
+    line, and no `absent:` line about a group or a gshadow entry, so `userdb_none` had nothing to
+    confirm. The five groups' members are those of the supplementary script; `/etc/gshadow` shows
+    no administrator, no difference in members and every password field as `locked`;
+  - **two usable passwords:** `root` and `deploy`, the only accounts with a login shell, both have
+    one, which the operator set. The status of revision 16 named one;
+  - **the `systemd-journal` password field:** the supplementary script, `check_groups.sh`, gave
+    `set` on 2026-11-17, and P7a gave `locked` on 2026-11-19. The script counts a field as no
+    password only if it is empty or exactly `!`, `*` or `x`; P7a counts every field that starts
+    with `!` or `*` as `locked`. One value can give both results. That the field did not change
+    between the two reads is not shown, and its value and origin stay unknown;
+  - **E13** names both classifications and their effect on G6. The script's `set` of 2026-11-17
+    is the finding that the operator accepted. P7a's reading of 2026-11-19, `locked`, raises none
+    of G6's conditions for a `set` group password, so this reading raises no condition that E13
+    needs to except. E13 stays in the register, accepted and unresolved, and the field's origin
+    stays unknown (§8, G6);
+  - **`syslog`'s membership of `adm`:** P7a shows it in `/etc/group` and `/etc/gshadow`. The
+    operator leaves its origin unresolved, without a new entry of the register. An entry not yet
+    attributed is INCONCLUSIVE under G6, so G6 cannot pass while it stays so (§8);
+  - **§5** names P7a's run of 2026-11-19;
+  - **G6 still has no outcome.**
 
 ## 1. Purpose and scope
 
@@ -534,8 +566,8 @@ and a resolution that changes state needs its own consent (§11).
   key material from `authorized_keys`; a password field or a whole line of `/etc/gshadow`.
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
-- **Of these commands, P7a to P7c have run on the VPS,** P7c twice, with P7's helpers, in S6.1
-  (revisions 13 and 14).
+- **Of these commands, P7a to P7c have run on the VPS,** with P7's helpers, in S6.1: P7a on
+  2026-11-17 and again on 2026-11-19, P7c twice (revisions 13, 14 and 17).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -3098,11 +3130,16 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     blocks as above. Adding an entry needs a new revision of this contract, with the operator's
     acceptance;
   - **E13, the one group password excepted** (revision 16):
-    - **what it excepts:** only the STOP that G6 gives the set password field of the
-      `systemd-journal` group, because its origin is unknown and nobody known to the operator is
-      identified as having set it. The same unknown leaves G6's "keep it" decision without who
-      knows the password. For this one field, the decision is recorded as E13: keep it unchanged,
-      with that gap stated, not filled;
+    - **what it excepts:** only the STOP that G6 gives the password field of the
+      `systemd-journal` group, as the supplementary script classified it on 2026-11-17 (`set`),
+      because its origin is unknown and nobody known to the operator is identified as having set
+      it. The same unknown leaves G6's "keep it" decision without who knows the password. For this
+      one field, the decision is recorded as E13: keep it unchanged, with that gap stated, not
+      filled. P7a's reading of 2026-11-19 classifies the same field as `locked` (G6's review
+      record). That reading shows no `set` password, so it raises neither this STOP nor any other
+      of G6's conditions for a `set` group password. It does not show what the field holds, or
+      that the field was unchanged since 2026-11-17. E13 stands as accepted, and the field's
+      origin stays unresolved;
     - **what it does not do:** satisfy G6's provenance requirement. That requirement is not met
       for this field, only excepted. The password is not taken as trusted, verified, understood
       or known, and its origin is not established;
@@ -3132,10 +3169,13 @@ Tempo have no authentication and the host reaches every container address (G6, "
 matters"). No answer from Mikrus is recorded here, and none is assumed.
 
 **E13: accepted by the operator on 2026-11-19, separately** (revision 16) [USER-REPORTED]. The
-operator accepts the risk of exactly one finding: the set password field of the `systemd-journal`
-group, whose origin is unknown. The operator leaves its state unchanged. With a group password
-set, `newgrp` gives the group to anyone who knows the password (§6, P7a). This acceptance applies
-to E13's finding only. E1 to E12 keep their acceptance of 2026-11-17 and their status.
+operator accepts the risk of exactly one finding: the password field of the `systemd-journal`
+group, which the supplementary script classified as `set` and P7a as `locked`, and whose origin is
+unknown. The operator leaves its state unchanged. With a group password set, `newgrp` gives the
+group to anyone who knows the password (§6, P7a). This acceptance applies to E13's finding only.
+E1 to E12 keep their acceptance of 2026-11-17 and their status. Revision 17 makes E13's
+description precise and records the effect of P7a's reading of 2026-11-19 on G6; its acceptance
+and its status, excepted and unresolved, are unchanged.
 
 | # | Finding | From | Classification, as read | Under G6 as of revision 13, without this register | Status now | Known | Not known |
 |---|---|---|---|---|---|---|---|
@@ -3151,7 +3191,7 @@ to E13's finding only. E1 to E12 keep their acceptance of 2026-11-17 and their s
 | E10 | `systemd-journald.service`: its drop-in `nice.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | The drop-in's name | Its origin and purpose |
 | E11 | `systemd-logind.service`: its drop-in `dbus.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | The drop-in's name | Its origin and purpose |
 | E12 | Two drop-ins that apply to `user@0.service`, and only these two files: `/usr/lib/systemd/system/user@0.service.d/10-login-barrier.conf` and `/usr/lib/systemd/system/user@.service.d/timeout.conf` | P7c, second run | Entries whose attribution is open | INCONCLUSIVE: entries not yet attributed; STOP if the operator considers their origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | Their paths, as P7c showed them | Their origin and purpose; whether a package ships them unchanged, since P7c checks no drop-in with `pkg_file`. No other drop-in of `user@0.service` or `user@.service`, now or later, is covered |
-| E13 | The `systemd-journal` group: its password field is set, and its origin is unknown | Operator's supplementary read-only script; G6's review record | A set password field (`set`, `/etc/gshadow`), origin unknown | STOP: a set group password whose origin is unknown; nobody known to the operator is identified as having set it | Excepted, accepted by the operator on 2026-11-19; unresolved | The field is set. The operator consciously accepts leaving the current state unchanged | Who set it, when and why, and who knows its value. Its origin is not established |
+| E13 | The `systemd-journal` group: its password field, which the supplementary script classified as `set`, and whose origin is unknown | Operator's supplementary read-only script; G6's review record | `set` in the supplementary script's classification (2026-11-17, through `getent gshadow`); `locked` in P7a's (2026-11-19, `/etc/gshadow`). The two rules differ (G6's review record). Origin unknown | STOP: a set group password whose origin is unknown; nobody known to the operator is identified as having set it | Excepted, accepted by the operator on 2026-11-19; unresolved. P7a's reading of 2026-11-19 (`locked`) raises no G6 condition for a `set` group password. The historical STOP recorded in the previous column is not raised by this reading | The script found the field neither empty nor exactly `!`, `*` or `x`; P7a found that it starts with `!` or `*`. The operator consciously accepts leaving the current state unchanged | Its exact value, and whether it changed between the two reads. Who set it, when and why, and who knows its value. Its origin is not established |
 
 Nothing in this register describes an entry as malicious or untrusted, and nothing in it marks
 one as verified because its name or apparent purpose looks familiar.
@@ -3186,7 +3226,8 @@ are the operator's summaries of read-only reads, which the operator chose to rec
 no password field, key, fingerprint, address, host, SSH port or login. P7's listings themselves
 stay with the operator (§5). The record changes none of G6's criteria and no entry of the
 exception register, and it is not G6's outcome. Revision 16 adds the operator's acceptance of
-E13, below.
+E13, below. Revision 17 adds P7a's own output of 2026-11-19, and compares the two classifications
+of the `systemd-journal` password field.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -3213,6 +3254,10 @@ operator's own, not P7a's block:
 | `adm` | `syslog` | none | none | `syslog` | no active password |
 | `systemd-journal` | none | none | none | none | set |
 
+- **the script** is `check_groups.sh`, the version that ran on 2026-11-17, as the operator
+  confirmed (revision 17). It reads each entry through `getent gshadow` and splits it with
+  `cut -d:`. Its "no active password" is a field that is empty or exactly `!`, `*` or `x`; any
+  other field is "set";
 - **`visudo -c`:** `/etc/sudoers` and `/etc/sudoers.d/README` parsed OK. The sudo rules that the
   operator saw are `root ALL=(ALL:ALL) ALL`, `%admin ALL=(ALL) ALL` and `%sudo ALL=(ALL:ALL) ALL`.
   The groups they name, `admin` and `sudo`, are among the groups above, and neither has a member;
@@ -3229,8 +3274,44 @@ operator's own, not P7a's block:
   Neither read proves complete NSS coverage or a complete reading of the sudo rules. Both still
   rest on P7a's own output.
 
+**P7a's own output, 2026-11-19** [VPS, USER-REPORTED], recorded in revision 17. The operator
+reviewed P7a's own listing, which stays with the operator (§5):
+- **the markers:** no `UNREAD:` line in the whole output, also in the helpers' `context:` and
+  `nss:` lines; no `REVIEW:` line; no `absent:` line about a group or a gshadow entry, so
+  `userdb_none` had nothing to confirm. The only `absent:` line is about accounts without an
+  authorized-keys file;
+- **the five groups:** each exists and has an entry in `/etc/gshadow`. Their members agree with
+  the supplementary script's: `deploy` in `docker`, `syslog` in `adm`, and none in `sudo`, `admin`
+  and `systemd-journal`. For each of the five, `primary group` gives `no account`. `/etc/gshadow`
+  shows no administrator and no member that differs from `/etc/group`'s, and every password field
+  as `locked`;
+- **login shells and usable passwords:** only `root` and `deploy` have a login shell, and both
+  have a usable password. The operator confirms that both accounts have a known purpose, and that
+  the operator set both passwords. The status of revision 16 named one usable password; that
+  record was incomplete;
+- **`syslog` in `adm`:** P7a shows the membership in `/etc/group` and in `/etc/gshadow`.
+  `rsyslog`'s `postinst` holds `adduser syslog adm || true`: a mechanism that could have added
+  it, not evidence that it did. The operator leaves the membership's origin unresolved; it is not
+  presented as established, and it is no entry of the exception register. An entry not yet
+  attributed is INCONCLUSIVE under G6, so G6 cannot pass while it stays so.
+
 **The `systemd-journal` group password:**
-- **state:** `set`, in `/etc/gshadow`. No password field was read, disclosed or recorded;
+- **state:** `set` in the supplementary script's classification (2026-11-17), and `locked` in
+  P7a's (2026-11-19). No password field was read, disclosed or recorded;
+- **the two classifications** (revision 17):
+  - **the source:** the script reads the entry through `getent gshadow`, P7a reads
+    `/etc/gshadow` itself. NSS asks `files` first, so for a group that the file holds both read
+    the same entry (§6, P7a);
+  - **the rules differ:** the script counts a field as no password only if it is empty or exactly
+    `!`, `*` or `x`; P7a counts every field that starts with `!` or `*` as `locked`. So a field
+    such as `!*`, `!!`, or `!` followed by more characters is "set" for the script and `locked`
+    for P7a. Both take the second `:`-separated field, and neither normalizes it;
+  - **one value can give both results:** a field that starts with `!` or `*` and is longer than
+    one character. The script's "set" is not P7a's `set`, and the rules explain the difference
+    between the two results;
+  - **not shown:** that the field did not change between 2026-11-17 and 2026-11-19, since a
+    field that changed between the reads could give the same two results; its exact value; its
+    origin;
 - **origin:** unknown. The operator does not know where it came from;
 - **the operator's decision, 2026-11-17:** consciously accepted; leave the current state
   unchanged for now. No change is requested or authorized;
@@ -3305,12 +3386,10 @@ needs every requirement outside the register met, and the evidence above does no
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1), and only P7a to P7c
    are recorded as run. P3's container list is part of G6's command. A `MISSING:` tool in P10's
    admin check leaves G6 INCONCLUSIVE.
-2. **P7a's own output:**
-   - the operator's confirmation that it printed no `UNREAD:` line, and that each of its
-     `REVIEW:` lines is resolved;
-   - for each `absent:` line about an account, a group or a gshadow entry, `userdb_none`'s
-     confirmation;
-   - every entry attributed, `syslog`'s membership of `adm` among them.
+2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. Revision 17 records
+   the rest that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that
+   needs `userdb_none`, and the operator's confirmation of the accounts with a login shell and
+   their usable passwords.
 3. **P7c's second run:** every `REVIEW:` line outside the register resolved, and every entry
    outside it attributed.
 4. **Listeners:** the attribution of any UDP listener in P7c's listing.
