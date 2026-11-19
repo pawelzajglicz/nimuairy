@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-19: draft for review (revision 21). S6.1, the read-only preflight, has started:
+**Status, 2026-11-19: draft for review (revision 22). S6.1, the read-only preflight, has started:
 P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
 stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
@@ -13,7 +13,11 @@ stack has not started.**
   and the operator reviewed them [USER-REPORTED]; their results are in the preflight record (§6),
   without dates, which are not recorded. On 2026-11-19, P10's admin block ran three times, the
   last time in the root session that then ran P7b again, and P10's `deploy` block ran as `deploy`
-  (revision 19). P9 has partial readings only (§6).
+  (revision 19). After 21:16 UTC that day, P10's two blocks ran again, followed by P7a and P7c in
+  the same session, and P1 to P6 and P8 ran again, as root, in a session whose `date -u` read
+  21:35:11 UTC (revision 22). §5 runs these blocks as `deploy`, apart from P8's UFW line; the
+  preflight record (§6) says what running them as root leaves of each reading. P9 has partial
+  readings only (§6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -32,7 +36,11 @@ stack has not started.**
     - P7a's own output of 2026-11-19 (revision 17): no `UNREAD:` line, no `REVIEW:` line, and no
       `absent:` line about a group or a gshadow entry. `root` and `deploy`, the only accounts with
       a login shell, both have a usable password, which the operator set (revision 17). The record
-      of revision 13 named one.
+      of revision 13 named one;
+    - P7a's run after P10's checks, in their session, on 2026-11-19 (revision 22): the same UID 0
+      account, login shells, NSS sources and group members, and the `systemd-journal` field as
+      `locked`; no `UNREAD:` line, no `REVIEW:` line, and no `absent:` line about a group or a
+      gshadow entry. The operator's review of the keys and logins that it lists is not recorded.
 
     Not attributed: `syslog`'s membership of `adm`. Its origin stays unresolved, and it is no entry
     of the exception register;
@@ -48,20 +56,24 @@ stack has not started.**
     reads but does not check, gave `MODIFIED`. On 2026-11-19 the operator compared the file with
     its package and accepted its risk as E14 (revision 21); its origin stays unresolved (§8, G6's
     review record);
-  - **P7c: run twice; reviewed; entries are open.** Its first run used revision 12's blocks. Its
-    `UNREAD` lines for the templates and for root's user manager came from the two defects. The
-    second run, of 2026-11-17, with revision 13's blocks, showed four templates as `REVIEW`,
-    `container-getty@.service` as `MODIFIED`, and a unit and five drop-ins whose attribution is
-    open. These are entries of G6's exception register (§8). A finding of that run which the
-    register does not name is not excepted. The operator reviewed that run (revision 18): it
-    printed no `UNREAD:` line, and no `REVIEW:` line, `MODIFIED` line or drop-in outside the
-    register. The unit files of four units with drop-ins were attributed by the operator from
+  - **P7c: run three times; reviewed; entries are open.** Its first run used revision 12's
+    blocks. Its `UNREAD` lines for the templates and for root's user manager came from the two
+    defects. The second run, of 2026-11-17, with revision 13's blocks, showed four templates as
+    `REVIEW`, `container-getty@.service` as `MODIFIED`, and a unit and five drop-ins whose
+    attribution is open. These are entries of G6's exception register (§8). A finding of that run
+    which the register does not name is not excepted. The operator reviewed that run (revision
+    18): it printed no `UNREAD:` line, and no `REVIEW:` line, `MODIFIED` line or drop-in outside
+    the register. The unit files of four units with drop-ins were attributed by the operator from
     their content, not verified by dpkg. G6 counts a unit file as its package's only when
-    `pkg_file` verified it, so under G6 these four are not yet attributed (§8, G6's review record).
+    `pkg_file` verified it, so under G6 these four were not yet attributed. Its third run, of
+    2026-11-19, followed P10's checks in their session and showed the same findings, none outside
+    the register. That day, `pkg_file` verified all four files, so G6 now counts them as their
+    packages' (revision 22; §8, G6's review record).
 - **Listeners and containers** [VPS, USER-REPORTED]: the only TCP listener, `sshd`, is
   attributed to the `openssh-server` package and `ssh.socket`. P7c's second run listed no UDP
   socket. The four application containers are attributed to the Compose project `nimuairy` (§8,
-  G6's review record).
+  G6's review record). P3's run of 2026-11-19 listed exactly these four, with `docker ps -a` and
+  no status filter (revision 22).
 - **The gates:** G6 has not been recorded, with any outcome. On 2026-11-17 the operator accepted
   the risk of the open findings E1 to E12 that G6's exception register names, so as to go on
   without waiting for the hosting provider's answer (§8, G6). On 2026-11-19 the operator
@@ -74,16 +86,16 @@ stack has not started.**
   for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
   so far does not show that. G6's review record (§8) lists what is missing:
-  - from the preflight, which G6 follows: P3's confirmation that no other container exists, P9's
-    block for a tunnel candidate, the operator's decision whether P10's admin runs meet its
-    session rule for P7a's and P7c's runs, and the record's verdicts and missing fields;
-  - from P7a, the attribution of `syslog`'s membership of `adm`;
-  - from P7c, four unit files that `pkg_file` has not verified, which G6 therefore does not yet
-    count as their packages'.
+  - from the preflight, which G6 follows: P9's block for a tunnel candidate, and the record's
+    verdicts, dates and missing fields;
+  - from P7a, the attribution of `syslog`'s membership of `adm`, and the operator's review of the
+    keys and logins that its run after P10's checks lists.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
-  E14. S6.1 is not complete, so the order of §4.1 stops before C2.
+  E14. P3's confirmation that no other container exists, P10's session rule for P7a's and P7c's
+  runs, and the four unit files, which revision 21 listed as missing, are recorded in revision 22.
+  S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
 - The operator decisions D1 to D7 (§13.3) are open.
@@ -432,6 +444,59 @@ Revisions:
   - **G6 still has no outcome:** `/etc/crontab` is no longer a STOP finding outside the register,
     but every other gap in G6's review record stands. E14 authorizes no VPS operation and gives no
     consent (§4); C2 is not authorized.
+- **22** (2026-11-19), runs and checks of 2026-11-19 that the operator ran after revision 21, and
+  whose output the operator supplied with addresses, the host and key fingerprints removed
+  [VPS, USER-REPORTED]. No procedure and no criterion changes, no entry of the exception register
+  changes, and no exception is added:
+  - **P1 to P6 and P8 ran again,** as root, in one SSH session whose `date -u` read 21:35:11 UTC.
+    §5 runs P1 to P6, and P8 apart from its UFW line, as `deploy`; this run is recorded as it was,
+    and §5 is unchanged. Where both runs are recorded, the readings agree with the earlier run's
+    (§6, the preflight record):
+    - **P3:** `docker ps -a`, with no status filter, listed exactly the four application
+      containers, running, without a restart or an OOM kill, healthy where they have a health
+      check, with the limits of `compose.prod.yaml`. Revision 18's gap, that no other container
+      was shown, is closed;
+    - **P4:** the contract's own lines ran. `memory.stat` has no `kernel` field, so §10.3 computes
+      kernel memory from its parts, without `vmalloc`, which this kernel lacks, as an [ESTIMATE];
+      every other field the sampler needs is present. The block of `VPS_RESOURCE_BUDGET.md` that
+      P4 runs first is not in the output given. No verdict on P4's items is recorded;
+    - **P8:** `disable_ipv6` 0, `IPV6=yes`, and SSH the only IPv6 listener; UFW as before;
+  - **the preflight record (§6):**
+    - a table for this run, with every value its output gives, and the fields it does not give
+      marked as not recorded;
+    - for each reading, what running as root leaves of it. Host-wide and kernel facts hold for
+      every account. The engine's facts hold for the engine that root's client reached. The Docker
+      client, Compose and the Docker context are root's, and `deploy`'s are not read;
+    - in the earlier table, the fields that this run records point to it;
+    - an `ok / STOP` column in both tables. Each row is not recorded, since the operator gives
+      these;
+  - **P10, P7a and P7c in one session,** after 21:16 UTC, as the operator confirmed: P10's
+    `deploy` block and admin block, then P7a, then P7c. P10's blocks match the contract's text
+    exactly, and so does P7c's, apart from comment lines outside its functions. P10's session rule
+    holds for these runs of P7a and P7c, so for them the operator's decision that revisions 18 and
+    19 left open is not needed (§6, the preflight record);
+  - **P7a's run:** 34 accounts; `root` the only UID 0 account; login shells only for `root` and
+    `deploy`; the group members and NSS sources as before; the `systemd-journal` field `locked`.
+    No `UNREAD:` or `REVIEW:` line, and no `absent:` line about a group or a gshadow entry. One row
+    of the block's echo is garbled; the output is intact, as the operator confirmed. The operator's
+    review of its `key:` lines and of `last`'s logins is not recorded. `syslog`'s membership of
+    `adm` stays unattributed (§8, G6's review record);
+  - **P7c's third run:** no `UNREAD:` line; exactly E3 to E6 as `REVIEW:`, E7's file as the only
+    `MODIFIED` line, and exactly the five drop-ins of E8, E10, E11 and E12; no UDP listener; root's
+    the only user manager. No finding outside the register;
+  - **the four unit files:** the operator ran the existing helper `pkg_file` on the unit file of
+    each unit with drop-ins, as `systemctl show` names it. Each gave its verified line and exited
+    0, so G6 now counts them as their packages'. This is dpkg's integrity check, not a security
+    verification. Their drop-ins stay E8, E10, E11 and E12, unchanged (§8, G6's review record);
+  - **G6's review record (§8):** a part for these runs and checks, and P3's container list. Its
+    list of what G6 lacks drops P3's container list, P10's session rule and the four unit files,
+    and adds the operator's review of the keys and logins of P7a's latest run;
+  - **the status and §5's list of runs** name these runs, and **§14**'s row on the `memory.stat`
+    fields holds P4's reading;
+  - **P9:** unchanged, partial readings only. D2 is open;
+  - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
+    `syslog`'s membership of `adm`, and the operator's review of the keys and logins that P7a's
+    latest run lists stay open. E1 to E14 are unchanged; C2 is not authorized.
 
 ## 1. Purpose and scope
 
@@ -677,10 +742,11 @@ and a resolution that changes state needs its own consent (§11).
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
 - **Of these commands, P1 to P8 and P10 have run on the VPS,** in S6.1: P7a to P7c with P7's
-  helpers, P7a and P7b on 2026-11-17 and again on 2026-11-19, P7c twice, its second run on
-  2026-11-17; P10's admin block three times and its `deploy` block once, on 2026-11-19; P1 to P6
-  and P8 on dates not recorded (revisions 13, 14, 17, 18 and 19). P9 has partial readings only
-  (§6, the preflight record).
+  helpers, P7a on 2026-11-17 and twice on 2026-11-19, P7b on 2026-11-17 and again on 2026-11-19,
+  P7c three times, its second run on 2026-11-17 and its third on 2026-11-19; P10's two blocks on
+  2026-11-19, once in the session of P7a's and P7c's latest runs; P1 to P6 and P8 on dates not
+  recorded, and again on 2026-11-19, as root (revisions 13, 14, 17, 18, 19 and 22). P9 has
+  partial readings only (§6, the preflight record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -2753,31 +2819,34 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18 and 19)
+### Preflight record, S6.1 (revisions 18, 19 and 22)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
-reviewed them; their dates are not recorded. P10 ran on 2026-11-19 (revision 19). These are not the
-earlier readings of §2.3, which stay context only. "Not recorded" marks a field missing from the
-evidence given, not a block that did not run. The operator's `ok` or `STOP` for each row is not
-recorded here. P7 is G6's (§8, G6's review record).
+reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
+(revisions 19 and 22), and P1 to P6 and P8 ran again on 2026-11-19, as root, in a session whose
+`date -u` read 21:35:11 UTC (revision 22, below the table). These are not the earlier readings of
+§2.3, which stay context only. "Not recorded" marks a field missing from the evidence given, not a
+block that did not run. The operator's `ok` or `STOP` is not recorded for any row, in either
+table: the `ok / STOP` column says so row by row, and no reading counts as `ok` until the operator
+records it. P7 is G6's (§8, G6's review record).
 
-| # | Fact | Read | Not recorded |
-|---|---|---|---|
-| P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; systemd 255; LXC; UTC | — |
-| P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — |
-| P2 | Engine, Compose, runc versions | Docker 29.8.2; Compose v5.6.0; runc 1.5.1 | — |
-| P2 | cgroup version and driver | `2/systemd` | — |
-| P2 | `userns` in SecurityOptions; context | User namespaces not enabled; seccomp `builtin`; the cgroup namespace enabled; context `default` | — |
-| P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`, so none configured there; logging driver `json-file` | — |
-| P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU | `memtotal`; `warnings` |
-| P3 | Application containers | Listed and inspected: `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy`, `postgres-nimuairy`. The operator reviewed their status, health, restarts, OOM state and limits | The values; that `docker ps -a` showed no other container, stopped ones included |
-| P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | `MemTotal` 4352 MiB, 3798 MiB available, no swap in use; LXCFS overlays `/proc/meminfo` and `/proc/swaps`. Root cgroup: no finite `memory.max` or `memory.high`, current memory 905416704, no `memory.peak`, the memory events 0; CPU unlimited, cpuset 0, no throttling; PIDs unlimited, 164 current. Disk 45 GB, 7 % used. The host's effective memory limit: UNKNOWN (§2.3); 4352 MiB is what LXCFS shows, not a verified limit | The `memory.stat` field list (§10.3); the controllers; the pressure files; the backend's cgroup files |
-| P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — |
-| P6 | Listeners on the stack's ports | None; SSH is the only listener | — |
-| P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing |
-| P9 | Forwarding for the D2 account(s) | Partial readings only (below) | P9's block for a tunnel candidate; its verdict |
-| P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time |
-| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time; the operator's decision on the session rule for P7a's and P7c's runs |
+| # | Fact | Read | Not recorded | ok / STOP |
+|---|---|---|---|---|
+| P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; systemd 255; LXC; UTC | — | Not recorded |
+| P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — | Not recorded |
+| P2 | Engine, Compose, runc versions | Docker 29.8.2; Compose v5.6.0; runc 1.5.1 | — | Not recorded |
+| P2 | cgroup version and driver | `2/systemd` | — | Not recorded |
+| P2 | `userns` in SecurityOptions; context | User namespaces not enabled; seccomp `builtin`; the cgroup namespace enabled; context `default` | — | Not recorded |
+| P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`, so none configured there; logging driver `json-file` | — | Not recorded |
+| P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU | `memtotal`; `warnings`. The run of revision 22 records them (below) | Not recorded |
+| P3 | Application containers | Listed and inspected: `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy`, `postgres-nimuairy`. The operator reviewed their status, health, restarts, OOM state and limits | The values; that this run's `docker ps -a` showed no other container, stopped ones included. The run of revision 22 shows that (below) | Not recorded |
+| P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | `MemTotal` 4352 MiB, 3798 MiB available, no swap in use; LXCFS overlays `/proc/meminfo` and `/proc/swaps`. Root cgroup: no finite `memory.max` or `memory.high`, current memory 905416704, no `memory.peak`, the memory events 0; CPU unlimited, cpuset 0, no throttling; PIDs unlimited, 164 current. Disk 45 GB, 7 % used. The host's effective memory limit: UNKNOWN (§2.3); 4352 MiB is what LXCFS shows, not a verified limit | The `memory.stat` field list (§10.3); the controllers; the pressure files; the backend's cgroup files. The run of revision 22 records them (below) | Not recorded |
+| P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | Not recorded |
+| P6 | Listeners on the stack's ports | None; SSH is the only listener | — | Not recorded |
+| P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | Not recorded |
+| P9 | Forwarding for the D2 account(s) | Partial readings only (below) | P9's block for a tunnel candidate; its verdict | Not recorded; P9's block has not run |
+| P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time | Not recorded |
+| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session (below) | Not recorded |
 
 - **P9's partial readings** [USER-REPORTED]. They are not P9's block:
   - **2026-11-19, with the operator's own commands:**
@@ -2803,7 +2872,8 @@ recorded here. P7 is G6's (§8, G6's review record).
     - the second, in a session whose `date -u` read 16:59 UTC, was clean;
   - **the operator's decision:** P7a's run of 2026-11-19 and P7c's second run were in other
     sessions. Whether these runs meet P10's session rule for them is the operator's decision. P9's
-    session is still to come.
+    session is still to come. Revision 22 records later runs of P7a and P7c, after P10's checks in
+    their own session, for which no such decision is needed (below).
 - **P10's `deploy` block, 2026-11-19** [USER-REPORTED], run as `deploy` after `su - deploy` from the
   root session: the values in the table.
   - **P10's expectations:** each holds in these values: `deploy` in `docker`, Bash 4 or later as
@@ -2815,6 +2885,65 @@ recorded here. P7 is G6's (§8, G6's review record).
     and V14 (P10);
   - **the earlier PASS:** this run replaces the earlier PASS that the operator reported, of which
     no record is available.
+- **P10, then P7a and P7c, in one session, 2026-11-19** (revision 22) [VPS, USER-REPORTED]. In
+  this order: P10's `deploy` block, its admin block, P7a, P7c. After 21:16 UTC, as the operator
+  confirmed; the exact time is not recorded. Both of P10's blocks match the contract's text
+  exactly:
+  - **`deploy`'s block,** after `su - deploy` from the root session: every value as in the table
+    above, the same as in revision 19's run;
+  - **the admin block:** every tool found, as the admin account and as root through `sudo`; no
+    `MISSING:` and no `UNREAD:` line; `at` and `atq` absent, which is optional;
+  - **P10's session rule** ("in the admin session that runs them") holds for these runs of P7a and
+    P7c. For them, the operator's decision that revisions 18 and 19 left open is not needed. G6's
+    review record holds what these runs showed (§8).
+- **P1 to P6 and P8, again, 2026-11-19** (revision 22) [VPS, USER-REPORTED]. Run as root, in one
+  SSH session, whose `date -u`, P1's first line, read 21:35:11 UTC; P8 ran in the same session, as
+  the operator confirmed. **This differs from §5,** which runs every block without the *admin*
+  label as `deploy`: P1 to P6, and P8 apart from its UFW line. The run is recorded as it was; §5 is
+  unchanged, and what running as root leaves of each reading follows the table. The values below
+  agree with the earlier table's where both are recorded:
+
+  | # | Fact | Read | Not recorded | ok / STOP |
+  |---|---|---|---|---|
+  | P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; `lxc`; systemd 255 (`255.4-1ubuntu8.18`); `Etc/UTC` | — | Not recorded |
+  | P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — | Not recorded |
+  | P2 | Engine, Compose, runc versions | Client and server 29.8.2; Compose v5.6.0; runc 1.5.1 | `deploy`'s client and Compose versions: this run read root's | Not recorded |
+  | P2 | cgroup version and driver | `2/systemd` | — | Not recorded |
+  | P2 | `userns` in SecurityOptions; context | Seccomp `builtin` and `cgroupns`, no `userns`; context `default`, read as root | `deploy`'s context: the context is per account | Not recorded |
+  | P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`; logging driver `json-file` | — | Not recorded |
+  | P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU; `memtotal` 4563402752, that is 4352 MiB; no warnings | — | Not recorded |
+  | P3 | Application containers | `docker ps -a`, with no status filter: exactly four, `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy` and `postgres-nimuairy`, no other container, stopped ones included; the images of G6's review record (§8). All running since 2026-11-12, no restart, no OOM kill; `backend-nimuairy` and `postgres-nimuairy` healthy, the other two without a health check. Memory and PIDs limits: 512 MiB and 256, 1792 MiB and 1024, 128 MiB and 128, 256 MiB and 128, for `postgres`, `backend`, `frontend` and `cloudflared`, as `compose.prod.yaml` sets them | — | Not recorded |
+  | P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | **`memory.stat`:** no `kernel` field. Of its parts, `kernel_stack`, `pagetables`, `percpu`, `slab_reclaimable` and `slab_unreclaimable` are present and `vmalloc` is not; every other field that §10.3's sampler needs is present. **Controllers:** `cpuset cpu io memory hugetlb pids rdma misc`; cgroup2 mounted at `/sys/fs/cgroup`. **Root counters:** `memory.events` and `memory.events.local` all 0; `pids.events` `max 0`. **Root pressure:** CPU `some` avg10/60/300 6.82, 4.34, 3.12 and `full` 3.37, 2.07, 1.39; memory `some` and `full` averages 0.00, totals 11596147 and 8855907 µs. **The backend's cgroup:** its `cpu.*`, `memory.*` and `pids.*` files, among them `memory.oom.group`; no `memory.peak` or `pids.peak` | The block of `VPS_RESOURCE_BUDGET.md` that P4 runs first: not in the output given. A verdict on any of P4's items | Not recorded |
+  | P5 | Stack volumes, networks, containers; the directory | `none_of` printed five `ok` lines; none of the stack images present; `/var/nimuairy-observability`: `No such file or directory` | — | Not recorded |
+  | P6 | Listeners on the stack's ports | `none_of` printed `ok`; the only listener is SSH, on the IPv4 and IPv6 wildcard addresses | — | Not recorded |
+  | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist; `disable_ipv6` 0; `IPV6=yes`. UFW active, logging `low`: deny incoming, allow outgoing, deny routed; the SSH port allowed from anywhere over IPv4 and IPv6, by one rule for any protocol and one for TCP. The only IPv6 listener is SSH | The time of P8's commands | Not recorded |
+
+  - **Without a `kernel` field,** §10.3 computes kernel memory as the sum of the parts present,
+    here without `vmalloc`, and marks it [ESTIMATE] (§10.3).
+  - **What running as root leaves of each reading.** Three kinds: valid for every account, since
+    the reading does not depend on the account; valid for the engine that root's Docker client
+    reached; and valid for root only, with `deploy`'s reading not taken:
+
+    | Readings | Kind | Why |
+    |---|---|---|
+    | P1: time, time zone, kernel, OS, `lxc`, systemd | Every account | Host-wide facts |
+    | P1: `uid_map`, `gid_map` | Every account, under the assumption below | They belong to the user namespace, not to the account. G7 reads them again, as `deploy` |
+    | P2: `daemon.json` | Every account | A host file |
+    | P2: the server's version and `docker info`'s fields; P3; P5's Docker listings; the backend's PID in P4 | The engine root's client reached | Root's client reached an engine through root's context, `default`. That `deploy`'s client reaches the same engine is not shown: P10, as `deploy`, shows only that an engine answers, with 29.8.2, and that no `DOCKER_*` variable is set |
+    | P2: the client's version, Compose's version, the context | Root only; `deploy`'s not read | Each depends on the account: the client on its `PATH`, Compose, a CLI plugin, also on the account's own Docker configuration directory, and the context on that account's Docker configuration. So P2's expectation, `default` "so the commands reach the local engine", is not verified for `deploy`, who runs the commands (§5) |
+    | P4: the root cgroup's files, the backend's cgroup files | Every account | Kernel files, which every account reads alike |
+    | P4: `/proc/self/mounts` | Every account, under the assumption below | It belongs to the mount namespace |
+    | P5: `/var/nimuairy-observability` | Every account | A path that root cannot find exists for no account |
+    | P6: `ss -Hltn` | Every account, under the assumption below | The network namespace's listeners, without process names |
+    | P8 | Every account, under the assumption below | The network namespace's addresses, routes, setting and listeners, and a host file. Its UFW line, which needs privilege, is the *admin* line that §5 gives it |
+
+    - **The assumption:** `deploy`'s sessions run in the same user, mount and network namespaces as
+      root's. Nothing read here shows otherwise, and nothing reads it for `deploy`.
+    - **The earlier run:** its account is not recorded, so its readings of the second and third
+      kinds are not known to be `deploy`'s either.
+    - **Not settled by the contract:** whether `deploy`'s Docker context and Compose need a reading
+      of their own before S6.2. §5 gives `deploy` the commands, and neither run read them as
+      `deploy`; that is the operator's decision. They stay not recorded meanwhile.
 
 ## 7. S6.2 — Delivering the files and host configuration
 
@@ -3421,7 +3550,8 @@ E13, below. Revision 17 adds P7a's own output of 2026-11-19, and compares the tw
 of the `systemd-journal` password field. Revision 18 adds the operator's review of P7c's second
 run. Revision 19 adds P7b's run of 2026-11-19, E2's scope and `/etc/crontab`. Revision 20 adds the
 operator's decision on E2's scope. Revision 21 adds the operator's comparison of `/etc/crontab` with
-its package, and E14.
+its package, and E14. Revision 22 adds P3's container list of 2026-11-19, and P7a's and P7c's runs
+after P10's checks, with the package checks of four unit files.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -3565,12 +3695,11 @@ reviewed P7a's own listing, which stays with the operator (§5):
   of the repository's `compose.yaml` and `compose.prod.yaml` [CONFIG]. The application's two
   images carry the `APP_SHA` that S4.4 recorded from the VPS's `.env`
   ([S4.4 §10.3](S4.4_DESIGN_CONTRACT.md#103-local-evidence-docker-desktop));
-- **not shown:**
-  - the images' integrity or provenance. Compose's labels are metadata that any Docker client
-    can set, and no digest or signature was checked;
-  - whether any other container exists. P3 ran (§6, the preflight record of revision 18), but
-    that its `docker ps -a` listing showed no other container, stopped ones included, is not
-    recorded.
+- **no other container** (revision 22): P3's run of 2026-11-19, 21:35:11 UTC, listed exactly these
+  four with `docker ps -a` and no status filter, so stopped ones included (§6, the preflight
+  record). P3's earlier run did not record that;
+- **not shown:** the images' integrity or provenance. Compose's labels are metadata that any
+  Docker client can set, and no digest or signature was checked.
 
 **P7c's second run, 2026-11-17** [VPS, USER-REPORTED], reviewed by the operator, recorded in
 revision 18. The output that the operator pasted into a session on 2026-11-19 is that of this run,
@@ -3585,8 +3714,9 @@ not of a new run:
   P7c does not run `pkg_file` on a unit with drop-ins, and shows its whole definition instead (§6,
   `unit_review`). The operator attributed these four files from their content to the Docker and
   systemd packages. dpkg did not verify them. G6 counts a unit file as its package's only when
-  `pkg_file` verified it (G6, "Expected (PASS)"), so under G6 these four are not yet attributed to
-  their packages, whatever their content shows (below, item 4);
+  `pkg_file` verified it (G6, "Expected (PASS)"), so under G6 these four were not yet attributed
+  to their packages, whatever their content shows. Revision 22 records `pkg_file`'s verification
+  of all four (below);
 - **the sockets of E3 to E6:** attributed to their packages, `apport`, `lxd-installer` and
   `systemd`;
 - **every other unit file** of the system manager and of root's user manager, outside the
@@ -3685,38 +3815,104 @@ session in which P10's admin block had just run clean (§6, the preflight record
   - E14 changes none of G6's criteria. It authorizes neither C2 nor any other VPS operation, and
     gives no consent (§4).
 
+**P7a's and P7c's runs after P10's checks, 2026-11-19** [VPS, USER-REPORTED], recorded in
+revision 22. In one session, after 21:16 UTC, as the operator confirmed, and after P10's `deploy`
+block and its admin block (§6, the preflight record), so P10's session rule holds for both runs.
+The operator supplied their output with addresses, the host and key fingerprints removed; the
+listings themselves are not recorded here (§5):
+- **P7a:**
+  - **the markers:** no `UNREAD:` line, also in the helpers' `context:` and `nss:` lines; no
+    `REVIEW:` line; the only `absent:` line is about 32 accounts without an authorized-keys file,
+    so `userdb_none` had nothing to confirm;
+  - **accounts:** 34 in NSS's reading; `root` the only account with UID 0; `root` and `deploy` the
+    only accounts with a login shell, and the only ones with a usable password; both have an
+    authorized-keys file, `root`'s with two keys and `deploy`'s with one, which has `restrict`;
+  - **keys and logins, not yet reviewed in the record:** the operator's review of these `key:`
+    lines, by their fingerprints and options, and of the logins that `last` lists (G6, items 3 and
+    6) is not recorded for this run. It is not inferred from the review of 2026-11-17 (revision
+    13), which covered that day's run (below, item 2);
+  - **NSS's sources:** `files systemd` for `passwd`, `group` and `gshadow`, accepted by
+    `nss_sources`, as before;
+  - **the sudo rules and the groups:** the rules of `root`, `%admin` and `%sudo`, and nothing else
+    from `/etc/sudoers.d`. `deploy` in `docker`, `syslog` in `adm`, no member in `sudo`, `admin`
+    and `systemd-journal`, and no account whose primary group is one of the five. `/etc/gshadow`
+    shows no administrator and no member that differs from `/etc/group`'s. `deploy`'s membership
+    of `users`, and that it has no passwordless sudo, are P10's readings, not P7a's;
+  - **the `systemd-journal` password field:** `locked`, as in P7a's earlier run of 2026-11-19,
+    and so are the other four groups'. E13 is unchanged;
+  - **the echo:** one row of the block's echo is garbled, made of fragments of its last lines drawn
+    over one another; the operator confirmed that the terminal's output was intact. The visible
+    rest of the echo matches the contract's text, and the output runs in the block's order through
+    `last`. P7a is not taken as failed for it;
+  - **`syslog` in `adm`:** still not attributed. This output adds no evidence of its origin. No
+    further investigation of it has run, and no entry of the register is added for it;
+- **P7c, its third run.** Its block matches the contract's text, apart from comment lines outside
+  its functions:
+  - **the markers:** no `UNREAD:` line. Exactly four `REVIEW:` lines, the templates of E3 to E6,
+    each started by its socket. Exactly one `MODIFIED` line, E7's
+    `/usr/lib/systemd/system/container-getty@.service`;
+  - **the definitions shown in full:** `container-getty@1.service`, which is E7's file alone;
+    `docker.service`, `systemd-journald.service`, `systemd-logind.service` and `user@0.service`,
+    with exactly the five drop-ins of E8, E10, E11 and E12; and `earlyoom.service`, E9, whose unit
+    file is from no package;
+  - **every other unit file** of the system manager and of root's user manager: verified by
+    `pkg_file`;
+  - **user managers:** no user lingers; root's is the only one, and it was reached;
+  - **listeners:** TCP only `sshd`, with `ssh.socket`, over IPv4 and IPv6; the UDP listing empty;
+  - **no finding outside the register.** The register covers only E3 to E6's four templates, E7,
+    E9 and the five drop-ins of E8, E10, E11 and E12, which it does not widen;
+- **the four unit files, checked with `pkg_file`** on 2026-11-19; the time is not recorded. The
+  operator's loop asked `systemctl show -p FragmentPath` for each unit and passed the path to the
+  loaded helper, which `declare -F` confirmed. For each, the helper printed its verified line, from
+  its package, with the MD5 sum recorded (`md5sums`) and `dpkg --verify` reporting no difference,
+  and exited 0. That line prints only when `dpkg --audit` printed nothing as well (§6, `pkg_file`).
+  The helper's text is not in the output, as for P7's other runs; its line matches the contract's
+  word for word:
+
+  | Unit | File | Package |
+  |---|---|---|
+  | `docker.service` | `/usr/lib/systemd/system/docker.service` | `docker-ce` |
+  | `systemd-journald.service` | `/usr/lib/systemd/system/systemd-journald.service` | `systemd` |
+  | `systemd-logind.service` | `/usr/lib/systemd/system/systemd-logind.service` | `systemd` |
+  | `user@0.service` | `/usr/lib/systemd/system/user@.service` | `systemd` |
+
+  G6 now counts these four files as their packages' (G6, "Expected (PASS)"). This is dpkg's
+  integrity check, not a security verification. It covers the unit files only; their drop-ins
+  stay E8, E10, E11 and E12, unchanged and unresolved.
+
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
 needs every requirement outside the register met, and the evidence above does not show that.
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
-   run and been reviewed (§6, the preflight record of revision 18), but:
-   - **P3:** that its `docker ps -a` listing showed no container other than the four, stopped
-     ones included, is not recorded. P3's container list is part of G6's command;
-   - **the preflight record:** it lacks the operator's `ok` or `STOP` per row, the runs' dates,
-     and the fields that it marks as not recorded;
-   - **P9:** its block has not run for a tunnel candidate;
-   - **P10:** its `deploy` block and its admin block ran clean on 2026-11-19 (revision 19).
-     Whether a run in another session meets P10's session rule for P7a's run of 2026-11-19 and
-     P7c's second run is the operator's decision. A `MISSING:` tool in P10's admin check leaves G6
-     INCONCLUSIVE.
+   run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
+   - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row, the dates of
+     P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded. Among them
+     are the part of P4 that runs `VPS_RESOURCE_BUDGET.md`'s block, in the run of 2026-11-19, and
+     `deploy`'s Docker context, client and Compose, which that run, as root, did not read;
+   - **P9:** its block has not run for a tunnel candidate. D2 is open.
+
+   Revision 22 records the rest that revision 21 listed here. P3's run of 2026-11-19 showed no
+   container other than the four. P7a's and P7c's latest runs followed P10's checks in their own
+   session, and those checks reported no `MISSING:` tool, so for these runs P10's session rule
+   needs no decision. A `MISSING:` tool in P10's admin check leaves G6 INCONCLUSIVE.
 2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. An entry not yet
    attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. Revision 17 records the rest
    that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
    `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
-   usable passwords.
+   usable passwords. P7a's run after P10's checks (revision 22) shows the same markers. The
+   operator's review of its `key:` lines and of `last`'s logins (G6, items 3 and 6) is not
+   recorded; revision 13 records that review for the run of 2026-11-17.
 3. **P7b:** `/etc/crontab`, which revision 19 listed here as a STOP finding outside the register,
    is E14 (revision 21); its origin stays unresolved (above). Revision 20 records E2's scope: both
    `sysstat` files, which E2 now names. Revision 19 records the rest: P7b's run of 2026-11-19
    printed no `UNREAD:` and no `REVIEW:` line, and every other entry of `/etc/cron.d` and of the
    periodic directories is a verified package file or the application's backup entry; there is no
    user crontab, and `at` is not installed.
-4. **P7c's second run:** the unit files of `docker.service`, `systemd-journald.service`,
-   `systemd-logind.service` and `user@.service` (above). G6 counts a unit file as its package's
-   only when `pkg_file` verified it, and `pkg_file` did not check these four, so they are not yet
-   attributed, which is INCONCLUSIVE. The operator's attribution from their content does not
-   change that. `pkg_file`, the existing helper, run on each of the four files, could close it;
-   P7c's block does not do that, and no such check has run. Revision 18 records the rest that
-   revision 15 listed: every `REVIEW:` line is one of E3 to E6, every other entry is attributed,
-   and P7c listed no UDP listener.
+4. **P7c:** the unit files of `docker.service`, `systemd-journald.service`,
+   `systemd-logind.service` and `user@.service`, which revision 21 listed here, are verified by
+   `pkg_file` (revision 22, above), so G6 counts them as their packages'. P7c's third run, after
+   P10's checks, shows what revision 18 records for the second: every `REVIEW:` line one of E3 to
+   E6, E7's the only `MODIFIED` line, exactly the register's five drop-ins, no UDP listener, and
+   root's the only user manager.
 
 Revision 15 also listed a decision on the `systemd-journal` password that G6 accepts, or the
 operator's judgement on G6's STOP. Revision 16 records both, as E13 of the exception register; the
@@ -5107,7 +5303,7 @@ Accepted together with this contract:
 | Docker's log rotation; disk growth | Guide, budget | D5, V14, R3 | Open |
 | The stack's limits and use on the VPS | Guide, budget | §10.3 | Open |
 | §8 of S4.4 for the stack's containers (`memory.oom.group`, `Delegate`, `OOMPolicy`) | S4.4 §8 | R1 | Open |
-| The `memory.stat` fields of the VPS's kernel | Budget | P4; the sampler's header | Open |
+| The `memory.stat` fields of the VPS's kernel | Budget | P4; the sampler's header | Read by P4 on 2026-11-19 (§6, the preflight record): no `kernel` field, and of its parts no `vmalloc`, so kernel memory is an [ESTIMATE]. Every other field the sampler needs is present |
 | The VPS's awk runs the readout correctly | This contract | P10, the self-test (§10.3) | Open. P10 read GNU Awk 5.2.1 on 2026-11-19. Local runs on gawk and a newer mawk are no proof for the VPS's build |
 | cgroup v2 with Docker's `systemd` driver, systemd scopes for the containers | S4.4 §10.4 [VPS] | G12 | Read for the application in S4.4.4; open for the stack |
 | How LXCFS computes `MemAvailable` inside the LXC | Budget | Not settled by S6 | Unknown; G13 and M5 use it only next to the cgroup counters |
