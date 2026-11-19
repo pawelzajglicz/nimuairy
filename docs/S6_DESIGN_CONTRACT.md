@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-19: draft for review (revision 20). S6.1, the read-only preflight, has started:
+**Status, 2026-11-19: draft for review (revision 21). S6.1, the read-only preflight, has started:
 P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
 stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
@@ -45,8 +45,9 @@ stack has not started.**
     `/etc/cron.d/e2scrub_all`, `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat`; the run of
     2026-11-17 had shown both `sysstat` files as `MODIFIED` too. On 2026-11-19 the operator
     explicitly accepted that E2 covers both (revision 20). `pkg_file` on `/etc/crontab`, which P7b
-    reads but does not check, gave `MODIFIED`: a finding outside the register (§8, G6's review
-    record);
+    reads but does not check, gave `MODIFIED`. On 2026-11-19 the operator compared the file with
+    its package and accepted its risk as E14 (revision 21); its origin stays unresolved (§8, G6's
+    review record);
   - **P7c: run twice; reviewed; entries are open.** Its first run used revision 12's blocks. Its
     `UNREAD` lines for the templates and for root's user manager came from the two defects. The
     second run, of 2026-11-17, with revision 13's blocks, showed four templates as `REVIEW`,
@@ -66,23 +67,23 @@ stack has not started.**
   without waiting for the hosting provider's answer (§8, G6). On 2026-11-19 the operator
   separately accepted that of E13, the password field of the `systemd-journal` group, `set` as the
   supplementary script classified it on 2026-11-17, whose origin is unknown. The same day, the
-  operator widened E2 to both `sysstat` files that P7b reports as `MODIFIED` (revision 20). They
-  stay unresolved.
+  operator widened E2 to both `sysstat` files that P7b reports as `MODIFIED` (revision 20), and
+  separately accepted the risk of E14, `/etc/crontab`, a `MODIFIED` package file, with the content
+  that its comparison with the package showed (revision 21). They stay unresolved.
   P7a's reading of 2026-11-19 shows E13's field as `locked`, which raises none of G6's conditions
   for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
-  so far does not show that: a finding that G6 classifies as STOP is open outside the register,
-  `/etc/crontab`, a `MODIFIED` package file. G6's review record (§8) lists what is missing:
+  so far does not show that. G6's review record (§8) lists what is missing:
   - from the preflight, which G6 follows: P3's confirmation that no other container exists, P9's
     block for a tunnel candidate, the operator's decision whether P10's admin runs meet its
     session rule for P7a's and P7c's runs, and the record's verdicts and missing fields;
   - from P7a, the attribution of `syslog`'s membership of `adm`;
-  - from P7b, `/etc/crontab`;
   - from P7c, four unit files that `pkg_file` has not verified, which G6 therefore does not yet
     count as their packages'.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
-  recorded as E13. S6.1 is not complete, so the order of §4.1 stops before C2.
+  recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
+  E14. S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
 - The operator decisions D1 to D7 (§13.3) are open.
@@ -413,6 +414,24 @@ Revisions:
     and usable passwords come from the run of 2026-11-19 (revision 17);
   - **G6 still has no outcome:** `/etc/crontab` stays a STOP finding outside the register, and
     every other gap in G6's review record stands. C2 is not authorized.
+- **21** (2026-11-19), the operator's comparison of `/etc/crontab` with its package, and the
+  explicit acceptance of one more G6 finding [VPS, USER-REPORTED]. No procedure and no criterion
+  changes:
+  - **the comparison:** `/etc/crontab` against the file of `cron-daemon-common` 3.0pl1-184ubuntu2,
+    the installed version, taken from its package. Only the minute fields of the four `run-parts`
+    lines differ (§8, G6's review record);
+  - **E14**, a new entry of G6's exception register (§8): `/etc/crontab`, a `MODIFIED` package
+    file. Without the exception it is STOP under G6. The operator accepted its risk on 2026-11-19,
+    separately from E1 to E13, and leaves the file unchanged;
+  - **a narrow exception:** this file only, with the content the comparison showed, bound by its
+    SHA-256. Other content is an ordinary finding of G6. G6's criteria, its other STOP and
+    INCONCLUSIVE conditions, and E1 to E13 are unchanged;
+  - **unresolved:** when, how, by whom and why the file was changed. Its timestamps are recorded as
+    observed; they do not date the original change, and no party is attributed (§8, G6's review
+    record). The change is not taken as verified or trusted;
+  - **G6 still has no outcome:** `/etc/crontab` is no longer a STOP finding outside the register,
+    but every other gap in G6's review record stands. E14 authorizes no VPS operation and gives no
+    consent (§4); C2 is not authorized.
 
 ## 1. Purpose and scope
 
@@ -3281,11 +3300,11 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     does not mean that any of them is verified, trusted or resolved. Each keeps the classification
     that the register records, and U8 stays open for them (§14);
   - **what it cannot do:** waive any other finding. The register covers each entry as P7b's run
-    and P7c's second run showed it, and E13 as the operator's supplementary read-only script and
-    G6's review record showed it. A finding it does not name is an ordinary finding of G6, also a
-    further file or drop-in of a unit it names, and an INCONCLUSIVE or STOP finding of that kind
-    blocks as above. Adding an entry needs a new revision of this contract, with the operator's
-    acceptance;
+    and P7c's second run showed it, E13 as the operator's supplementary read-only script and
+    G6's review record showed it, and E14 as the operator's comparison of 2026-11-19 showed it. A
+    finding it does not name is an ordinary finding of G6, also a further file or drop-in of a
+    unit it names, and an INCONCLUSIVE or STOP finding of that kind blocks as above. Adding an
+    entry needs a new revision of this contract, with the operator's acceptance;
   - **E13, the one group password excepted** (revision 16):
     - **what it excepts:** only the STOP that G6 gives the password field of the
       `systemd-journal` group, as the supplementary script classified it on 2026-11-17 (`set`),
@@ -3342,6 +3361,12 @@ P7b's saved output of 2026-11-17 and its run of 2026-11-19 both show them. The w
 conscious. E2's classification, STOP under G6 without the register, and its status, unresolved,
 are unchanged, and no other entry changes.
 
+**E14: accepted by the operator on 2026-11-19, separately** (revision 21) [USER-REPORTED]. The
+operator accepts the risk of exactly one finding: `/etc/crontab`, which `pkg_file` gives as
+`MODIFIED`, with the content that the comparison of 2026-11-19 showed. The operator leaves the file
+unchanged. This acceptance applies to E14's finding only; E1 to E13 keep their acceptance and
+their status.
+
 | # | Finding | From | Classification, as read | Under G6 as of revision 13, without this register | Status now | Known | Not known |
 |---|---|---|---|---|---|---|---|
 | E1 | `e2scrub_all` | P7b | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; unresolved | `pkg_file` reports the package file as `MODIFIED` | Who changed it, when, what and why. The modification is not explained or verified |
@@ -3357,6 +3382,7 @@ are unchanged, and no other entry changes.
 | E11 | `systemd-logind.service`: its drop-in `dbus.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | The drop-in's name | Its origin and purpose |
 | E12 | Two drop-ins that apply to `user@0.service`, and only these two files: `/usr/lib/systemd/system/user@0.service.d/10-login-barrier.conf` and `/usr/lib/systemd/system/user@.service.d/timeout.conf` | P7c, second run | Entries whose attribution is open | INCONCLUSIVE: entries not yet attributed; STOP if the operator considers their origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | Their paths, as P7c showed them | Their origin and purpose; whether a package ships them unchanged, since P7c checks no drop-in with `pkg_file`. No other drop-in of `user@0.service` or `user@.service`, now or later, is covered |
 | E13 | The `systemd-journal` group: its password field, which the supplementary script classified as `set`, and whose origin is unknown | Operator's supplementary read-only script; G6's review record | `set` in the supplementary script's classification (2026-11-17, through `getent gshadow`); `locked` in P7a's (2026-11-19, `/etc/gshadow`). The two rules differ (G6's review record). Origin unknown | STOP: a set group password whose origin is unknown; nobody known to the operator is identified as having set it | Excepted, accepted by the operator on 2026-11-19; unresolved. P7a's reading of 2026-11-19 (`locked`) raises no G6 condition for a `set` group password. The historical STOP recorded in the previous column is not raised by this reading | The script found the field neither empty nor exactly `!`, `*` or `x`; P7a found that it starts with `!` or `*`. The operator consciously accepts leaving the current state unchanged | Its exact value, and whether it changed between the two reads. Who set it, when and why, and who knows its value. Its origin is not established |
+| E14 | `/etc/crontab`, with SHA-256 `acd4e3e13c57d9745416c2fd8e13b6f3090cc3e20938a76da8dd07754130a1c0` | The operator's package check and comparison, 2026-11-19; G6's review record | `MODIFIED` (`pkg_file`; package `cron-daemon-common`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-19; unresolved | Against the package's file of the installed version, whose MD5 sum dpkg's database records, only the minute fields of the four `run-parts` lines differ; every other field and line is the package's. Its mtime is 2026-10-02 22:52:11 UTC, within 0.25 ms of the mtimes of `/etc/cron.d/sysstat` and `/etc/cron.d/e2scrub_all`; an mtime does not date the original change | When, how, by whom and why it was changed. No party is attributed, and a change by hand is not excluded |
 
 Nothing in this register describes an entry as malicious or untrusted, and nothing in it marks
 one as verified because its name or apparent purpose looks familiar.
@@ -3394,7 +3420,8 @@ exception register, and it is not G6's outcome. Revision 16 adds the operator's 
 E13, below. Revision 17 adds P7a's own output of 2026-11-19, and compares the two classifications
 of the `systemd-journal` password field. Revision 18 adds the operator's review of P7c's second
 run. Revision 19 adds P7b's run of 2026-11-19, E2's scope and `/etc/crontab`. Revision 20 adds the
-operator's decision on E2's scope.
+operator's decision on E2's scope. Revision 21 adds the operator's comparison of `/etc/crontab` with
+its package, and E14.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -3608,20 +3635,58 @@ session in which P10's admin block had just run clean (§6, the preflight record
 - **what it does not do:** explain or verify either modification. Who changed the files, when,
   what and why stay unknown, and E2 stays unresolved.
 
-**`/etc/crontab`** (revision 19) [VPS, USER-REPORTED]:
+**`/etc/crontab`** (revisions 19 and 21) [VPS, USER-REPORTED]:
 - **the check:** P7b reads its lines but does not check the file with `pkg_file`. In the root
   session of P7b's run of 2026-11-19, the operator ran the existing helper on it. It printed
   `MODIFIED: /etc/crontab: package cron-daemon-common`, and `pkg_file` exited 2;
-- **under G6:** a `MODIFIED` package file is STOP, as revision 14 classified E1 and E2, and it
-  cannot count as its package's (G6, "Expected (PASS)"). `/etc/crontab` is no entry of the
-  register. So it is an open STOP finding outside the register, and G6's next action for STOP
-  applies to it (G6, "Next allowed action");
-- **not known:** what changed in it, who changed it, when and why. Nothing here says whether the
-  change is wanted.
+- **under G6, as revision 19 recorded it:** a `MODIFIED` package file is STOP, as revision 14
+  classified E1 and E2, and it cannot count as its package's (G6, "Expected (PASS)").
+  `/etc/crontab` is no entry of the register. So it is an open STOP finding outside the register,
+  and G6's next action for STOP applies to it (G6, "Next allowed action");
+- **not known, as revision 19 recorded it:** what changed in it, who changed it, when and why.
+  Nothing here says whether the change is wanted;
+- **the comparison, 2026-11-19** (revision 21), the operator's read-only reads as root:
+  - **the reference:** `cron-daemon-common` 3.0pl1-184ubuntu2, the installed version and the only
+    one that apt's sources offer, downloaded with `apt-get download`, which checks the package
+    against the archive's signed index. Its `/etc/crontab` has the MD5 sum that dpkg's database
+    records for the conffile, so two independent sources agree. `dpkg --verify` gives
+    `??5?????? c` for the file;
+  - **the difference:** only the minute fields of the four `run-parts` lines, hourly, daily,
+    weekly and monthly. Their hours and days, the user `root`, the commands, `SHELL`, `PATH` and
+    the comments are the package's, and `cat -A` shows no hidden character. `anacron` is not
+    installed, so all four lines are in effect;
+  - **the content:** its SHA-256, which E14 records in full;
+  - **the mtimes** [VPS]: `/etc/crontab`'s is 2026-10-02 22:52:11 UTC. Those of
+    `/etc/cron.d/sysstat` and `/etc/cron.d/e2scrub_all` lie within 0.25 ms of it; `/etc/vzdump`'s
+    is 8 s earlier, those of the host's current SSH keys 0.35 s later, and `/etc/machine-id`'s 7 s
+    later. The operator's welcome e-mail arrived at 01:21 CEST, 23:21 UTC [USER-REPORTED];
+  - **the current inode** [VPS]: `/etc/crontab`'s birth and change time is 2026-11-10 22:34:28
+    UTC. 958 of the 962 regular files in `/etc` have a birth time of 22:34 or 22:35 that day. The
+    operator upgraded the plan at about 23:30 CET, 22:30 UTC [USER-REPORTED];
+  - **the logs:** the searches of `dpkg.log` for a conffile decision about `/etc/crontab` or an
+    installation of `cron-daemon-common`, of `term.log`, and of the maintainer scripts printed
+    nothing, but ran without their exit status, so they do not show that nothing matched.
+    `dpkg.log`'s oldest entry is of 2026-06-26. The shell history of `root` and `deploy` shows only
+    reads of the file;
+  - **what the timestamps suggest** [inference]: the birth times fit a bulk copy or restoration of
+    `/etc` during the upgrade that kept the files' mtimes; they do not show how the upgrade moved
+    the files. The close mtimes of the three cron files fit their being written or stamped
+    together. An mtime records the last write or the last time it was set, which a copy can keep
+    and a person or a tool can set, so it does not date the original change of the content;
+  - **not known:** when the content of `/etc/crontab` was changed, by what mechanism, by whom and
+    why. A change by hand is not excluded, and no party is attributed, neither the provider nor
+    the operator. None of this changes E1 or E2;
+- **the operator's acceptance, 2026-11-19** (revision 21) [USER-REPORTED]:
+  - the operator accepts the risk of E14 in the register's wording, bound to its SHA-256, and
+    leaves the file unchanged. The acceptance covers only the file's present content;
+  - **what stays unresolved:** the origin of the four changed minutes, and the person or
+    mechanism that made the change. E14 does not count the finding as resolved; it excepts it
+    (G6, PASS WITH RECORDED EXCEPTIONS);
+  - E14 changes none of G6's criteria. It authorizes neither C2 nor any other VPS operation, and
+    gives no consent (§4).
 
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
-needs every requirement outside the register met, and the evidence above does not show that. A
-finding that G6 classifies as STOP is open outside the register: `/etc/crontab` (item 3).
+needs every requirement outside the register met, and the evidence above does not show that.
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
    run and been reviewed (§6, the preflight record of revision 18), but:
    - **P3:** that its `docker ps -a` listing showed no container other than the four, stopped
@@ -3638,12 +3703,12 @@ finding that G6 classifies as STOP is open outside the register: `/etc/crontab` 
    that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
    `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
    usable passwords.
-3. **P7b:** `/etc/crontab`, a `MODIFIED` package file outside the register, STOP under G6
-   (above). Revision 20 records E2's scope: both `sysstat` files, which E2 now names. Revision 19
-   records the rest: P7b's run of 2026-11-19 printed no `UNREAD:` and no `REVIEW:`
-   line, and every other entry of `/etc/cron.d` and of the periodic directories is a verified
-   package file or the application's backup entry; there is no user crontab, and `at` is not
-   installed.
+3. **P7b:** `/etc/crontab`, which revision 19 listed here as a STOP finding outside the register,
+   is E14 (revision 21); its origin stays unresolved (above). Revision 20 records E2's scope: both
+   `sysstat` files, which E2 now names. Revision 19 records the rest: P7b's run of 2026-11-19
+   printed no `UNREAD:` and no `REVIEW:` line, and every other entry of `/etc/cron.d` and of the
+   periodic directories is a verified package file or the application's backup entry; there is no
+   user crontab, and `at` is not installed.
 4. **P7c's second run:** the unit files of `docker.service`, `systemd-journald.service`,
    `systemd-logind.service` and `user@.service` (above). G6 counts a unit file as its package's
    only when `pkg_file` verified it, and `pkg_file` did not check these four, so they are not yet
@@ -5107,11 +5172,10 @@ Accepted together with this contract:
 ## 17. Acceptance checklist
 
 S6.1, the read-only preflight, has started: P1 to P8 and P10 have run, and P9 has partial readings
-only. The review is not complete (the status at the top), and a finding that G6 classifies as STOP
-is open outside its register (§8, G6's review record). G6 has not been recorded; the operator
-has accepted its exception register, E1 to E12 on 2026-11-17, and E13 and E2's widened scope on
-2026-11-19 (§8, G6). G6's review record (§8) lists what G6 still lacks outside the register. The
-deployment of the observability stack has not started. Every item is open.
+only. The review is not complete (the status at the top). G6 has not been recorded; the operator
+has accepted its exception register, E1 to E12 on 2026-11-17, and E13, E2's widened scope and E14
+on 2026-11-19 (§8, G6). G6's review record (§8) lists what G6 still lacks outside the register.
+The deployment of the observability stack has not started. Every item is open.
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
