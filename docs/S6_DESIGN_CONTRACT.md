@@ -1,20 +1,26 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-19: draft for review (revision 17). S6.1, the read-only preflight, has started:
-P7a, P7b and P7c have run on the VPS. The deployment of the observability stack has not started.**
+**Status, 2026-11-19: draft for review (revision 20). S6.1, the read-only preflight, has started:
+P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
+stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
   consent at the point §4 names. Accepting or merging the contract is not such a consent.
 - **S6.1 has started:** P7a, P7b and P7c ran on the VPS, read-only, with P7's helpers. P7c's first
   run found two defects of its procedure, and four read-only diagnostics followed. Revision 13
-  corrects both (§6). P7c then ran again, with revision 13's blocks.
+  corrects both (§6). P7c then ran again, with revision 13's blocks. P1 to P6 and P8 have run too,
+  and the operator reviewed them [USER-REPORTED]; their results are in the preflight record (§6),
+  without dates, which are not recorded. On 2026-11-19, P10's admin block ran three times, the
+  last time in the root session that then ran P7b again, and P10's `deploy` block ran as `deploy`
+  (revision 19). P9 has partial readings only (§6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
-  - **P7a: run and reviewed; one entry is not attributed.** The operator confirmed that the SSH
-    keys are trusted, the recent logins are recognized, `deploy`'s access to Docker is intended,
-    the sudo rules are verified and NSS's sources are complete. The operator then went on to P7b.
+  - **P7a: run and reviewed; one entry is not attributed.** In the review of P7a's run of
+    2026-11-17 (revision 13), the operator confirmed that the SSH keys are trusted, the recent
+    logins are recognized, `deploy`'s access to Docker is intended, the sudo rules are verified and
+    NSS's sources are complete. The operator then went on to P7b.
     Further read-only findings followed (§8, G6's review record):
     - the accounts with UID 0 and NSS's sources;
     - a supplementary script's summary of the groups and `/etc/gshadow`, which is not P7a's
@@ -25,39 +31,55 @@ P7a, P7b and P7c have run on the VPS. The deployment of the observability stack 
       2026-11-19 accepted its risk as E13 of G6's exception register (§8);
     - P7a's own output of 2026-11-19 (revision 17): no `UNREAD:` line, no `REVIEW:` line, and no
       `absent:` line about a group or a gshadow entry. `root` and `deploy`, the only accounts with
-      a login shell, both have a usable password, which the operator set. The earlier record named
-      one.
+      a login shell, both have a usable password, which the operator set (revision 17). The record
+      of revision 13 named one.
 
     Not attributed: `syslog`'s membership of `adm`. Its origin stays unresolved, and it is no entry
     of the exception register;
-  - **P7b: run and reviewed; two entries are open.** It printed no `UNREAD:` and no `STOP`. The
-    job `app-backup` was recognized as the application's backup, `nimuairy-backup`
-    ([README, Database backups](../README.md#database-backups)). `pkg_file` gave `MODIFIED` for
-    `e2scrub_all` and for `sysstat`. Neither modification is explained or verified: both stay
-    open, as entries of G6's exception register (§8);
-  - **P7c: run twice; entries are open.** Its first run used revision 12's blocks. Its `UNREAD`
-    lines for the templates and for root's user manager came from the two defects. The second
-    run, with revision 13's blocks, showed four templates as `REVIEW`,
+  - **P7b: run twice and reviewed; findings are open.** Its first run, of 2026-11-17, printed no
+    `UNREAD:` and no `STOP`. The job `app-backup` was recognized as the application's backup,
+    `nimuairy-backup` ([README, Database backups](../README.md#database-backups)). `pkg_file` gave
+    `MODIFIED` for `e2scrub_all` and for `sysstat`'s files. None of these modifications is
+    explained or verified: they stay open, as E1 and E2 of G6's exception register (§8). Its run
+    of 2026-11-19 (revision 19) printed no `UNREAD:` and no `REVIEW:` line, and `MODIFIED` for
+    `/etc/cron.d/e2scrub_all`, `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat`; the run of
+    2026-11-17 had shown both `sysstat` files as `MODIFIED` too. On 2026-11-19 the operator
+    explicitly accepted that E2 covers both (revision 20). `pkg_file` on `/etc/crontab`, which P7b
+    reads but does not check, gave `MODIFIED`: a finding outside the register (§8, G6's review
+    record);
+  - **P7c: run twice; reviewed; entries are open.** Its first run used revision 12's blocks. Its
+    `UNREAD` lines for the templates and for root's user manager came from the two defects. The
+    second run, of 2026-11-17, with revision 13's blocks, showed four templates as `REVIEW`,
     `container-getty@.service` as `MODIFIED`, and a unit and five drop-ins whose attribution is
     open. These are entries of G6's exception register (§8). A finding of that run which the
-    register does not name is not excepted. The operator reports that this run printed no
-    `UNREAD` line outside the register. Not recorded: that every `REVIEW` line outside the
-    register is resolved, and every entry outside it attributed.
+    register does not name is not excepted. The operator reviewed that run (revision 18): it
+    printed no `UNREAD:` line, and no `REVIEW:` line, `MODIFIED` line or drop-in outside the
+    register. The unit files of four units with drop-ins were attributed by the operator from
+    their content, not verified by dpkg. G6 counts a unit file as its package's only when
+    `pkg_file` verified it, so under G6 these four are not yet attributed (§8, G6's review record).
 - **Listeners and containers** [VPS, USER-REPORTED]: the only TCP listener, `sshd`, is
-  attributed to the `openssh-server` package and `ssh.socket`. The four application containers
-  are attributed to the Compose project `nimuairy` (§8, G6's review record).
+  attributed to the `openssh-server` package and `ssh.socket`. P7c's second run listed no UDP
+  socket. The four application containers are attributed to the Compose project `nimuairy` (§8,
+  G6's review record).
 - **The gates:** G6 has not been recorded, with any outcome. On 2026-11-17 the operator accepted
   the risk of the open findings E1 to E12 that G6's exception register names, so as to go on
   without waiting for the hosting provider's answer (§8, G6). On 2026-11-19 the operator
   separately accepted that of E13, the password field of the `systemd-journal` group, `set` as the
-  supplementary script classified it on 2026-11-17, whose origin is unknown. They stay unresolved.
+  supplementary script classified it on 2026-11-17, whose origin is unknown. The same day, the
+  operator widened E2 to both `sysstat` files that P7b reports as `MODIFIED` (revision 20). They
+  stay unresolved.
   P7a's reading of 2026-11-19 shows E13's field as `locked`, which raises none of G6's conditions
   for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
-  so far does not show that. G6's review record (§8) lists what is missing:
-  - the rest of the preflight, which G6 follows;
+  so far does not show that: a finding that G6 classifies as STOP is open outside the register,
+  `/etc/crontab`, a `MODIFIED` package file. G6's review record (§8) lists what is missing:
+  - from the preflight, which G6 follows: P3's confirmation that no other container exists, P9's
+    block for a tunnel candidate, the operator's decision whether P10's admin runs meet its
+    session rule for P7a's and P7c's runs, and the record's verdicts and missing fields;
   - from P7a, the attribution of `syslog`'s membership of `adm`;
-  - P7c's own results outside the register.
+  - from P7b, `/etc/crontab`;
+  - from P7c, four unit files that `pkg_file` has not verified, which G6 therefore does not yet
+    count as their packages'.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. S6.1 is not complete, so the order of §4.1 stops before C2.
@@ -322,6 +344,75 @@ Revisions:
     attributed is INCONCLUSIVE under G6, so G6 cannot pass while it stays so (§8);
   - **§5** names P7a's run of 2026-11-19;
   - **G6 still has no outcome.**
+- **18** (2026-11-19), the operator's S6.1 evidence reconciled with this contract
+  [VPS, USER-REPORTED]. No procedure, no criterion and no entry of the exception register changes,
+  and no exception is added:
+  - **P1 to P6 and P8** ran, and the operator reviewed them. This contract recorded only P7a to P7c
+    as run, because no other result was in it. The preflight record (§6) now holds their results;
+    a field missing from the evidence is marked as not recorded, which is not a block that did not
+    run. Their dates are not recorded;
+  - **P7c's second run, of 2026-11-17,** reviewed by the operator, in G6's review record (§8). The
+    output reviewed in a session on 2026-11-19 is that run's, not a new run:
+    - no `UNREAD:` line; its only `REVIEW:` lines are E3 to E6, its only `MODIFIED` line is E7,
+      and its only drop-ins are the five that E8, E10, E11 and E12 name;
+    - `container-getty@1.service` consists of E7's file alone;
+    - every unit file outside the register's entries is verified by `pkg_file`, except the unit
+      files of four units with drop-ins, which the operator attributed from their content, not
+      verified by dpkg. G6 counts a unit file as its package's only when `pkg_file` verified it,
+      so these four are not yet attributed under G6;
+    - no UDP listener;
+  - **P7b:** what its record lacks outside E1 and E2;
+  - **P10's admin block:** two runs on 2026-11-19, the first with `MISSING: grep` from a shell
+    alias, the second without `MISSING:`. The operator decides whether the second meets P10's
+    session rule;
+  - **P10's `deploy` block:** the operator reports an earlier PASS. No available record holds that
+    run, so it needs the operator's confirmation;
+  - **P9:** partial readings only. Its block runs once the operator has chosen the tunnel's
+    account and key (D2);
+  - **G6's review record** drops the UDP listener and P7c's `REVIEW:` lines from what G6 lacks.
+    It keeps every gap whose evidence is incomplete, keeps the four unit files open, and adds
+    P7b's completeness;
+  - **G6 still has no outcome.** E1 to E13 are unchanged, `syslog`'s membership of `adm` stays
+    INCONCLUSIVE, and C2 is not authorized.
+- **19** (2026-11-19), fresh runs of P10 and P7b, and a package check of `/etc/crontab`
+  [VPS, USER-REPORTED]. No procedure, no criterion and no entry of the exception register changes,
+  and no exception is added:
+  - **P10:** its `deploy` block ran as `deploy`, and its admin block ran clean as root, in the
+    session that then ran P7b. The preflight record (§6) holds their values. The `deploy` block's
+    earlier PASS, of which no record is available, is superseded. `awk` is GNU Awk 5.2.1;
+  - **P7b ran again:**
+    - no `UNREAD:` and no `REVIEW:` line;
+    - three `MODIFIED` files, `/etc/cron.d/e2scrub_all`, `/etc/cron.d/sysstat` and
+      `/etc/cron.daily/sysstat`;
+    - every other entry is a verified package file or the application's backup entry.
+
+    The operator confirms that the run of 2026-11-17 showed both `sysstat` files as `MODIFIED`
+    too;
+  - **E2's scope is open:** E2 names `sysstat` without a path, and revision 14 counted two
+    `MODIFIED` files from P7b. Which `sysstat` file or files E2 covers is the operator's decision.
+    Widening E2 needs a new revision and the operator's acceptance;
+  - **`/etc/crontab`:** `pkg_file` gave `MODIFIED` (package `cron-daemon-common`). It is outside
+    the register, so it is an open finding that G6 classifies as STOP;
+  - **§14** records P10's readings for `deploy`, its sudo, the production check's tools and `awk`;
+  - **G6 still has no outcome.** With a STOP finding open outside the register, it can be neither
+    PASS nor PASS WITH RECORDED EXCEPTIONS. C2 is not authorized.
+- **20** (2026-11-19), the operator's explicit widening of E2 [USER-REPORTED]. No procedure and no
+  criterion changes, and no entry is added:
+  - **E2 covers both `sysstat` files** that P7b reports as `MODIFIED`: `/etc/cron.d/sysstat` and
+    `/etc/cron.daily/sysstat`. The operator accepted this scope explicitly on 2026-11-19. Before,
+    E2 named `sysstat` without a path, and revision 14 counted two `MODIFIED` files from P7b, so
+    its scope was ambiguous (revision 19). Revision 14's and revision 19's entries stay as they
+    were written;
+  - **what stays:** E2's classification, STOP under G6 without the register, and its status,
+    unresolved. The modifications are not explained or verified. E1 and E3 to E13 keep their scope
+    and status (§8, G6's exception register);
+  - **wording:** the "Known" column of E1 and E2 now names `pkg_file`'s `MODIFIED`, P7b's own
+    output, which carries `dpkg --verify`'s line for the file; their meaning is unchanged. The
+    status now attributes each of P7a's confirmations to its run. The keys, logins, Docker access,
+    sudo rules and NSS sources come from the review of 2026-11-17 (revision 13). The login shells
+    and usable passwords come from the run of 2026-11-19 (revision 17);
+  - **G6 still has no outcome:** `/etc/crontab` stays a STOP finding outside the register, and
+    every other gap in G6's review record stands. C2 is not authorized.
 
 ## 1. Purpose and scope
 
@@ -566,8 +657,11 @@ and a resolution that changes state needs its own consent (§11).
   key material from `authorized_keys`; a password field or a whole line of `/etc/gshadow`.
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
-- **Of these commands, P7a to P7c have run on the VPS,** with P7's helpers, in S6.1: P7a on
-  2026-11-17 and again on 2026-11-19, P7c twice (revisions 13, 14 and 17).
+- **Of these commands, P1 to P8 and P10 have run on the VPS,** in S6.1: P7a to P7c with P7's
+  helpers, P7a and P7b on 2026-11-17 and again on 2026-11-19, P7c twice, its second run on
+  2026-11-17; P10's admin block three times and its `deploy` block once, on 2026-11-19; P1 to P6
+  and P8 on dates not recorded (revisions 13, 14, 17, 18 and 19). P9 has partial readings only
+  (§6, the preflight record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -2640,6 +2734,69 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
+### Preflight record, S6.1 (revisions 18 and 19)
+
+**Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
+reviewed them; their dates are not recorded. P10 ran on 2026-11-19 (revision 19). These are not the
+earlier readings of §2.3, which stay context only. "Not recorded" marks a field missing from the
+evidence given, not a block that did not run. The operator's `ok` or `STOP` for each row is not
+recorded here. P7 is G6's (§8, G6's review record).
+
+| # | Fact | Read | Not recorded |
+|---|---|---|---|
+| P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; systemd 255; LXC; UTC | — |
+| P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — |
+| P2 | Engine, Compose, runc versions | Docker 29.8.2; Compose v5.6.0; runc 1.5.1 | — |
+| P2 | cgroup version and driver | `2/systemd` | — |
+| P2 | `userns` in SecurityOptions; context | User namespaces not enabled; seccomp `builtin`; the cgroup namespace enabled; context `default` | — |
+| P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`, so none configured there; logging driver `json-file` | — |
+| P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU | `memtotal`; `warnings` |
+| P3 | Application containers | Listed and inspected: `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy`, `postgres-nimuairy`. The operator reviewed their status, health, restarts, OOM state and limits | The values; that `docker ps -a` showed no other container, stopped ones included |
+| P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | `MemTotal` 4352 MiB, 3798 MiB available, no swap in use; LXCFS overlays `/proc/meminfo` and `/proc/swaps`. Root cgroup: no finite `memory.max` or `memory.high`, current memory 905416704, no `memory.peak`, the memory events 0; CPU unlimited, cpuset 0, no throttling; PIDs unlimited, 164 current. Disk 45 GB, 7 % used. The host's effective memory limit: UNKNOWN (§2.3); 4352 MiB is what LXCFS shows, not a verified limit | The `memory.stat` field list (§10.3); the controllers; the pressure files; the backend's cgroup files |
+| P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — |
+| P6 | Listeners on the stack's ports | None; SSH is the only listener | — |
+| P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing |
+| P9 | Forwarding for the D2 account(s) | Partial readings only (below) | P9's block for a tunnel candidate; its verdict |
+| P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time |
+| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time; the operator's decision on the session rule for P7a's and P7c's runs |
+
+- **P9's partial readings** [USER-REPORTED]. They are not P9's block:
+  - **2026-11-19, with the operator's own commands:**
+    - one `Include`, of `/etc/ssh/sshd_config.d/*.conf`;
+    - no active `Match` block in `/etc/ssh/sshd_config` or in that directory's one file, which
+      sets only `PasswordAuthentication no`;
+    - `sshd -t` exited 0;
+  - **an earlier reading, whose date and account are not recorded:** `allowtcpforwarding yes`,
+    `disableforwarding no`, `permitopen any`, `permitlisten any`;
+  - **the deploy workflow's key** has `restrict`, so it cannot open the tunnel. As P9 says, that
+    key keeps its restriction, and the tunnel needs another key or account (D2);
+  - **still open:** the operator chooses the account and key for the tunnel (D2). Then P9's block
+    runs for them, with its own `Match` and `Include` listing, and gives the verdict.
+- **P10's admin block, 2026-11-19** [USER-REPORTED], as root, three runs:
+  - **the latest run** (revision 19), in the root session that then ran P7b again: every tool was
+    found, as this account and as root through `sudo`; no `MISSING:` and no `UNREAD:` line; `at`
+    and `atq` absent, which is optional. Its output has no time. For that P7b run, it is the check
+    "in the admin session that runs them" (P10);
+  - **two earlier runs:**
+    - the first, whose output reached the agent at 16:26 UTC, gave `MISSING: grep, as this
+      account`: the shell had an alias, `grep='grep --color=auto'`, and `command -v` printed it
+      instead of a path;
+    - the second, in a session whose `date -u` read 16:59 UTC, was clean;
+  - **the operator's decision:** P7a's run of 2026-11-19 and P7c's second run were in other
+    sessions. Whether these runs meet P10's session rule for them is the operator's decision. P9's
+    session is still to come.
+- **P10's `deploy` block, 2026-11-19** [USER-REPORTED], run as `deploy` after `su - deploy` from the
+  root session: the values in the table.
+  - **P10's expectations:** each holds in these values: `deploy` in `docker`, Bash 4 or later as
+    its shell, the engine answering, no variable listed, the production check's tools present,
+    and `diff`. `jq` is present too;
+  - **`awk`:** GNU Awk 5.2.1, not Ubuntu's default mawk. The readout's self-test on the VPS
+    decides whether it runs the readout correctly (§10.3);
+  - **sudo:** `deploy` has no passwordless sudo. That decides who runs the optional reads of V12
+    and V14 (P10);
+  - **the earlier PASS:** this run replaces the earlier PASS that the operator reported, of which
+    no record is available.
+
 ## 7. S6.2 — Delivering the files and host configuration
 
 **Consent:** C2. It needs S6.1 recorded without an open STOP outside G6's exception register, G6
@@ -3177,10 +3334,18 @@ E1 to E12 keep their acceptance of 2026-11-17 and their status. Revision 17 make
 description precise and records the effect of P7a's reading of 2026-11-19 on G6; its acceptance
 and its status, excepted and unresolved, are unchanged.
 
+**E2's scope: widened by the operator on 2026-11-19, explicitly** (revision 20) [USER-REPORTED].
+E2 named `sysstat` without a path, and revision 14 counted two `MODIFIED` files from P7b, so its
+scope was ambiguous (G6's review record). The operator explicitly accepts that E2 covers both
+`sysstat` files that P7b reports as `MODIFIED`: `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat`.
+P7b's saved output of 2026-11-17 and its run of 2026-11-19 both show them. The widening is
+conscious. E2's classification, STOP under G6 without the register, and its status, unresolved,
+are unchanged, and no other entry changes.
+
 | # | Finding | From | Classification, as read | Under G6 as of revision 13, without this register | Status now | Known | Not known |
 |---|---|---|---|---|---|---|---|
-| E1 | `e2scrub_all` | P7b | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; unresolved | `dpkg --verify` reports the package file changed | Who changed it, when, what and why. The modification is not explained or verified |
-| E2 | `sysstat` | P7b | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; unresolved | `dpkg --verify` reports the package file changed | Who changed it, when, what and why. The modification is not explained or verified |
+| E1 | `e2scrub_all` | P7b | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; unresolved | `pkg_file` reports the package file as `MODIFIED` | Who changed it, when, what and why. The modification is not explained or verified |
+| E2 | `sysstat`: both of its files that P7b reports, `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat` | P7b | `MODIFIED` (`pkg_file`), each file | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; its scope, both files, accepted explicitly on 2026-11-19 (revision 20); unresolved | `pkg_file` reports both package files as `MODIFIED`, in P7b's output of 2026-11-17 and in its run of 2026-11-19 | Who changed them, when, what and why. The modifications are not explained or verified |
 | E3 | `apport-forward@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Excepted, accepted by the operator on 2026-11-17; unresolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
 | E4 | `lxd-installer@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Excepted, accepted by the operator on 2026-11-17; unresolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
 | E5 | `systemd-sysext@.service` | P7c, second run | `REVIEW`: a template, which `pkg_file` does not check | INCONCLUSIVE: a `REVIEW` line not resolved | Excepted, accepted by the operator on 2026-11-17; unresolved | Its definition, shown in full; the template of an `Accept=yes` socket (P7c) | Its provenance and purpose, not yet fully established; whether the file is its package's, unchanged |
@@ -3227,7 +3392,9 @@ no password field, key, fingerprint, address, host, SSH port or login. P7's list
 stay with the operator (§5). The record changes none of G6's criteria and no entry of the
 exception register, and it is not G6's outcome. Revision 16 adds the operator's acceptance of
 E13, below. Revision 17 adds P7a's own output of 2026-11-19, and compares the two classifications
-of the `systemd-journal` password field.
+of the `systemd-journal` password field. Revision 18 adds the operator's review of P7c's second
+run. Revision 19 adds P7b's run of 2026-11-19, E2's scope and `/etc/crontab`. Revision 20 adds the
+operator's decision on E2's scope.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -3348,12 +3515,11 @@ reviewed P7a's own listing, which stays with the operator (§5):
   difference;
 - **attributed** by the operator to the operating system's OpenSSH package, started through
   systemd's socket activation;
-- **not shown:**
-  - `dpkg -V` printing nothing is dpkg's integrity check. It says nothing about a file without
-    a recorded MD5 sum, and it is no security verification (§6, `pkg_file`). `pkg_file`'s own
-    result for the two unit files is not reported;
-  - the read covers TCP only. P7c's listing, `ss -Hltunp`, also shows UDP; no attribution of a
-    UDP listener is recorded.
+- **UDP** (revision 18): this read covers TCP only. P7c's listing, `ss -Hltunp`, also lists UDP,
+  and in P7c's second run its UDP listing was empty. So there is no UDP listener to attribute;
+- **not shown:** `dpkg -V` printing nothing is dpkg's integrity check. It says nothing about a
+  file without a recorded MD5 sum, and it is no security verification (§6, `pkg_file`).
+  `pkg_file`'s own result for the two unit files is not reported.
 
   The port and the addresses are not recorded (§5).
 
@@ -3375,24 +3541,117 @@ reviewed P7a's own listing, which stays with the operator (§5):
 - **not shown:**
   - the images' integrity or provenance. Compose's labels are metadata that any Docker client
     can set, and no digest or signature was checked;
-  - whether any other container exists. P3's listing of every container is not recorded.
+  - whether any other container exists. P3 ran (§6, the preflight record of revision 18), but
+    that its `docker ps -a` listing showed no other container, stopped ones included, is not
+    recorded.
 
-**P7c's second run:** the operator reports no `UNREAD:` line outside the exception register. Not
-reported: that every `REVIEW:` line outside the register is resolved, and every entry outside it
-attributed.
+**P7c's second run, 2026-11-17** [VPS, USER-REPORTED], reviewed by the operator, recorded in
+revision 18. The output that the operator pasted into a session on 2026-11-19 is that of this run,
+not of a new run:
+- **the markers:** no `UNREAD:` line. Exactly four `REVIEW:` lines, those of E3 to E6, and exactly
+  one `MODIFIED` line, E7's `/usr/lib/systemd/system/container-getty@.service`;
+- **the drop-ins:** exactly the five that E8, E10, E11 and E12 name, and no other;
+- **`container-getty@1.service`:** the only active instance of E7's template. Its definition is
+  E7's file alone, without drop-ins, so it adds no finding to E7's;
+- **the unit files of the four units with drop-ins:** `docker.service`,
+  `systemd-journald.service`, `systemd-logind.service`, and `user@.service` as `user@0.service`'s.
+  P7c does not run `pkg_file` on a unit with drop-ins, and shows its whole definition instead (§6,
+  `unit_review`). The operator attributed these four files from their content to the Docker and
+  systemd packages. dpkg did not verify them. G6 counts a unit file as its package's only when
+  `pkg_file` verified it (G6, "Expected (PASS)"), so under G6 these four are not yet attributed to
+  their packages, whatever their content shows (below, item 4);
+- **the sockets of E3 to E6:** attributed to their packages, `apport`, `lxd-installer` and
+  `systemd`;
+- **every other unit file** of the system manager and of root's user manager, outside the
+  register's entries: verified against its package by `pkg_file`;
+- **user managers:** root's is the only one, and no account lingers. No other instance of
+  `user@.service` ran, so E12's `timeout.conf` applied only to `user@0.service`;
+- **listeners:** TCP only `sshd`, over IPv4 and IPv6, through `ssh.socket`; the UDP listing empty;
+- **not shown:** the listing itself, which stays with the operator (§5).
+
+**P7b's run of 2026-11-19** [VPS, USER-REPORTED], recorded in revision 19. It ran as root, in the
+session in which P10's admin block had just run clean (§6, the preflight record):
+- **the run:** every part of the block gave its output, from `/etc/crontab` and `/etc/cron.d` to
+  `at`. The block is unchanged since revision 12, and `bash -n` passes it. One row of its echo on
+  the terminal looked garbled. That row is the block's later lines drawn over one another, and
+  the output shows that those lines ran;
+- **the markers:** no `UNREAD:` and no `REVIEW:` line;
+- **`/etc/crontab` and `/etc/cron.d`:** read. `/etc/cron.d` holds `.placeholder`, `e2scrub_all`,
+  `nimuairy-backup` and `sysstat`;
+- **`run-parts`** would run:
+  - hourly: nothing;
+  - daily: `apport`, `apt-compat`, `dpkg`, `logrotate`, `man-db` and `sysstat`;
+  - weekly: `man-db`;
+  - monthly: nothing;
+- **the package check of each entry** of `/etc/cron.d` and of the periodic directories:
+  - every entry, `.placeholder` files included, is a file that `pkg_file` verified, apart from
+    the four below;
+  - `/etc/cron.d/nimuairy-backup` is from no package. Its content is the application's backup
+    entry ([README, Database backups](../README.md#database-backups));
+  - three files are `MODIFIED`, each shown in full: `/etc/cron.d/e2scrub_all` (`e2fsprogs`), and
+    `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat` (`sysstat`);
+- **user crontabs:** none;
+- **`at`:** not installed, which is optional;
+- **the run of 2026-11-17:** the operator confirms, from its saved output, that it showed both
+  `sysstat` files as `MODIFIED` too.
+
+**E2's scope** (revisions 19 and 20):
+- **what E2 named:** `sysstat`, without a path. Its row spoke of "the package file", and revision
+  14 counts "P7b's two `MODIFIED` files", E1's and E2's. The operator reported them on 2026-11-17
+  as two package files, `e2scrub_all` and `sysstat`;
+- **what the run of 2026-11-17 showed:** three `MODIFIED` files, two of them named `sysstat`. E2's
+  wording did not say which of them it covered, or whether it covered both;
+- **the operator's decision, 2026-11-19** (revision 20) [USER-REPORTED]: E2 covers both,
+  `/etc/cron.d/sysstat` and `/etc/cron.daily/sysstat`. This widens E2 consciously, with the
+  operator's explicit acceptance, and the register now names both paths (G6, the exception
+  register);
+- **what it does not do:** explain or verify either modification. Who changed the files, when,
+  what and why stay unknown, and E2 stays unresolved.
+
+**`/etc/crontab`** (revision 19) [VPS, USER-REPORTED]:
+- **the check:** P7b reads its lines but does not check the file with `pkg_file`. In the root
+  session of P7b's run of 2026-11-19, the operator ran the existing helper on it. It printed
+  `MODIFIED: /etc/crontab: package cron-daemon-common`, and `pkg_file` exited 2;
+- **under G6:** a `MODIFIED` package file is STOP, as revision 14 classified E1 and E2, and it
+  cannot count as its package's (G6, "Expected (PASS)"). `/etc/crontab` is no entry of the
+  register. So it is an open STOP finding outside the register, and G6's next action for STOP
+  applies to it (G6, "Next allowed action");
+- **not known:** what changed in it, who changed it, when and why. Nothing here says whether the
+  change is wanted.
 
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
-needs every requirement outside the register met, and the evidence above does not show that:
-1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1), and only P7a to P7c
-   are recorded as run. P3's container list is part of G6's command. A `MISSING:` tool in P10's
-   admin check leaves G6 INCONCLUSIVE.
-2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. Revision 17 records
-   the rest that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that
-   needs `userdb_none`, and the operator's confirmation of the accounts with a login shell and
-   their usable passwords.
-3. **P7c's second run:** every `REVIEW:` line outside the register resolved, and every entry
-   outside it attributed.
-4. **Listeners:** the attribution of any UDP listener in P7c's listing.
+needs every requirement outside the register met, and the evidence above does not show that. A
+finding that G6 classifies as STOP is open outside the register: `/etc/crontab` (item 3).
+1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
+   run and been reviewed (§6, the preflight record of revision 18), but:
+   - **P3:** that its `docker ps -a` listing showed no container other than the four, stopped
+     ones included, is not recorded. P3's container list is part of G6's command;
+   - **the preflight record:** it lacks the operator's `ok` or `STOP` per row, the runs' dates,
+     and the fields that it marks as not recorded;
+   - **P9:** its block has not run for a tunnel candidate;
+   - **P10:** its `deploy` block and its admin block ran clean on 2026-11-19 (revision 19).
+     Whether a run in another session meets P10's session rule for P7a's run of 2026-11-19 and
+     P7c's second run is the operator's decision. A `MISSING:` tool in P10's admin check leaves G6
+     INCONCLUSIVE.
+2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. An entry not yet
+   attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. Revision 17 records the rest
+   that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
+   `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
+   usable passwords.
+3. **P7b:** `/etc/crontab`, a `MODIFIED` package file outside the register, STOP under G6
+   (above). Revision 20 records E2's scope: both `sysstat` files, which E2 now names. Revision 19
+   records the rest: P7b's run of 2026-11-19 printed no `UNREAD:` and no `REVIEW:`
+   line, and every other entry of `/etc/cron.d` and of the periodic directories is a verified
+   package file or the application's backup entry; there is no user crontab, and `at` is not
+   installed.
+4. **P7c's second run:** the unit files of `docker.service`, `systemd-journald.service`,
+   `systemd-logind.service` and `user@.service` (above). G6 counts a unit file as its package's
+   only when `pkg_file` verified it, and `pkg_file` did not check these four, so they are not yet
+   attributed, which is INCONCLUSIVE. The operator's attribution from their content does not
+   change that. `pkg_file`, the existing helper, run on each of the four files, could close it;
+   P7c's block does not do that, and no such check has run. Revision 18 records the rest that
+   revision 15 listed: every `REVIEW:` line is one of E3 to E6, every other entry is attributed,
+   and P7c listed no UDP listener.
 
 Revision 15 also listed a decision on the `systemd-journal` password that G6 accepts, or the
 operator's judgement on G6's STOP. Revision 16 records both, as E13 of the exception register; the
@@ -4769,22 +5028,22 @@ Accepted together with this contract:
 | U10: the extraction leaves the files readable | S4b §12.1 | G8 | Open |
 | U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open |
 | Compose reads `observability/.env` | Guide | G4 | Open |
-| `deploy`'s ownership, Docker access, shell, umask | Guide | P10, §7.2, G8 | Open |
+| `deploy`'s ownership, Docker access, shell, umask | Guide | P10, §7.2, G8 | Open for §7.2 and G8. Read by P10 on 2026-11-19 (§6, the preflight record): `deploy` in `docker`, `/bin/bash`, umask `0002`, `/var/nimuairy` `deploy:deploy` |
 | How the archive reaches `deploy` | Guide | D2, §7.3 | Open |
-| `sudo` for the log-size check | Guide | P10, V14 | Open |
+| `sudo` for the log-size check | Guide | P10, V14 | Open for V14. Read by P10 on 2026-11-19: `deploy` has no passwordless sudo |
 | The secret's owner and mode; 472's read access; the production check's access | Guide, S4b §6.5 | D1, G5, G7, V1, V6 | Open |
 | No existing volumes, no listeners | Guide, S4b §12.3 | G1, G3 | Open |
 | SSH forwarding for the tunnel account | Guide | P9, V7 | Open |
 | The Alloy UI tunnel to a container address | Guide | V15, optional | Open; may stay open |
 | A restart picks up a replaced file | Guide | D6 | Stays open until the first update |
-| The production check's tools and its run | Guide, B8 | P10, V6 | Open |
+| The production check's tools and its run | Guide, B8 | P10, V6 | Tools present (P10, 2026-11-19); the run is open (V6) |
 | `grafana cli admin reset-admin-password --password-from-stdin` | Guide | Not needed with a new `grafana-data` (G1, V3) | **Not validated**; S6 does not validate it |
 | Grafana's failed-login threshold and lockout time | Guide | Not determined by S6; V6 and V7 keep failures to one | Unknown |
 | Docker's log rotation; disk growth | Guide, budget | D5, V14, R3 | Open |
 | The stack's limits and use on the VPS | Guide, budget | §10.3 | Open |
 | §8 of S4.4 for the stack's containers (`memory.oom.group`, `Delegate`, `OOMPolicy`) | S4.4 §8 | R1 | Open |
 | The `memory.stat` fields of the VPS's kernel | Budget | P4; the sampler's header | Open |
-| The VPS's awk runs the readout correctly | This contract | P10, the self-test (§10.3) | Open. Local runs on gawk and a newer mawk are no proof for the VPS's build |
+| The VPS's awk runs the readout correctly | This contract | P10, the self-test (§10.3) | Open. P10 read GNU Awk 5.2.1 on 2026-11-19. Local runs on gawk and a newer mawk are no proof for the VPS's build |
 | cgroup v2 with Docker's `systemd` driver, systemd scopes for the containers | S4.4 §10.4 [VPS] | G12 | Read for the application in S4.4.4; open for the stack |
 | How LXCFS computes `MemAvailable` inside the LXC | Budget | Not settled by S6 | Unknown; G13 and M5 use it only next to the cgroup counters |
 | The first start's memory and CPU peak on the VPS | Budget | The pre-start sampler runs through the start | Never measured |
@@ -4847,11 +5106,12 @@ Accepted together with this contract:
 
 ## 17. Acceptance checklist
 
-S6.1, the read-only preflight, has started: P7a to P7c have run, and their review is not complete
-(the status at the top). G6 has not been recorded; the operator has accepted its exception register,
-E1 to E12 on 2026-11-17 and E13 on 2026-11-19 (§8, G6). G6's review record (§8) lists what G6
-still lacks outside the register. The deployment of the observability stack has not started.
-Every item is open.
+S6.1, the read-only preflight, has started: P1 to P8 and P10 have run, and P9 has partial readings
+only. The review is not complete (the status at the top), and a finding that G6 classifies as STOP
+is open outside its register (§8, G6's review record). G6 has not been recorded; the operator
+has accepted its exception register, E1 to E12 on 2026-11-17, and E13 and E2's widened scope on
+2026-11-19 (§8, G6). G6's review record (§8) lists what G6 still lacks outside the register. The
+deployment of the observability stack has not started. Every item is open.
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
