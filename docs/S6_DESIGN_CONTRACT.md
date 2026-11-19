@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-17: draft for review (revision 14). S6.1, the read-only preflight, has started:
+**Status, 2026-11-19: draft for review (revision 16). S6.1, the read-only preflight, has started:
 P7a, P7b and P7c have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
@@ -12,10 +12,19 @@ P7a, P7b and P7c have run on the VPS. The deployment of the observability stack 
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
-  - **P7a: run and reviewed.** The operator confirmed that the usable password is expected, the
-    SSH keys are trusted, the recent logins are recognized, `deploy`'s access to Docker is
-    intended, the sudo rules are verified and NSS's sources are complete. The operator then went
-    on to P7b;
+  - **P7a: run and reviewed; not everything G6 needs from it is recorded.** The operator confirmed
+    that the usable password is expected, the SSH keys are trusted, the recent logins are
+    recognized, `deploy`'s access to Docker is intended, the sudo rules are verified and NSS's
+    sources are complete. The operator then went on to P7b. Further read-only findings followed
+    (§8, G6's review record):
+    - the accounts with UID 0 and NSS's sources;
+    - a supplementary script's summary of the groups and `/etc/gshadow`, which is not P7a's
+      block, and `visudo -c`;
+    - a set group password for `systemd-journal`, of unknown origin, which the operator decided
+      on 2026-11-17 to leave unchanged. On 2026-11-19 the operator accepted its risk as E13 of
+      G6's exception register (§8). Its origin stays unknown.
+
+    Not recorded: that P7a's own output had no `UNREAD:` line and no unresolved `REVIEW:` line;
   - **P7b: run and reviewed; two entries are open.** It printed no `UNREAD:` and no `STOP`. The
     job `app-backup` was recognized as the application's backup, `nimuairy-backup`
     ([README, Database backups](../README.md#database-backups)). `pkg_file` gave `MODIFIED` for
@@ -26,13 +35,24 @@ P7a, P7b and P7c have run on the VPS. The deployment of the observability stack 
     run, with revision 13's blocks, showed four templates as `REVIEW`,
     `container-getty@.service` as `MODIFIED`, and a unit and five drop-ins whose attribution is
     open. These are entries of G6's exception register (§8). A finding of that run which the
-    register does not name is not excepted.
+    register does not name is not excepted. The operator reports that this run printed no
+    `UNREAD` line outside the register. Not recorded: that every `REVIEW` line outside the
+    register is resolved, and every entry outside it attributed.
+- **Listeners and containers** [VPS, USER-REPORTED]: the only TCP listener, `sshd`, is
+  attributed to the `openssh-server` package and `ssh.socket`. The four application containers
+  are attributed to the Compose project `nimuairy` (§8, G6's review record).
 - **The gates:** G6 has not been recorded, with any outcome. On 2026-11-17 the operator accepted
-  the risk of the open findings that G6's exception register names, so as to go on without waiting
-  for the hosting provider's answer (§8, G6). They stay unresolved. G6 can be recorded as
-  PASS WITH RECORDED EXCEPTIONS only when every requirement of G6 outside the register is met; the
-  conclusions above are not all of them. S6.1 is not complete, so the order of §4.1 stops before
-  C2.
+  the risk of the open findings E1 to E12 that G6's exception register names, so as to go on
+  without waiting for the hosting provider's answer (§8, G6). On 2026-11-19 the operator
+  separately accepted that of E13, the set password field of the `systemd-journal` group, whose
+  origin is unknown. They stay unresolved. G6 can be recorded as PASS WITH RECORDED EXCEPTIONS
+  only when every requirement of G6 outside the register is met. The evidence recorded so far does
+  not show that. G6's review record (§8) lists what is missing:
+  - the rest of the preflight, which G6 follows;
+  - P7a's and P7c's own results outside the register.
+
+  The decision on the `systemd-journal` password, which revision 15 listed as missing, is
+  recorded as E13. S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
 - The operator decisions D1 to D7 (§13.3) are open.
@@ -243,6 +263,33 @@ Revisions:
   - P7c's second run, with revision 13's blocks, is in the status. P7's output rule lets the names
     of the register's entries into this contract (§5, §6). The exception authorizes no VPS
     operation and gives no consent (§4).
+- **15** (2026-11-19), the operator's further read-only findings of 2026-11-17, and a decision
+  [VPS, USER-REPORTED]. No procedure, no criterion and no entry of the exception register changes:
+  - **G6's review record**, a new part of G6 (§8), records:
+    - the accounts with UID 0, and NSS's sources;
+    - a supplementary script's summary of the groups and `/etc/gshadow`, and `visudo -c`. These
+      are supplementary evidence, not P7a's output;
+    - the `systemd-journal` group password: `set`, of unknown origin, left unchanged by the
+      operator's decision. No password field was read or recorded;
+    - the TCP listener, attributed to `openssh-server` and `ssh.socket`;
+    - the four application containers, attributed to the Compose project `nimuairy`;
+    - P7c's second run, without `UNREAD` outside the register;
+  - **what G6 still lacks** outside the register, listed in that record. G6 has no outcome; E1 to
+    E12 stay as they are, unresolved;
+  - **§14:** the VPS's NSS sources, which it gave as never read.
+- **16** (2026-11-19), the operator's explicit acceptance of one more G6 finding [USER-REPORTED]:
+  - **E13**, a new entry of G6's exception register (§8): the set password field of the
+    `systemd-journal` group, whose origin is unknown. Without the exception it is STOP under G6.
+    The operator accepted its risk on 2026-11-19, separately from E1 to E12, and leaves the state
+    unchanged;
+  - **a narrow exception:** this group's password field only, and only for what its unknown
+    origin leaves open under G6. G6's rules for group passwords, its other STOP and INCONCLUSIVE
+    conditions, and E1 to E12 are unchanged (§8, G6);
+  - **unresolved:** the origin stays unknown, as do who set the password and who knows it. The
+    password is not taken as trusted, verified, understood or known. No password field was read,
+    disclosed or recorded;
+  - **G6 still has no outcome:** every other gap in G6's review record stands. E13 authorizes no
+    VPS operation and gives no consent (§4).
 
 ## 1. Purpose and scope
 
@@ -3045,10 +3092,24 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     does not mean that any of them is verified, trusted or resolved. Each keeps the classification
     that the register records, and U8 stays open for them (§14);
   - **what it cannot do:** waive any other finding. The register covers each entry as P7b's run
-    and P7c's second run showed it. A finding it does not name is an ordinary finding of G6, also
-    a further file or drop-in of a unit it names, and an INCONCLUSIVE or STOP finding of that kind
+    and P7c's second run showed it, and E13 as the operator's supplementary read-only script and
+    G6's review record showed it. A finding it does not name is an ordinary finding of G6, also a
+    further file or drop-in of a unit it names, and an INCONCLUSIVE or STOP finding of that kind
     blocks as above. Adding an entry needs a new revision of this contract, with the operator's
     acceptance;
+  - **E13, the one group password excepted** (revision 16):
+    - **what it excepts:** only the STOP that G6 gives the set password field of the
+      `systemd-journal` group, because its origin is unknown and nobody known to the operator is
+      identified as having set it. The same unknown leaves G6's "keep it" decision without who
+      knows the password. For this one field, the decision is recorded as E13: keep it unchanged,
+      with that gap stated, not filled;
+    - **what it does not do:** satisfy G6's provenance requirement. That requirement is not met
+      for this field, only excepted. The password is not taken as trusted, verified, understood
+      or known, and its origin is not established;
+    - **what stands:** "a group password that is `set` is never taken as harmless", and a recorded
+      decision for any other set group password; every other STOP and INCONCLUSIVE condition of
+      G6; E1 to E12 as the register records them. Any other finding about `systemd-journal`, such
+      as a member or an administrator, is an ordinary finding of G6;
   - **where this contract requires G6 to have passed** (C2, C5, §4.1), this outcome counts for as
     long as its register stands;
   - **the record:** the operator records "G6 PASS WITH RECORDED EXCEPTIONS" with the date, the
@@ -3062,13 +3123,19 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
 
 #### G6's exception register
 
-**Accepted by the operator on 2026-11-17**, the date of this amendment (revision 14)
-[USER-REPORTED]. The operator accepts the residual risk of the findings below in order to go on
+**E1 to E12: accepted by the operator on 2026-11-17**, the date of that amendment (revision 14)
+[USER-REPORTED]. The operator accepts the residual risk of these findings in order to go on
 with S6, without waiting for the clarification that the operator awaits from the hosting
 provider, Mikrus. That risk is the one G6 guards against: if one of them is an untrusted change, a
 process on the host could read or change what the stack holds and does, since Prometheus, Loki and
 Tempo have no authentication and the host reaches every container address (G6, "Why it
 matters"). No answer from Mikrus is recorded here, and none is assumed.
+
+**E13: accepted by the operator on 2026-11-19, separately** (revision 16) [USER-REPORTED]. The
+operator accepts the risk of exactly one finding: the set password field of the `systemd-journal`
+group, whose origin is unknown. The operator leaves its state unchanged. With a group password
+set, `newgrp` gives the group to anyone who knows the password (§6, P7a). This acceptance applies
+to E13's finding only. E1 to E12 keep their acceptance of 2026-11-17 and their status.
 
 | # | Finding | From | Classification, as read | Under G6 as of revision 13, without this register | Status now | Known | Not known |
 |---|---|---|---|---|---|---|---|
@@ -3084,6 +3151,7 @@ matters"). No answer from Mikrus is recorded here, and none is assumed.
 | E10 | `systemd-journald.service`: its drop-in `nice.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | The drop-in's name | Its origin and purpose |
 | E11 | `systemd-logind.service`: its drop-in `dbus.conf` | P7c, second run | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | The drop-in's name | Its origin and purpose |
 | E12 | Two drop-ins that apply to `user@0.service`, and only these two files: `/usr/lib/systemd/system/user@0.service.d/10-login-barrier.conf` and `/usr/lib/systemd/system/user@.service.d/timeout.conf` | P7c, second run | Entries whose attribution is open | INCONCLUSIVE: entries not yet attributed; STOP if the operator considers their origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | Their paths, as P7c showed them | Their origin and purpose; whether a package ships them unchanged, since P7c checks no drop-in with `pkg_file`. No other drop-in of `user@0.service` or `user@.service`, now or later, is covered |
+| E13 | The `systemd-journal` group: its password field is set, and its origin is unknown | Operator's supplementary read-only script; G6's review record | A set password field (`set`, `/etc/gshadow`), origin unknown | STOP: a set group password whose origin is unknown; nobody known to the operator is identified as having set it | Excepted, accepted by the operator on 2026-11-19; unresolved | The field is set. The operator consciously accepts leaving the current state unchanged | Who set it, when and why, and who knows its value. Its origin is not established |
 
 Nothing in this register describes an entry as malicious or untrusted, and nothing in it marks
 one as verified because its name or apparent purpose looks familiar.
@@ -3110,6 +3178,148 @@ one as verified because its name or apparent purpose looks familiar.
 6. **No expiry:** the register never expires, and time alone resolves nothing. Without an answer,
    every entry stays open, and the register stays in this contract. S6.7 reports each entry's
    state.
+
+#### G6's review record
+
+**Reported by the operator on 2026-11-17, recorded in revision 15** [VPS, USER-REPORTED]. These
+are the operator's summaries of read-only reads, which the operator chose to record here. They hold
+no password field, key, fingerprint, address, host, SSH port or login. P7's listings themselves
+stay with the operator (§5). The record changes none of G6's criteria and no entry of the
+exception register, and it is not G6's outcome. Revision 16 adds the operator's acceptance of
+E13, below.
+
+**The accounts with UID 0, and NSS's sources:**
+- the accounts with UID 0: `root` only;
+- `/etc/nsswitch.conf`: `passwd: files systemd`, `group: files systemd` and
+  `gshadow: files systemd`, with no `initgroups:` line. `nss_sources` accepts a missing
+  `initgroups:` line (§6);
+- the operator reports that accounts and groups come from `/etc/passwd`, `/etc/group` and
+  dynamic users only. These are the words of the line that `nss_sources` prints only when it
+  accepts every source it checks: the lines above, nss-systemd's directories and services, and
+  nscd's socket;
+- **not shown:** that every source works. An accepted configuration does not show it (§6,
+  `nss_local=true`). With `systemd` among the sources of all three databases, each `absent:` line
+  about an account, a group or a gshadow entry also needs `userdb_none`'s confirmation. Whether
+  P7a printed such a line, and how `userdb_none` answered, is not reported.
+
+**Groups, sudo and `/etc/gshadow`, from a supplementary script:** a read-only script of the
+operator's own, not P7a's block:
+
+| Group | Additional members | Primary-group users | `/etc/gshadow` administrators | `/etc/gshadow` members | Password state, in the script's words |
+|---|---|---|---|---|---|
+| `sudo` | none | none | none | none | no active password |
+| `admin` | none | none | none | none | no active password |
+| `docker` | `deploy` | none | none | `deploy` | no active password |
+| `adm` | `syslog` | none | none | `syslog` | no active password |
+| `systemd-journal` | none | none | none | none | set |
+
+- **`visudo -c`:** `/etc/sudoers` and `/etc/sudoers.d/README` parsed OK. The sudo rules that the
+  operator saw are `root ALL=(ALL:ALL) ALL`, `%admin ALL=(ALL) ALL` and `%sudo ALL=(ALL:ALL) ALL`.
+  The groups they name, `admin` and `sudo`, are among the groups above, and neither has a member;
+- **`deploy` in `docker`** is the application's access, as the operator confirmed (the status at
+  the top);
+- **supplementary evidence only.** The script is not P7a, so it does not show what P7a's own
+  output shows:
+  - that each lookup's and each parser's status was checked;
+  - that no entry is duplicated or malformed;
+  - P7a's own password states, `empty`, `locked` or `set`. "No active password" is none of them.
+
+  `visudo -c` checks the syntax of `/etc/sudoers` and of the files it includes. It does not read
+  what P7a also reads: `/etc/sudo.conf`'s plugins and a `sudoers:` line in `nsswitch.conf`.
+  Neither read proves complete NSS coverage or a complete reading of the sudo rules. Both still
+  rest on P7a's own output.
+
+**The `systemd-journal` group password:**
+- **state:** `set`, in `/etc/gshadow`. No password field was read, disclosed or recorded;
+- **origin:** unknown. The operator does not know where it came from;
+- **the operator's decision, 2026-11-17:** consciously accepted; leave the current state
+  unchanged for now. No change is requested or authorized;
+- **status:** the decision is recorded; the origin is unresolved. Nothing here says that the
+  password is verified, trusted or understood;
+- **under G6, as revision 15 recorded it:**
+  - G6 passes a set group password only after a recorded decision to keep it, "with the reason
+    and who knows it", or to remove it outside S6. This record says neither who knows it nor why
+    it is set;
+  - G6 also names "a group password that nobody the operator knows set up" as STOP. Whether that
+    applies, with the origin unknown, is the operator's judgement, and it is not recorded;
+  - the password is not an entry of the exception register, which covers no other finding. An
+    entry is added only by a new revision, with the operator's acceptance.
+
+  So revision 15 did not count this finding as settled.
+- **the operator's acceptance, 2026-11-19** (revision 16) [USER-REPORTED]:
+  - the operator classifies the finding, without an exception, as STOP: its origin is unknown,
+    and nobody known to the operator is identified as having set it;
+  - the operator explicitly accepts its risk as E13 of G6's exception register, and leaves the
+    state unchanged. The decision that revision 15 found missing is recorded as E13;
+  - **what stays unresolved:** the origin, who set the password and who knows it. E13 does not
+    satisfy G6's provenance requirement; it excepts it for this field only (G6, PASS WITH
+    RECORDED EXCEPTIONS). The password is not taken as trusted, verified, understood or known;
+  - no password field was read, disclosed or recorded. No VPS change is requested or authorized,
+    and E13 gives no consent (§4).
+
+**The TCP listener:**
+- `ss -lntp`: one TCP port listens, on the IPv4 and the IPv6 wildcard address. Its process is
+  `/usr/sbin/sshd`, PID 1451304, the `MainPID` of the active `ssh.service`;
+- `ssh.socket` is active and listens on the same addresses and port;
+- `ssh.service` and `ssh.socket` are loaded from `/usr/lib/systemd/system/ssh.service` and
+  `/usr/lib/systemd/system/ssh.socket`, with no drop-ins;
+- `/usr/sbin/sshd` belongs to `openssh-server`, and `dpkg -V openssh-server` printed no
+  difference;
+- **attributed** by the operator to the operating system's OpenSSH package, started through
+  systemd's socket activation;
+- **not shown:**
+  - `dpkg -V` printing nothing is dpkg's integrity check. It says nothing about a file without
+    a recorded MD5 sum, and it is no security verification (§6, `pkg_file`). `pkg_file`'s own
+    result for the two unit files is not reported;
+  - the read covers TCP only. P7c's listing, `ss -Hltunp`, also shows UDP; no attribution of a
+    UDP listener is recorded.
+
+  The port and the addresses are not recorded (§5).
+
+**The application's containers** (`docker inspect`, named fields):
+
+| Container | Image | Compose service |
+|---|---|---|
+| `frontend-nimuairy` | `ghcr.io/pawelzajglicz/nimuairy-frontend:99c0c4aed717f28f84aa1355e973a42a2cda1c75` | `frontend` |
+| `backend-nimuairy` | `ghcr.io/pawelzajglicz/nimuairy-api:99c0c4aed717f28f84aa1355e973a42a2cda1c75` | `backend` |
+| `postgres-nimuairy` | `dhi.io/postgres:18-debian13` | `postgres` |
+| `cloudflared-nimuairy` | `cloudflare/cloudflared:2026.10.1` | `cloudflared` |
+
+- **all four:** the Compose project `nimuairy`, the working directory `/var/nimuairy`, and the
+  Compose files `/var/nimuairy/compose.yaml` and `/var/nimuairy/compose.prod.yaml`;
+- **consistent with the application:** the container names, services and image names are those
+  of the repository's `compose.yaml` and `compose.prod.yaml` [CONFIG]. The application's two
+  images carry the `APP_SHA` that S4.4 recorded from the VPS's `.env`
+  ([S4.4 §10.3](S4.4_DESIGN_CONTRACT.md#103-local-evidence-docker-desktop));
+- **not shown:**
+  - the images' integrity or provenance. Compose's labels are metadata that any Docker client
+    can set, and no digest or signature was checked;
+  - whether any other container exists. P3's listing of every container is not recorded.
+
+**P7c's second run:** the operator reports no `UNREAD:` line outside the exception register. Not
+reported: that every `REVIEW:` line outside the register is resolved, and every entry outside it
+attributed.
+
+**What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
+needs every requirement outside the register met, and the evidence above does not show that:
+1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1), and only P7a to P7c
+   are recorded as run. P3's container list is part of G6's command. A `MISSING:` tool in P10's
+   admin check leaves G6 INCONCLUSIVE.
+2. **P7a's own output:**
+   - the operator's confirmation that it printed no `UNREAD:` line, and that each of its
+     `REVIEW:` lines is resolved;
+   - for each `absent:` line about an account, a group or a gshadow entry, `userdb_none`'s
+     confirmation;
+   - every entry attributed, `syslog`'s membership of `adm` among them.
+3. **P7c's second run:** every `REVIEW:` line outside the register resolved, and every entry
+   outside it attributed.
+4. **Listeners:** the attribution of any UDP listener in P7c's listing.
+
+Revision 15 also listed a decision on the `systemd-journal` password that G6 accepts, or the
+operator's judgement on G6's STOP. Revision 16 records both, as E13 of the exception register; the
+password's origin stays unresolved.
+
+Until each holds, G6 has no outcome, and the order of §4.1 stops before C2.
 
 ### G7. U9: identity mapping, before the start
 
@@ -4474,7 +4684,7 @@ Accepted together with this contract:
 | U3: an unreadable secret leaves the password empty | S4b §12.1 | Not tested | Not observed; the guard does not depend on it |
 | U7: Compose on the VPS applies `!reset` | S4b §12.1 | G4 | Open |
 | U8: no untrusted users or services on the host | S4b §12.1 | G6 | Open. G6's exception register (§8) leaves it unverified for its entries; S6.7 does not record it closed while one stays open |
-| NSS takes accounts and groups only from `/etc/passwd`, `/etc/group` and nss-systemd's dynamic users; no nscd | This contract | P7 (`nss_sources`), G6 | Open. Ubuntu 26.04 under WSL has `files systemd`; the VPS's `/etc/nsswitch.conf` was never read |
+| NSS takes accounts and groups only from `/etc/passwd`, `/etc/group` and nss-systemd's dynamic users; no nscd | This contract | P7 (`nss_sources`), G6 | Open. Read in S6.1 [VPS, USER-REPORTED]: `passwd`, `group` and `gshadow` are `files systemd`, with no `initgroups:` line, and the operator reports `nss_sources`' acceptance (§8, G6's review record). An accepted configuration does not show that every source works (next row) |
 | `varlinkctl` runs on the VPS, and PID 1's `io.systemd.DynamicUser` answers NoRecordFound for a missing name | This contract | P7 (`userdb_none`), G6 | Open. Ubuntu 24.04's `systemd` package ships `varlinkctl`; the local systemd 259 answered so. Without either, every missing account or group is `UNREAD` |
 | U9: the LXC maps UIDs 10001, 472 and 473 | S4b §12.1 | G7, V11, V12 | Open |
 | U10: the extraction leaves the files readable | S4b §12.1 | G8 | Open |
@@ -4559,8 +4769,10 @@ Accepted together with this contract:
 ## 17. Acceptance checklist
 
 S6.1, the read-only preflight, has started: P7a to P7c have run, and their review is not complete
-(the status at the top). G6 has not been recorded; the operator has accepted its exception register
-(§8, G6). The deployment of the observability stack has not started. Every item is open.
+(the status at the top). G6 has not been recorded; the operator has accepted its exception register,
+E1 to E12 on 2026-11-17 and E13 on 2026-11-19 (§8, G6). G6's review record (§8) lists what G6
+still lacks outside the register. The deployment of the observability stack has not started.
+Every item is open.
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
