@@ -199,7 +199,7 @@ The highest samples:
 | cloudflared | 256 MiB, 128 | 17.07 MiB | 17.27 MiB | 16.26 MiB | 1.24 MiB | 7 |
 
 - **Each value is a lower bound of the peak, not the peak.** A peak between two samples is missed,
-  and the kernel has no `memory.peak` or `pids.peak`.
+  and after the upgrade the VPS's checks found `memory.peak` and `pids.peak` absent.
 - The working set is `memory.current − inactive_file`.
 - Each column is its own maximum, not necessarily from the same sample. For example, the backend's
   `anon` and `file` maxima add up to more than its `memory.current` maximum.
@@ -503,8 +503,8 @@ The design, its rules and the backend's measurement method are in
   show whether a limit is set.
   - `docker stats` shows the memory Docker sees, 4.25 GiB, as LIMIT when a container has no limit.
   - So a LIMIT of 4.25 GiB is no proof of a finite `memory.max`.
-- **No peak files.** The VPS's kernel (5.15) provides neither `memory.peak` nor `pids.peak` [VPS],
-  so no check can read a peak there.
+- **No peak files.** After the upgrade, the VPS's checks found `memory.peak` and `pids.peak` absent
+  at the root and in the backend's cgroup [VPS], so the method below reads no peak.
 - **The method**, used after the rollout ([With the app's limits](#with-the-apps-limits-s444)):
   - the cumulative counters need no sampling: `max`, `oom` and `oom_kill` in `memory.events` and
     `memory.events.local`, and `max` in `pids.events`, which counts the process or thread creations
