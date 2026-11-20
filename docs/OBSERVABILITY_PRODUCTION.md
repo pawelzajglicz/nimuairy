@@ -747,7 +747,7 @@ running stack:
   log collection while it runs;
 - `scripts/observability-exemplar-check.sh`, which needs the development ports and the backend;
 - `scripts/observability-limits-check.sh runtime`, which needs `jq` and reads `memory.peak` and
-  `pids.peak`. The VPS's kernel provides neither, so it cannot pass there;
+  `pids.peak`, failing on a file it cannot read. The VPS's checks found both absent;
 - anything that uses `observability/compose.test.yaml`.
 
 CI's checks run on a fresh runner, briefly and almost idle. A green CI run is no evidence about the

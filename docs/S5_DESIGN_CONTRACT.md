@@ -256,7 +256,7 @@ Provide a concise operational checklist covering:
 Use `docs/VPS_RESOURCE_BUDGET.md` as the source of resource values and verification commands. Do not duplicate its full resource analysis in the production guide.
 
 Important constraints:
-- The VPS kernel does not expose all peak counters used by the local resource checks.
+- The VPS's checks found `memory.peak` and `pids.peak` absent; the local resource checks read both.
 - Do not recommend running `observability-limits-check.sh runtime` directly on the VPS. Use the documented read-only VPS verification procedure from the S4.4 contract.
 - `observability-prod-check.sh runtime` is supported on the VPS, but each invocation makes one failed `admin:admin` login attempt. Grafana limits failed logins, so this check must be run deliberately and not repeated as a routine health probe.
 - Do not present CI checks as proof that the live VPS is healthy.

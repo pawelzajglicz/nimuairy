@@ -943,8 +943,9 @@ needs `jq`.
   ```
 
 - **Not on the VPS.**
-  - The VPS's kernel 5.15 probably has no `memory.peak`, which `runtime` reads, so it would fail
-    there for that reason alone.
+  - `runtime` reads `memory.peak` and `pids.peak` and fails on a file it cannot read. The VPS's
+    checks found both absent at the root and in the backend's cgroup (the contract's
+    [§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only)).
   - `jq` is not guaranteed there.
   - On the VPS, the limits are checked with the read-only commands of the contract's
     [§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only); the stack's at S6.
