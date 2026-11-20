@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-19: draft for review (revision 22). S6.1, the read-only preflight, has started:
+**Status, 2026-11-20: draft for review (revision 23). S6.1, the read-only preflight, has started:
 P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
 stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
@@ -16,8 +16,9 @@ stack has not started.**
   (revision 19). After 21:16 UTC that day, P10's two blocks ran again, followed by P7a and P7c in
   the same session, and P1 to P6 and P8 ran again, as root, in a session whose `date -u` read
   21:35:11 UTC (revision 22). §5 runs these blocks as `deploy`, apart from P8's UFW line; the
-  preflight record (§6) says what running them as root leaves of each reading. P9 has partial
-  readings only (§6).
+  preflight record (§6) says what running them as root leaves of each reading. They ran again as
+  `deploy`, at 23:19:40 UTC, with P4's budget block, and root read UFW's state (revision 23). P9
+  has partial readings only (§6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -497,6 +498,38 @@ Revisions:
   - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
     `syslog`'s membership of `adm`, and the operator's review of the keys and logins that P7a's
     latest run lists stay open. E1 to E14 are unchanged; C2 is not authorized.
+- **23** (2026-11-20), the operator's run of 2026-11-19 as `deploy`, whose output the operator
+  supplied with addresses removed [VPS, USER-REPORTED]. No procedure and no criterion changes, no
+  entry of the exception register changes, and no exception is added:
+  - **P1 to P6 and P8 as `deploy`,** after `su - deploy` from a root shell, as §5 gives these
+    blocks; P1's `date -u` read 23:19:40 UTC. The readings agree with root's run of 21:35:11 UTC,
+    apart from CPU pressure, which changes from reading to reading (§6, the preflight record):
+    - **P2:** `deploy`'s own Docker client 29.8.2, Compose v5.6.0 and context `default`, which
+      revision 22 left not read. P2's expectation for the context holds for `deploy`;
+    - **P3:** the same four containers, with the same start times to the nanosecond as in root's
+      run. That fits one engine [inference];
+    - **P5 and P6:** `none_of` was not defined in the shell, so their check lines did not run. P5's
+      listings, run again without it, show none of the stack's objects, but without exit statuses
+      they are not P5's fail-closed check. P6's listing shows only SSH;
+    - **P8:** the same IPv6 readings. Its UFW line failed as `deploy`, which is not in the sudoers
+      file; root's `ufw status verbose`, whose time is not recorded, gives the same state as at
+      21:35:11;
+  - **P4's budget block** (`VPS_RESOURCE_BUDGET.md`), in two samples, recorded apart:
+    - **how it ran:** in parts, without its first line, so no sample has a time. `memory.peak` is
+      only in the second sample, and the log sizes come from root;
+    - **what it shows:** `MemTotal` 4352 MiB from LXCFS, about 3791 MiB available, `memory.max`
+      and `memory.high` `max`, `memory.events` 0, memory-stall totals the same as at 21:35:11, one
+      CPU without throttling, 163 PIDs, 40 GB free disk, no `daemon.json`;
+    - **what it leaves open:** the effective outer LXC limit, kernel memory, peaks and the host's
+      swap. No verdict is recorded;
+  - **revision 22's classification:** `deploy`'s Docker readings now exist. The assumption about
+    the namespaces of `deploy`'s own SSH sessions stands, since this run came through `su`;
+  - **G6's review record (§8):** its list of what the preflight record lacks gains these runs'
+    missing times and `none_of`'s check, and loses P4's budget block and `deploy`'s Docker
+    readings;
+  - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
+    `syslog`'s membership of `adm`, and the operator's review of the keys and logins of P7a's
+    latest run stay open. E1 to E14 are unchanged; C2 is not authorized.
 
 ## 1. Purpose and scope
 
@@ -745,7 +778,8 @@ and a resolution that changes state needs its own consent (§11).
   helpers, P7a on 2026-11-17 and twice on 2026-11-19, P7b on 2026-11-17 and again on 2026-11-19,
   P7c three times, its second run on 2026-11-17 and its third on 2026-11-19; P10's two blocks on
   2026-11-19, once in the session of P7a's and P7c's latest runs; P1 to P6 and P8 on dates not
-  recorded, and again on 2026-11-19, as root (revisions 13, 14, 17, 18, 19 and 22). P9 has
+  recorded, and again on 2026-11-19, as root and then as `deploy` (revisions 13, 14, 17, 18, 19,
+  22 and 23). P9 has
   partial readings only (§6, the preflight record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
@@ -2819,15 +2853,16 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19 and 22)
+### Preflight record, S6.1 (revisions 18, 19, 22 and 23)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
-(revisions 19 and 22), and P1 to P6 and P8 ran again on 2026-11-19, as root, in a session whose
-`date -u` read 21:35:11 UTC (revision 22, below the table). These are not the earlier readings of
-§2.3, which stay context only. "Not recorded" marks a field missing from the evidence given, not a
-block that did not run. The operator's `ok` or `STOP` is not recorded for any row, in either
-table: the `ok / STOP` column says so row by row, and no reading counts as `ok` until the operator
+(revisions 19 and 22). P1 to P6 and P8 ran again on 2026-11-19: as root, in a session whose
+`date -u` read 21:35:11 UTC (revision 22), and as `deploy`, at 23:19:40 UTC, with P4's budget
+block (revision 23), both below the table. These are not the earlier readings of §2.3, which stay
+context only. "Not recorded" marks a field missing from the evidence given, not a block that did
+not run. The operator's `ok` or `STOP` is not recorded for any row of the record's fact tables:
+their `ok / STOP` column says so row by row, and no reading counts as `ok` until the operator
 records it. P7 is G6's (§8, G6's review record).
 
 | # | Fact | Read | Not recorded | ok / STOP |
@@ -2907,13 +2942,13 @@ records it. P7 is G6's (§8, G6's review record).
   |---|---|---|---|---|
   | P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; `lxc`; systemd 255 (`255.4-1ubuntu8.18`); `Etc/UTC` | — | Not recorded |
   | P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — | Not recorded |
-  | P2 | Engine, Compose, runc versions | Client and server 29.8.2; Compose v5.6.0; runc 1.5.1 | `deploy`'s client and Compose versions: this run read root's | Not recorded |
+  | P2 | Engine, Compose, runc versions | Client and server 29.8.2; Compose v5.6.0; runc 1.5.1 | `deploy`'s client and Compose versions: this run read root's. Revision 23's run reads them (below) | Not recorded |
   | P2 | cgroup version and driver | `2/systemd` | — | Not recorded |
-  | P2 | `userns` in SecurityOptions; context | Seccomp `builtin` and `cgroupns`, no `userns`; context `default`, read as root | `deploy`'s context: the context is per account | Not recorded |
+  | P2 | `userns` in SecurityOptions; context | Seccomp `builtin` and `cgroupns`, no `userns`; context `default`, read as root | `deploy`'s context: the context is per account. Revision 23's run reads it (below) | Not recorded |
   | P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`; logging driver `json-file` | — | Not recorded |
   | P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU; `memtotal` 4563402752, that is 4352 MiB; no warnings | — | Not recorded |
   | P3 | Application containers | `docker ps -a`, with no status filter: exactly four, `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy` and `postgres-nimuairy`, no other container, stopped ones included; the images of G6's review record (§8). All running since 2026-11-12, no restart, no OOM kill; `backend-nimuairy` and `postgres-nimuairy` healthy, the other two without a health check. Memory and PIDs limits: 512 MiB and 256, 1792 MiB and 1024, 128 MiB and 128, 256 MiB and 128, for `postgres`, `backend`, `frontend` and `cloudflared`, as `compose.prod.yaml` sets them | — | Not recorded |
-  | P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | **`memory.stat`:** no `kernel` field. Of its parts, `kernel_stack`, `pagetables`, `percpu`, `slab_reclaimable` and `slab_unreclaimable` are present and `vmalloc` is not; every other field that §10.3's sampler needs is present. **Controllers:** `cpuset cpu io memory hugetlb pids rdma misc`; cgroup2 mounted at `/sys/fs/cgroup`. **Root counters:** `memory.events` and `memory.events.local` all 0; `pids.events` `max 0`. **Root pressure:** CPU `some` avg10/60/300 6.82, 4.34, 3.12 and `full` 3.37, 2.07, 1.39; memory `some` and `full` averages 0.00, totals 11596147 and 8855907 µs. **The backend's cgroup:** its `cpu.*`, `memory.*` and `pids.*` files, among them `memory.oom.group`; no `memory.peak` or `pids.peak` | The block of `VPS_RESOURCE_BUDGET.md` that P4 runs first: not in the output given. A verdict on any of P4's items | Not recorded |
+  | P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | **`memory.stat`:** no `kernel` field. Of its parts, `kernel_stack`, `pagetables`, `percpu`, `slab_reclaimable` and `slab_unreclaimable` are present and `vmalloc` is not; every other field that §10.3's sampler needs is present. **Controllers:** `cpuset cpu io memory hugetlb pids rdma misc`; cgroup2 mounted at `/sys/fs/cgroup`. **Root counters:** `memory.events` and `memory.events.local` all 0; `pids.events` `max 0`. **Root pressure:** CPU `some` avg10/60/300 6.82, 4.34, 3.12 and `full` 3.37, 2.07, 1.39; memory `some` and `full` averages 0.00, totals 11596147 and 8855907 µs. **The backend's cgroup:** its `cpu.*`, `memory.*` and `pids.*` files, among them `memory.oom.group`; no `memory.peak` or `pids.peak` | The block of `VPS_RESOURCE_BUDGET.md` that P4 runs first: not in the output given; revision 23's run, as `deploy`, holds it (below). A verdict on any of P4's items | Not recorded |
   | P5 | Stack volumes, networks, containers; the directory | `none_of` printed five `ok` lines; none of the stack images present; `/var/nimuairy-observability`: `No such file or directory` | — | Not recorded |
   | P6 | Listeners on the stack's ports | `none_of` printed `ok`; the only listener is SSH, on the IPv4 and IPv6 wildcard addresses | — | Not recorded |
   | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist; `disable_ipv6` 0; `IPV6=yes`. UFW active, logging `low`: deny incoming, allow outgoing, deny routed; the SSH port allowed from anywhere over IPv4 and IPv6, by one rule for any protocol and one for TCP. The only IPv6 listener is SSH | The time of P8's commands | Not recorded |
@@ -2943,7 +2978,104 @@ records it. P7 is G6's (§8, G6's review record).
       kinds are not known to be `deploy`'s either.
     - **Not settled by the contract:** whether `deploy`'s Docker context and Compose need a reading
       of their own before S6.2. §5 gives `deploy` the commands, and neither run read them as
-      `deploy`; that is the operator's decision. They stay not recorded meanwhile.
+      `deploy`; that is the operator's decision. They stay not recorded meanwhile. Revision 23
+      records a run as `deploy` that reads them (below).
+- **P1 to P6 and P8 as `deploy`, and P4's budget block, 2026-11-19** (revision 23)
+  [VPS, USER-REPORTED]. Run as `deploy`, after `su - deploy` from a root shell, as §5 gives these
+  blocks; P1's `date -u` read 23:19:40 UTC. The operator supplied the output with addresses
+  removed. Three parts did not run as written:
+  - **`none_of`** was not defined in that shell, so P5's five check lines and P6's one printed
+    `none_of: command not found`. P5 says to define it in each new shell. The operator then ran
+    P5's listings again without it (below); P6's `ss -Hltn` had printed its listing;
+  - **P8's UFW line** failed as `deploy`, which is not in the sudoers file. §5 gives that line to
+    the *admin* account; root's reading is below;
+  - **P4's budget block** ran in parts, not unchanged (below).
+
+  | # | Fact | Read, as `deploy` | Not recorded | ok / STOP |
+  |---|---|---|---|---|
+  | P1 | Kernel, OS, `lxc`, systemd, time zone; `uid_map`, `gid_map` | As root's run at 21:35:11: Ubuntu 24.04.5 LTS, kernel `5.15.158-2-pve`, `lxc`, systemd 255 (`255.4-1ubuntu8.18`), `Etc/UTC`; both maps `0 100000 65536` | — | Not recorded |
+  | P2 | Engine, Compose, runc; cgroup; security; `daemon.json`; other fields | As root's run: client and server 29.8.2; Compose v5.6.0; runc 1.5.1; `2/systemd`; seccomp `builtin` and `cgroupns`, no `userns`; no warnings; `overlayfs`, `json-file`, `/var/lib/docker`, live restore disabled, one CPU, `memtotal` 4563402752; no `/etc/docker/daemon.json` | — | Not recorded |
+  | P2 | Context | `default`, `deploy`'s own | — | Not recorded |
+  | P3 | Application containers | As root's run: exactly the four, with the same images, states, health, restarts, OOM state and limits, and the same start times to the nanosecond | — | Not recorded |
+  | P4 | The contract's own lines | As root's run, apart from CPU pressure: the same `memory.stat` fields, with no `kernel` and no `vmalloc`; the same controllers and cgroup2 mount; root counters all 0; memory pressure averages 0.00, with the same totals as at 21:35:11, 11596147 and 8855907 µs; the same backend cgroup files. CPU pressure: `some` avg10/60/300 5.40, 3.99, 2.88 and `full` 2.63, 1.88, 1.23 | — | Not recorded |
+  | P4 | The block of `VPS_RESOURCE_BUDGET.md` | Two samples, below | The samples' times | Not recorded |
+  | P5 | Stack volumes, networks, containers; the directory | Listed again without `none_of`, below; none of the stack images present; `/var/nimuairy-observability`: `No such file or directory` | `none_of`'s check, which did not run; the listings' exit statuses | Not recorded |
+  | P6 | Listeners on the stack's ports | `ss -Hltn`: the only listener is SSH, on the IPv4 and IPv6 wildcard addresses, so none on the stack's ports | `none_of`'s check, which did not run | Not recorded |
+  | P8 | Global IPv6, IPv6 listeners | A global IPv6 address and a default IPv6 route exist; `disable_ipv6` 0; `IPV6=yes`; the only IPv6 listener is SSH | UFW's state, from this run: its line failed as `deploy` | Not recorded |
+
+  - **P5's listings, again, as `deploy`,** without `none_of`; their time is not recorded:
+    - volumes: only `nimuairy_postgres`; with the stack's project label,
+      `com.docker.compose.project=nimuairy-observability`: none;
+    - networks: `bridge`, `host`, `nimuairy_backend`, `nimuairy_frontend` and `none`;
+    - containers: exactly `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy` and
+      `postgres-nimuairy`; with the stack's project label: none;
+    - none of the stack images present; `/var/nimuairy-observability` does not exist.
+
+    No name matches P5's patterns, so these listings show none of the stack's objects. They are not
+    P5's fail-closed check: without `none_of`, no exit status was checked. The output shows no
+    error message. G1 and G2 read these sources again, with `none_of`, before the start (§8).
+  - **UFW, as root,** with `ufw status verbose`; its time is not recorded. The same as at 21:35:11:
+    active, logging `low`; deny incoming, allow outgoing, deny routed; the SSH port allowed from
+    anywhere over IPv4 and IPv6, by one rule for any protocol and one for TCP.
+  - **P4's budget block, as `deploy`.** The block of
+    [VPS_RESOURCE_BUDGET.md, Post-upgrade verification](VPS_RESOURCE_BUDGET.md#post-upgrade-verification)
+    ran in parts, with headings of the operator's own:
+    - **what differs from the block:**
+      - `date -u; uname -r`, the block's first line, did not run, so neither sample has a time.
+        P1's run gives the kernel;
+      - the first sample's loop omits `memory.peak`, and the second's omits `docker inspect` and
+        `daemon.json`;
+      - `nproc` ran apart, and its output is next to the second sample;
+      - the block's last line, `sudo … du`, ran as root; `deploy` is not in the sudoers file, as
+        P8's line showed;
+    - **the order:** the second sample is the later one, as its `cpu.stat` `usage_usec` is higher;
+    - **the values,** each sample's as read, not combined:
+
+      | Reading | First sample | Second sample |
+      |---|---|---|
+      | `free -m` | total 4352, used 560, free 3245, shared 19, buff/cache 545, available 3791; swap 0 | The same |
+      | `/proc/meminfo` | `MemTotal` 4456448 kB; `MemAvailable` 3882704 kB; `SwapTotal` 0 kB | `MemTotal` 4456448 kB; `MemAvailable` 3882168 kB; `SwapTotal` 0 kB |
+      | `/proc/swaps` | One entry, `none virtual 4189180 0 0` | The same |
+      | LXCFS | Mounted over `/proc/meminfo`, `/proc/swaps`, `/proc/cpuinfo`, `/proc/stat` and five more paths | The same |
+      | Root `memory.max`, `memory.high` | `max`, `max` | `max`, `max` |
+      | Root `memory.current` | 1159991296 | 1160536064 |
+      | Root `memory.peak` | Not read | `No such file or directory` |
+      | Root `memory.events` | All 0 | All 0 |
+      | Root `memory.pressure` | Averages 0.00; totals 11596147 and 8855907 µs | The same |
+      | CPU | `cpu.max` `max 100000`; `cpuset.cpus.effective` 0; `nr_periods` 0, `nr_throttled` 0 | The same; `nproc` 1 |
+      | Root PIDs | `pids.max` `max`; `pids.current` 163 | The same |
+      | Root `memory.stat` | `anon` 484364288, `file` 572276736, `sock` 49152, `shmem` 20680704, `inactive_file` 149716992; no `kernel` | `anon` 484917248, `file` 572313600, `sock` 49152, `shmem` 20680704, `inactive_file` 149401600; no `kernel` |
+      | `docker info` | NCPU 1; `memtotal` 4563402752; memory, swap and PID limits supported | The same |
+      | Containers | The four, started 2026-11-12 between 21:17:09 and 21:18:31 UTC; no restart, no OOM kill | Not read |
+      | `docker stats` | `cloudflared-nimuairy` 18.88 MiB, 0.23 %, 7 PIDs; `frontend-nimuairy` 3.953 MiB, 0.00 %, 2; `backend-nimuairy` 340.7 MiB, 0.03 %, 31; `postgres-nimuairy` 57.66 MiB, 0.00 %, 19 | 18.89 MiB, 0.16 %, 7; 3.953 MiB, 0.00 %, 2; 340.7 MiB, 0.04 %, 31; 61.45 MiB, 3.70 %, 24 |
+      | Disk | `/`: ext4, 45G, 2.7G used, 40G available, 7 %. Docker: 5 images, 4 in use, 1.13 GB, 59.41 MB reclaimable; 4 containers, all running; 1 volume, 65.41 MB; no build cache | The same |
+      | `daemon.json` | None | Not read |
+
+    - **the logs,** the block's last line, as root; its time is not recorded: four container logs,
+      of 4.0K, 16K, 36K and 1.8M;
+    - **restarts:** each container started on 2026-11-12, after the upgrade that the operator dates
+      to about 22:30 UTC on 2026-11-10 (§8, G6's review record), and none has restarted since;
+    - **what these readings leave open,** as the budget's own reading of them says:
+      - **T:** `memory.max=max` exposes no finite limit at the visible root, so it does not show
+        the effective outer LXC limit. 4352 MiB, from LXCFS's `/proc/meminfo`, stays the
+        best-supported estimate, not a verified, enforced limit (§2.3);
+      - **kernel memory:** the block's `memory.stat` line has no `kernel` field and does not print
+        its parts, so this output gives no kernel memory, and no sum of `anon`, `shmem`, `kernel`
+        and `sock`. §10.3 computes kernel memory from the parts, as an [ESTIMATE] (revision 22);
+      - **peaks:** the first sample's loop did not read `memory.peak`. The second sample's read of
+        `/sys/fs/cgroup/memory.peak`, the visible root, returned `No such file or directory`, so
+        neither sample gives a peak. `docker stats` gives readings at one moment, not peaks;
+      - **swap:** the guest shows no swap but a virtual `/proc/swaps` entry; swap on the host side
+        stays unknown, and this budget does not count on it;
+      - **no verdict** on P4's items is recorded.
+  - **What this run changes in revision 22's classification** (above):
+    - **`deploy`'s own readings:** the Docker client 29.8.2, Compose v5.6.0 and the context
+      `default`. P2's expectation for the context holds for `deploy`;
+    - **the engine:** `deploy`'s client, through `default`, reads the same engine values as root's,
+      and the same four containers with the same start times to the nanosecond. That fits one
+      engine [inference]; nothing else shows it;
+    - **the assumption** about namespaces stands for `deploy`'s own SSH sessions. This run came
+      through `su` from a root shell, so it ran in that shell's namespaces.
 
 ## 7. S6.2 — Delivering the files and host configuration
 
@@ -3886,8 +4018,10 @@ needs every requirement outside the register met, and the evidence above does no
    run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
    - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row, the dates of
      P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded. Among them
-     are the part of P4 that runs `VPS_RESOURCE_BUDGET.md`'s block, in the run of 2026-11-19, and
-     `deploy`'s Docker context, client and Compose, which that run, as root, did not read;
+     are the times of P4's budget samples, of P5's listings and of root's UFW reading, and the
+     check of `none_of`, which did not run in the run as `deploy` (revision 23). That run records
+     P4's budget block and `deploy`'s Docker context, client and Compose, which revision 22 listed
+     here;
    - **P9:** its block has not run for a tunnel candidate. D2 is open.
 
    Revision 22 records the rest that revision 21 listed here. P3's run of 2026-11-19 showed no
