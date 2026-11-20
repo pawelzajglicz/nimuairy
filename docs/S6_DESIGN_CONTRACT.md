@@ -527,6 +527,8 @@ Revisions:
   - **G6's review record (§8):** its list of what the preflight record lacks gains these runs'
     missing times and `none_of`'s check, and loses P4's budget block and `deploy`'s Docker
     readings;
+  - **the peak files:** §2.3, §2.4, §10.3 and §15 no longer say that the kernel lacks
+    `memory.peak` and `pids.peak`; they say that the VPS's checks found them absent;
   - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
     `syslog`'s membership of `adm`, and the operator's review of the keys and logins of P7a's
     latest run stay open. E1 to E14 are unchanged; C2 is not authorized.
@@ -602,7 +604,7 @@ replaces the old one for every S6 decision.
 | Kernel | `5.15.158-2-pve`, the provider's; it changed once with the upgrade, for a reason not determined [VPS, 2026-11-12] | [S4.4 §13, Rollout record](S4.4_DESIGN_CONTRACT.md#13-app-rollout-and-rollback-h11-option-b1) |
 | Docker Engine, Compose, runc | Engine 29.8.2; Compose `v5.6.0`; runc `v1.5.1-0-g8f2685a4` [VPS, 2026-11-12] | S4.4 §11, §13 |
 | systemd | `255.4-1ubuntu8.18` [VPS] | [S4.4 §8](S4.4_DESIGN_CONTRACT.md#8-oom-behaviour-and-oom_score_adj-h2) |
-| cgroup | v2 with the `systemd` driver; `memory.events.local` present; no `memory_localevents` mount option; no `memory.peak` or `pids.peak` [VPS] | [S4.4 §10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only) |
+| cgroup | v2 with the `systemd` driver; `memory.events.local` present; no `memory_localevents` mount option; S4.4's check of the root and the backend's cgroup found `memory.peak` and `pids.peak` absent [VPS] | [S4.4 §10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only) |
 | `memory.stat` fields | The filtered output had no `kernel` field; the full list was not read [VPS] | [Budget, Outstanding verification](VPS_RESOURCE_BUDGET.md#outstanding-verification) |
 | Memory | `MemTotal` 4352 MiB from LXCFS; root `memory.max=max`; T = 4352 MiB is an inference, its enforcement [UNKNOWN]; `MemAvailable` 3384 MiB before the app rollout | [Budget, After the upgrade](VPS_RESOURCE_BUDGET.md#after-the-upgrade) |
 | CPU | One CPU; `cpu.max max 100000` at the root; `nr_throttled` 0 | the same |
@@ -645,8 +647,9 @@ replaces the old one for every S6 decision.
   - exactly one running container for each of the six services, and nothing listening on
     `127.0.0.1` 9090, 3100, 3200, 4317, 4318 or 12345.
 - **`observability-limits-check.sh runtime` cannot run on the VPS.** It needs `jq`, and its probe
-  reads `memory.peak` and `pids.peak`, which the VPS's kernel lacks, and fails on an unreadable
-  file. §10.3 adapts S4.4's read-only method instead.
+  reads `memory.peak` and `pids.peak`, which the VPS's checks found absent (§2.3; §6, the
+  preflight record), and fails on an unreadable file. §10.3 adapts S4.4's read-only method
+  instead.
 - **CI writes the secret with mode 0644** into an `observability/secrets/` directory that
   `mkdir -p` creates with the runner's default mode. CI therefore never ran the secret in a 0700
   directory (§7.5).
@@ -4674,9 +4677,10 @@ env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES -u SHELLOPTS -u BASH_ENV bash
   ([With the app's limits](VPS_RESOURCE_BUDGET.md#with-the-apps-limits-s444)). S6 measures the
   stack (O, idle) and the combined state of the whole LXC.
 - **The method is S4.4's** ([§10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only),
-  [Appendix A.3](S4.4_DESIGN_CONTRACT.md#a3-after-the-app-rollout-s444)): the kernel has no peak
-  files, so cumulative counters are read twice and levels are sampled every 10 s. The highest sample
-  is a lower bound of the peak, never the peak. What must not be added together is in the budget's
+  [Appendix A.3](S4.4_DESIGN_CONTRACT.md#a3-after-the-app-rollout-s444)): the VPS's checks found
+  `memory.peak` and `pids.peak` absent (§2.3; §6, the preflight record), so cumulative counters
+  are read twice and levels are sampled every 10 s. The highest sample is a lower bound of the
+  peak, never the peak. What must not be added together is in the budget's
   [What must not be added together](VPS_RESOURCE_BUDGET.md#what-must-not-be-added-together).
 
 **R0, the baseline before the pull (G11, G13a, G13b).** **VPS, read-only:** P4's blocks, and the R1
@@ -5464,7 +5468,8 @@ Accepted together with this contract:
   initialisation, share it with the running application and its health check. Not measured on the
   VPS.
 - **Idle evidence only** (§10.4). A passing S6 says nothing about S7.
-- **Sampling misses peaks.** The kernel has no `memory.peak` or `pids.peak`.
+- **Sampling misses peaks.** The VPS's checks found `memory.peak` and `pids.peak` absent (§2.3;
+  §6, the preflight record).
 - **Tempo's memory** grew through the whole local idle run, and its 168-h steady state is unknown
   ([Risks](VPS_RESOURCE_BUDGET.md#risks)).
 - **Disk:** container logs without rotation, telemetry limited by time only, old images never
