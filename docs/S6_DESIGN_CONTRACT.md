@@ -23,8 +23,8 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   as PASS for that session's context, the account `root` and the selected existing key, as
   reported on 2026-11-21 (revision 26; §6). In that session, root also ran P10's `deploy` block
   (revision 27) and, as the operator confirms, P10's admin block. Its one `MISSING:` line,
-  `grep`'s, is no missing tool: `grep` is present, and the same line was explained on 2026-11-19
-  by a shell alias (revision 28; §6).
+  `grep`'s, is the issue resolved on 2026-11-19, a shell alias, as the operator identifies it;
+  `grep` exists (revision 28; §6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -100,9 +100,7 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
   so far does not show that, so accepting E15 does not complete G6. G6's review record (§8) lists
   what is missing: from the preflight, which G6 follows, the record's verdicts for every row but
-  P9's, its dates and its missing fields, and the operator's confirmation that the resolution of
-  2026-11-19 for `MISSING: grep`, a shell alias, applies to that line in P10's admin check in P9's
-  session.
+  P9's, its dates and its missing fields.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
@@ -682,27 +680,30 @@ Revisions:
   - **its output:** as this account, every tool found in `/usr/bin`, apart from one line,
     `MISSING: grep, as this account`; as root through `sudo`, every tool found, `grep` as
     `/usr/bin/grep` among them; no `UNREAD:` line; `atq` and `at` absent, which is optional;
-  - **the `grep` line, against the resolution of 2026-11-19** (revision 18): that resolution
-    established the cause of the same line, a shell alias, `grep='grep --color=auto'`, which made
-    `command -v` print the alias instead of a path, and later clean runs met P10's expectation. As
-    the operator states, this line is that issue, and no new finding. What carries over: the line
-    is no evidence of a missing tool, and this run shows `grep` present itself, `/usr/bin/grep`
-    executable as root and `/usr/bin` on this account's `PATH`; P10's blocking condition, "a
-    missing tool of P7 or P9", does not hold. What does not carry over by itself: the alias is not
-    shown for P9's session, and the resolution met P10's expectation, no `MISSING:` line, with a
-    clean run, not by accepting the line. So the operator's confirmation that the resolution
-    applies to this line is what the record still needs; no new investigation or run;
+  - **the `grep` line, against the resolution of 2026-11-19** (revision 18): that day the same
+    line had an established cause, a shell alias, `grep='grep --color=auto'`, which made
+    `command -v` print the alias instead of a path; later clean runs met P10's expected output.
+    Here `grep` exists, `/usr/bin/grep` executable as root and `/usr/bin` on this account's
+    `PATH`, so `command -v` printed something other than the path that `PATH` gives. The `sudo`
+    check shows that `grep` exists, not why the first loop printed the line, and the alias is not
+    in this output. The operator identifies the line as the issue resolved on 2026-11-19, and no
+    new finding [USER-REPORTED]; on that identification the resolution applies, and no decision
+    of the operator is pending for the line;
+  - **P10's criteria:** its rule for G6, "a missing tool of P7 or P9, or an `UNREAD:` here", does
+    not apply: `grep` exists, the operator identifies the line, and no `UNREAD:` line was printed.
+    Its expected output, no `MISSING:` line, is not met as printed; on 2026-11-19 a clean run met
+    it. The verdict on its tools row stays the operator's `ok` or `STOP`, which no P10 row has yet;
   - **P10's session rule for P9:** the question that revisions 26 and 27 left not recorded is
     answered. The admin block ran in P9's session, as the operator confirms. P9's PASS and its
     scope are unchanged;
   - **two runs, two blocks:** revision 27's run is P10's `deploy` block, this one its admin block;
     neither reads the other's values;
   - **P10 is not complete:** both P10 rows of the preflight record keep `Not recorded` as their
-    `ok / STOP`, and P10's check in P9's session awaits that confirmation;
-  - **G6 still has no outcome:** its list of what it lacks replaces the unrecorded session with that
-    confirmation, and keeps the record's verdicts, dates and other missing fields. E1 to E15, D2,
-    which is open, and the order of §4.1 are unchanged. The run authorizes no VPS operation and
-    gives no consent (§4); C2 is not authorized, and S6.2 has not started.
+    `ok / STOP`;
+  - **G6 still has no outcome:** its list of what it lacks drops the unrecorded session, and keeps
+    the record's verdicts, dates and other missing fields; the `grep` line adds no gap of its own.
+    E1 to E15, D2, which is open, and the order of §4.1 are unchanged. The run authorizes no VPS
+    operation and gives no consent (§4); C2 is not authorized, and S6.2 has not started.
 
 ## 1. Purpose and scope
 
@@ -3475,30 +3476,36 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
     `grep` as `/usr/bin/grep`. No `UNREAD:` line: `sudo` ran;
   - **`atq` and `at`:** absent, which P10 makes optional; P7b then lists no `at` job. This is no
     failure, and the same as on 2026-11-19;
-  - **the `grep` line, against the resolution of 2026-11-19** (above): the first admin run of that
-    day printed the same line. Its cause was established: the root shell had an alias,
+  - **the resolution of 2026-11-19** (above): the first admin run of that day printed the same
+    line. Its cause was established in that session: the root shell had an alias,
     `grep='grep --color=auto'`, so `command -v` printed the alias instead of a path, `[ -x ]`
-    failed, and the loop printed `MISSING:` while `grep` was present. Later runs, clean, then gave
-    P10's check its expected output, for the sessions that needed it. As the operator states, this
-    line is that issue, and no new finding [USER-REPORTED];
-  - **what the resolution carries over:** the line is no evidence of a missing tool, and no new
-    finding. This run shows `grep` present itself: `/usr/bin/grep` is executable as root, and
-    `/usr/bin` is on this account's `PATH`, where the loop found its other tools. So P10's blocking
-    condition, "a missing tool of P7 or P9", does not hold, and nothing about `grep` is to be
-    investigated again;
-  - **what it does not carry over by itself:** two things, which the record states instead of
-    assuming them:
-    - **the alias belongs to the session of 2026-11-19.** This output does not show what `grep`
-      was in P9's session. The same alias fits it [inference], and is not assumed;
-    - **the resolution met P10's expectation with a clean run,** not by accepting the line. P10
-      expects no `MISSING:` line, and G6's INCONCLUSIVE conditions name "a `MISSING:` tool in
-      P10's admin check", the line itself. This contract has no rule that an explained line meets
-      them;
+    failed, and the loop printed `MISSING:` although `grep` was present. Later runs, clean, gave
+    P10's check its expected output in the sessions that needed it;
+  - **what this run's output shows:**
+    - **that `grep` exists:** `/usr/bin/grep` is executable as root, and `/usr/bin` is on this
+      account's `PATH`, where the loop found its other tools;
+    - **why the line was printed, in part:** with an executable `grep` in `PATH`, `command -v`
+      printed something other than the path that `PATH` gives, as an alias or a function, for
+      example, makes it. The `sudo` check shows that `grep` exists, not what `command -v`
+      printed, and the alias itself is not in this output;
+  - **the operator's identification** [USER-REPORTED]: the line is the issue resolved on
+    2026-11-19, and no new finding. That the alias was active in P9's session rests on this
+    identification, not on the output. On it, the resolution applies: the line is no missing
+    executable, nothing about `grep` is investigated again, and no decision of the operator is
+    pending for it;
+  - **P10's criteria, as written:**
+    - **its rule for G6:** "a missing tool of P7 or P9, or an `UNREAD:` here, leaves G6
+      INCONCLUSIVE, because the listing that needs it cannot be complete". `grep` exists, the
+      operator identifies the line as the alias, and no `UNREAD:` line was printed, so the rule
+      does not apply. G6 lists "a `MISSING:` tool in P10's admin check" as an example of an
+      `UNREAD:` line, a source not known (§8, G6); `grep` is known to exist;
+    - **its expected output:** no `MISSING:` line. This output has one, so the expectation is not
+      met as printed, and the record does not count the line as absent. On 2026-11-19 a clean run
+      met it. The verdict on P10's tools row, this run included, is the operator's `ok` or `STOP`,
+      which no P10 row has yet; it is no separate decision about `grep`;
   - **what it settles:** P10's admin block ran in P9's session, as the operator confirms. That is
-    the question that revisions 26 and 27 left not recorded (above);
-  - **what it leaves:** only the record that the resolution of 2026-11-19 applies to this line:
-    the operator's confirmation of that, which is not yet recorded (§8, G6's review record). It is
-    no new investigation, and needs no new run. P9's PASS and its scope are unchanged;
+    the question that revisions 26 and 27 left not recorded (above). P9's PASS and its scope are
+    unchanged;
   - **not the `deploy` block:** this run and revision 27's are runs of P10's two different blocks,
     and neither reads the other's values. P10's expectations for `deploy` stay with the run as
     `deploy` of 2026-11-19 (above);
@@ -4554,18 +4561,18 @@ of G6.
      among them P9's time. Revision 25's runs of 2026-11-21 give P4's budget block, its last line
      and root's UFW reading their times, and run P5's and P6's checks as written, as `deploy`, with
      `none_of` defined in that shell. Revision 23's run records `deploy`'s Docker context, client
-     and Compose, which revision 22 listed here;
-   - **P10's check in P9's session:** the operator's confirmation that the resolution of
-     2026-11-19 applies to the run's one `MISSING:` line, `grep`'s, as this account. The resolution
-     and the run already show that `grep` is present and that the line is no new finding. They do
-     not show that the alias was active in P9's session, and the resolution met P10's expectation
-     with a clean run, not by accepting the line (§6, the preflight record).
+     and Compose, which revision 22 listed here.
 
    P9's block, which revision 25 listed here, has run for `root` and the selected key, and the
    operator accepted it as PASS (revision 26; §6, the preflight record). D2 stays open: §4.1 needs
    it before C2 (step 2), not for G6. Whether P10's admin block ran in P9's session, which
    revisions 26 and 27 listed here as not recorded, is recorded in revision 28: it ran there, as
-   the operator confirms. Revision 27's run in that session is P10's `deploy` block.
+   the operator confirms. Revision 27's run in that session is P10's `deploy` block. The admin
+   run's one `MISSING:` line, `grep`'s, is the issue resolved on 2026-11-19, as the operator
+   identifies it. `grep` exists, so neither P10's rule for G6, a missing tool, nor G6's condition
+   for it, "a `MISSING:` tool in P10's admin check" (below), which G6 lists as an `UNREAD:` line,
+   applies, and the line adds no gap here. That the line is printed stays part of P10's tools row,
+   whose `ok` or `STOP` is among the record's missing verdicts (§6, the preflight record).
 
    Revision 22 records the rest that revision 21 listed here. P3's run of 2026-11-19 showed no
    container other than the four. P7a's and P7c's latest runs followed P10's checks in their own
