@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-20: draft for review (revision 23). S6.1, the read-only preflight, has started:
+**Status, 2026-11-21: draft for review (revision 24). S6.1, the read-only preflight, has started:
 P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
 stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
@@ -41,10 +41,12 @@ stack has not started.**
     - P7a's run after P10's checks, in their session, on 2026-11-19 (revision 22): the same UID 0
       account, login shells, NSS sources and group members, and the `systemd-journal` field as
       `locked`; no `UNREAD:` line, no `REVIEW:` line, and no `absent:` line about a group or a
-      gshadow entry. The operator's review of the keys and logins that it lists is not recorded.
+      gshadow entry. The operator accepts the review of the keys, by their fingerprints and
+      options, and of the logins that it lists (revision 24).
 
-    Not attributed: `syslog`'s membership of `adm`. Its origin stays unresolved, and it is no entry
-    of the exception register;
+    Not attributed: `syslog`'s membership of `adm`. A read-only investigation of 2026-11-20 found
+    the installed `rsyslog` package's mechanism for it, but no evidence that this mechanism created
+    it (revision 24). Its origin stays unresolved, and it is no entry of the exception register;
   - **P7b: run twice and reviewed; findings are open.** Its first run, of 2026-11-17, printed no
     `UNREAD:` and no `STOP`. The job `app-backup` was recognized as the application's backup,
     `nimuairy-backup` ([README, Database backups](../README.md#database-backups)). `pkg_file` gave
@@ -89,13 +91,15 @@ stack has not started.**
   so far does not show that. G6's review record (§8) lists what is missing:
   - from the preflight, which G6 follows: P9's block for a tunnel candidate, and the record's
     verdicts, dates and missing fields;
-  - from P7a, the attribution of `syslog`'s membership of `adm`, and the operator's review of the
-    keys and logins that its run after P10's checks lists.
+  - from P7a, the attribution of `syslog`'s membership of `adm`, which the investigation of
+    2026-11-20 did not establish (revision 24).
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
   E14. P3's confirmation that no other container exists, P10's session rule for P7a's and P7c's
   runs, and the four unit files, which revision 21 listed as missing, are recorded in revision 22.
+  The operator's review of the keys and logins of P7a's run after P10's checks, which revision 22
+  listed as missing, is recorded in revision 24.
   S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
@@ -532,6 +536,31 @@ Revisions:
   - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
     `syslog`'s membership of `adm`, and the operator's review of the keys and logins of P7a's
     latest run stay open. E1 to E14 are unchanged; C2 is not authorized.
+- **24** (2026-11-21), the operator's read-only investigation of `syslog`'s membership of `adm`,
+  of 2026-11-20, and the operator's acceptance of the review of P7a's latest run
+  [VPS, USER-REPORTED]. No procedure and no criterion changes, no entry of the exception register
+  changes, and no exception is added:
+  - **`syslog` in `adm`:** the installed `rsyslog.postinst`, of 8.2312.0-3ubuntu9.4, runs
+    `adduser syslog adm || true` in its `configure` branch, not only on the first installation;
+    it was not compared with its package. dpkg's log, as read on 2026-11-19, has the package
+    configured on 2026-08-24 and 2026-10-01; APT's history, in the operator's material of
+    2026-11-20, gives the same two upgrades. No other mechanism was found in the packages'
+    maintainer scripts, `sysusers.d` or `base-passwd`; `cloud-init` is installed, with no log
+    kept. The membership is in `/etc/group`, `/etc/gshadow` and both their backups. The kept logs
+    begin on 2026-10-02 (`auth.log`) and 2026-11-14 (the journal); the operator's searches of them
+    found neither the membership's addition nor a change by hand. Nothing shows that the
+    mechanism created the membership, or when or how it was made, so it stays not attributed, and
+    G6 INCONCLUSIVE on it (§8, G6's review record);
+  - **the comparison of `/etc/gshadow-` with `/etc/gshadow`** leaves the password field out: it
+    compares fields 1, 3 and 4 only (§8, G6's review record);
+  - **P7a's review:** the operator accepts the review of P7a's run after P10's checks, of
+    2026-11-19: its keys, by their fingerprints and options, and the logins of `last` (G6, items 3
+    and 6). No fingerprint, address or host is recorded, and P7a's results are unchanged;
+  - **the status and G6's review record (§8)** record both. G6's list of what it lacks loses the
+    review of the keys and logins and keeps `syslog`'s membership of `adm`;
+  - **G6 still has no outcome:** P9's block, the preflight record's verdicts and missing fields,
+    and `syslog`'s membership of `adm` stay open, and D2 is open. E1 to E14 are unchanged; C2 is
+    not authorized, and S6.2 has not started.
 
 ## 1. Purpose and scope
 
@@ -3965,7 +3994,8 @@ listings themselves are not recorded here (§5):
   - **keys and logins, not yet reviewed in the record:** the operator's review of these `key:`
     lines, by their fingerprints and options, and of the logins that `last` lists (G6, items 3 and
     6) is not recorded for this run. It is not inferred from the review of 2026-11-17 (revision
-    13), which covered that day's run (below, item 2);
+    13), which covered that day's run (below, item 2). Revision 24 records the operator's
+    acceptance of this run's review (below);
   - **NSS's sources:** `files systemd` for `passwd`, `group` and `gshadow`, accepted by
     `nss_sources`, as before;
   - **the sudo rules and the groups:** the rules of `root`, `%admin` and `%sudo`, and nothing else
@@ -3980,7 +4010,8 @@ listings themselves are not recorded here (§5):
     rest of the echo matches the contract's text, and the output runs in the block's order through
     `last`. P7a is not taken as failed for it;
   - **`syslog` in `adm`:** still not attributed. This output adds no evidence of its origin. No
-    further investigation of it has run, and no entry of the register is added for it;
+    further investigation of it had run by revision 22, and no entry of the register is added for
+    it. Revision 24 records the investigation of 2026-11-20 (below);
 - **P7c, its third run.** Its block matches the contract's text, apart from comment lines outside
   its functions:
   - **the markers:** no `UNREAD:` line. Exactly four `REVIEW:` lines, the templates of E3 to E6,
@@ -4015,6 +4046,67 @@ listings themselves are not recorded here (§5):
   integrity check, not a security verification. It covers the unit files only; their drop-ins
   stay E8, E10, E11 and E12, unchanged and unresolved.
 
+**The review of P7a's run after P10's checks, accepted** [USER-REPORTED], recorded in revision 24.
+The operator accepts the review of that run of 2026-11-19 (above): its `key:` lines, by their
+fingerprints and options, and the logins that `last` lists (G6, items 3 and 6). This record holds
+no fingerprint, address or host. P7a's results above are unchanged; the acceptance adds no
+reading.
+
+**`syslog` in `adm`: the investigation of 2026-11-20** [VPS, USER-REPORTED], recorded in revision
+24. Read-only checks; the operator supplied a summary of their results, and the raw output, with
+its exit statuses, is not part of it, apart from the two comparisons of the backups (below):
+- **the installed script:** `/var/lib/dpkg/info/rsyslog.postinst` of `rsyslog`
+  `8.2312.0-3ubuntu9.4`, `install ok installed`, with the SHA-256
+  `88c6faeb717244bf60e75084393bbb8592b4d39202673f0bb0c0c43b2243673b`. Its `configure` branch runs
+  `adduser --system --group --no-create-home --quiet syslog || true` and
+  `adduser syslog adm || true`, on every `configure`, not only on the first installation;
+- **not compared with its package:** the `.deb` of this version was not in APT's cache. dpkg's
+  MD5 sums cover a package's files, not its maintainer scripts, so no check covers the script;
+- **the package's history:** dpkg's log, as read on 2026-11-19, has a `trigproc` at 9.2 on
+  2026-06-26, an `upgrade` from 9.2 to 9.3 with its `configure` on 2026-08-24, and an `upgrade`
+  from 9.3 to 9.4 with its `configure` on 2026-10-01, each ending `status installed`, and no
+  `install` event. APT's history, in the operator's material of 2026-11-20, gives the same two
+  upgrades. `dpkg.log`'s oldest entry is of 2026-06-26 (E14, above), so the package was
+  installed before the kept history. The script read is 9.4's; 9.3's, which the `configure` of
+  2026-08-24 ran, was not read;
+- **other mechanisms:** among the packages' maintainer scripts, only `rsyslog.postinst` has
+  instructions about `syslog`. `/usr/lib/sysusers.d` declares nothing about `syslog`, and
+  `/etc/sysusers.d` and `/run/sysusers.d` do not exist. `/usr/share/base-passwd/group.master`
+  does not make `syslog` a member of `adm`. `cloud-init` is installed, and no
+  `/var/log/cloud-init*.log` is kept;
+- **the backups:** `syslog` is `adm`'s member in `/etc/group` and `/etc/group-`, and in
+  `/etc/gshadow` and `/etc/gshadow-`. Both comparisons, `diff /etc/group- /etc/group` and the one
+  of the two `gshadow` files (below), exited 1 with one difference only, the same in both, on
+  line 61: `deploy` is `docker`'s member in the current file and not in its backup
+  (`docker:x:988:` against `docker:x:988:deploy`, and `docker::` against `docker::deploy`).
+  Neither shows a difference about `adm`. That the two differences match does not show that both
+  backups come from one write (below, "not established"). All four files have a birth time of
+  2026-11-10, the upgrade's day, like most of `/etc` (E14, above); it does not date the
+  membership;
+- **the comparison of the two `gshadow` files,** without the password field: as root, after a
+  check that both are readable regular files, a `diff` of their fields 1, 3 and 4
+  (`cut -d: -f1,3,4`), the group's name, administrators and members. The password field is
+  neither printed nor compared; a plain `diff` of the two files would print it, so it is not
+  used. Exit status 0: no difference; 1: differences; 2: an error, or a file not read;
+- **the logs:** the journal's oldest entry is of 2026-11-14, and the kept `auth.log` files begin
+  on 2026-10-02. The operator's searches found no entry of the membership's addition, no change
+  of it by hand, and no run of the script's lines as its cause. Both `configure` runs came before
+  either log begins, so no kept log shows what they did. An absence there excludes nothing
+  before their start;
+- **established:** the membership now and in both backups; the mechanism in the installed
+  script's `configure` branch; the two `configure` runs of dpkg;
+- **not established:** that the mechanism created this membership, and when, how or by whom it
+  was made. `|| true` discards `adduser`'s exit status, so a run of the line shows no result
+  either way. Each backup holds its own file's state before that file's last write, so
+  `/etc/group-` and `/etc/gshadow-` can come from different writes, and together they date no
+  single moment. That the membership is in them shows only that it was there before those
+  writes;
+- **not excluded:** the provider's provisioning, `cloud-init`, whose logs are not kept, and a
+  change by hand before the kept logs;
+- **for G6:** not attributed, and neither presented as made by `rsyslog` nor as unauthorized. An
+  entry not yet attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. No entry of the
+  exception register is added for it.
+
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
 needs every requirement outside the register met, and the evidence above does not show that.
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
@@ -4031,13 +4123,16 @@ needs every requirement outside the register met, and the evidence above does no
    container other than the four. P7a's and P7c's latest runs followed P10's checks in their own
    session, and those checks reported no `MISSING:` tool, so for these runs P10's session rule
    needs no decision. A `MISSING:` tool in P10's admin check leaves G6 INCONCLUSIVE.
-2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. An entry not yet
+2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. The investigation of
+   2026-11-20 (revision 24, above) found the installed `rsyslog` script's mechanism for it, but no
+   evidence that this mechanism created it, or when or how it was made. An entry not yet
    attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. Revision 17 records the rest
    that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
    `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
    usable passwords. P7a's run after P10's checks (revision 22) shows the same markers. The
-   operator's review of its `key:` lines and of `last`'s logins (G6, items 3 and 6) is not
-   recorded; revision 13 records that review for the run of 2026-11-17.
+   operator's review of its `key:` lines and of `last`'s logins (G6, items 3 and 6), which
+   revision 22 listed here, is accepted (revision 24, above); revision 13 records that review for
+   the run of 2026-11-17.
 3. **P7b:** `/etc/crontab`, which revision 19 listed here as a STOP finding outside the register,
    is E14 (revision 21); its origin stays unresolved (above). Revision 20 records E2's scope: both
    `sysstat` files, which E2 now names. Revision 19 records the rest: P7b's run of 2026-11-19
