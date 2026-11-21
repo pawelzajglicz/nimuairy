@@ -537,7 +537,7 @@ Revisions:
     `syslog`'s membership of `adm`, and the operator's review of the keys and logins of P7a's
     latest run stay open. E1 to E14 are unchanged; C2 is not authorized.
 - **24** (2026-11-21), the operator's read-only investigation of `syslog`'s membership of `adm`,
-  of 2026-11-20, and the operator's acceptance of the review of P7a's latest run
+  which ran on 2026-11-20, and the operator's acceptance of the review of P7a's latest run
   [VPS, USER-REPORTED]. No procedure and no criterion changes, no entry of the exception register
   changes, and no exception is added:
   - **`syslog` in `adm`:** the installed `rsyslog.postinst`, of 8.2312.0-3ubuntu9.4, runs
@@ -3991,11 +3991,11 @@ listings themselves are not recorded here (§5):
   - **accounts:** 34 in NSS's reading; `root` the only account with UID 0; `root` and `deploy` the
     only accounts with a login shell, and the only ones with a usable password; both have an
     authorized-keys file, `root`'s with two keys and `deploy`'s with one, which has `restrict`;
-  - **keys and logins, not yet reviewed in the record:** the operator's review of these `key:`
-    lines, by their fingerprints and options, and of the logins that `last` lists (G6, items 3 and
-    6) is not recorded for this run. It is not inferred from the review of 2026-11-17 (revision
-    13), which covered that day's run (below, item 2). Revision 24 records the operator's
-    acceptance of this run's review (below);
+  - **keys and logins, not reviewed in the record before revision 24:** in revisions 22 and 23,
+    the operator's review of these `key:` lines, by their fingerprints and options, and of the
+    logins that `last` lists (G6, items 3 and 6) was not recorded for this run. It is not inferred
+    from the review of 2026-11-17 (revision 13), which covered that day's run (below, item 2).
+    Revision 24 records the operator's acceptance of this run's review (below);
   - **NSS's sources:** `files systemd` for `passwd`, `group` and `gshadow`, accepted by
     `nss_sources`, as before;
   - **the sudo rules and the groups:** the rules of `root`, `%admin` and `%sudo`, and nothing else
