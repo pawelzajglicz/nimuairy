@@ -590,6 +590,9 @@ Revisions:
     to it where it gives a missing time or check. G6's review record (§8) drops from what G6 lacks
     the times of P4's budget samples, of P5's listings and of root's UFW reading, and `none_of`'s
     check as `deploy`;
+  - **the basis of S6.1:** the operator accepted revision 24 as the basis for continuing S6.1
+    [USER-REPORTED]. The status stays a draft for review, and this acceptance gives no consent of
+    §4;
   - **G6 still has no outcome:** P9's block, the preflight record's verdicts and its other missing
     fields, and `syslog`'s membership of `adm` stay open, and D2 is open. E1 to E14 are unchanged;
     C2 is not authorized, and S6.2 has not started.
