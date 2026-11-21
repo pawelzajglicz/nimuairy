@@ -3240,8 +3240,8 @@ record).
     Both are recorded as read; their origin is not shown. Whether they meet G9's "only the SSH
     rule" is G9's question, and D7's if G9 asks for it (§8, G9; §13.3);
   - **the namespace assumption** about `deploy`'s own SSH sessions stands (revision 22): B1, B3 and
-    the second run came through `su - deploy` from a root shell, so they ran in that shell's
-    namespaces.
+    the second run came through `su - deploy` from a root shell. That does not establish the
+    namespace context of an independent SSH session by `deploy`.
 
 ## 7. S6.2 — Delivering the files and host configuration
 
