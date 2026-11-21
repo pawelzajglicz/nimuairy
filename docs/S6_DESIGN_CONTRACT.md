@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-21: draft for review (revision 27). S6.1, the read-only preflight, has started:
+**Status, 2026-11-21: draft for review (revision 28). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
@@ -21,9 +21,10 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   last line and P8's UFW line; and P5 and P6 ran as `deploy`, the second time as written
   (revision 25). P9 ran as root, inside the operator's SSH session, and the operator accepted it
   as PASS for that session's context, the account `root` and the selected existing key, as
-  reported on 2026-11-21 (revision 26; §6). In that session, root also ran P10's `deploy` block,
-  not its admin block, which P10's session rule asks for there; whether the admin block ran in
-  P9's session stays not recorded (revision 27; §6).
+  reported on 2026-11-21 (revision 26; §6). In that session, root also ran P10's `deploy` block
+  (revision 27) and, as the operator confirms, P10's admin block. Its one `MISSING:` line,
+  `grep`'s, is no missing tool: `grep` is present, and the same line was explained on 2026-11-19
+  by a shell alias (revision 28; §6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -99,7 +100,9 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
   so far does not show that, so accepting E15 does not complete G6. G6's review record (§8) lists
   what is missing: from the preflight, which G6 follows, the record's verdicts for every row but
-  P9's, its dates and its missing fields.
+  P9's, its dates and its missing fields, and the operator's confirmation that the resolution of
+  2026-11-19 for `MISSING: grep`, a shell alias, applies to that line in P10's admin check in P9's
+  session.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
@@ -110,7 +113,8 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   reading, and `none_of`'s check as `deploy`, which revision 23 listed as missing, are recorded in
   revision 25. P9's block for a tunnel candidate, which revision 25 listed as missing, has run,
   with the operator's PASS, and `syslog`'s membership of `adm`, which revision 25 also listed as
-  missing, from P7a, is E15 (revision 26).
+  missing, from P7a, is E15 (revision 26). Whether P10's admin block ran in P9's session, which
+  revisions 26 and 27 left not recorded, is recorded in revision 28.
   S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
@@ -668,6 +672,37 @@ Revisions:
   - **unchanged:** P9's PASS and its scope; E1 to E15; D2, open; G6, with no outcome. The run and
     this revision authorize no VPS operation and give no consent (§4): not C2, and not a Compose
     command, whatever the engine's answer. C2 is not authorized, and S6.2 has not started.
+- **28** (2026-11-21), P10's admin block, run as root in P9's session [VPS, USER-REPORTED]. No
+  procedure and no criterion changes, no entry of the exception register changes, and no exception
+  is added:
+  - **the run:** P10's admin block, its code as this contract gives it, as root, the
+    administrative account of P9's run. The operator explicitly confirms that it ran in the same
+    SSH session as P9. Its date is 2026-11-21; its time is not recorded, since the operator does
+    not remember it, and none is taken from another block's (§6, the preflight record);
+  - **its output:** as this account, every tool found in `/usr/bin`, apart from one line,
+    `MISSING: grep, as this account`; as root through `sudo`, every tool found, `grep` as
+    `/usr/bin/grep` among them; no `UNREAD:` line; `atq` and `at` absent, which is optional;
+  - **the `grep` line, against the resolution of 2026-11-19** (revision 18): that resolution
+    established the cause of the same line, a shell alias, `grep='grep --color=auto'`, which made
+    `command -v` print the alias instead of a path, and later clean runs met P10's expectation. As
+    the operator states, this line is that issue, and no new finding. What carries over: the line
+    is no evidence of a missing tool, and this run shows `grep` present itself, `/usr/bin/grep`
+    executable as root and `/usr/bin` on this account's `PATH`; P10's blocking condition, "a
+    missing tool of P7 or P9", does not hold. What does not carry over by itself: the alias is not
+    shown for P9's session, and the resolution met P10's expectation, no `MISSING:` line, with a
+    clean run, not by accepting the line. So the operator's confirmation that the resolution
+    applies to this line is what the record still needs; no new investigation or run;
+  - **P10's session rule for P9:** the question that revisions 26 and 27 left not recorded is
+    answered. The admin block ran in P9's session, as the operator confirms. P9's PASS and its
+    scope are unchanged;
+  - **two runs, two blocks:** revision 27's run is P10's `deploy` block, this one its admin block;
+    neither reads the other's values;
+  - **P10 is not complete:** both P10 rows of the preflight record keep `Not recorded` as their
+    `ok / STOP`, and P10's check in P9's session awaits that confirmation;
+  - **G6 still has no outcome:** its list of what it lacks replaces the unrecorded session with that
+    confirmation, and keeps the record's verdicts, dates and other missing fields. E1 to E15, D2,
+    which is open, and the order of §4.1 are unchanged. The run authorizes no VPS operation and
+    gives no consent (§4); C2 is not authorized, and S6.2 has not started.
 
 ## 1. Purpose and scope
 
@@ -919,8 +954,8 @@ and a resolution that changes state needs its own consent (§11).
   2026-11-19, once in the session of P7a's and P7c's latest runs; P1 to P6 and P8 on dates not
   recorded, and again on 2026-11-19, as root and then as `deploy`; P4, P5 and P6 again on
   2026-11-21, as `deploy`, P5 and P6 twice, with P4's last line and P8's UFW line as root; P9
-  once, as root, reported on 2026-11-21; and P10's `deploy` block once more, as root, in P9's
-  session (revisions 13, 14, 17, 18, 19, 22, 23, 25, 26 and 27).
+  once, as root, reported on 2026-11-21; and P10's `deploy` block and its admin block once more,
+  as root, in P9's session (revisions 13, 14, 17, 18, 19, 22, 23, 25, 26, 27 and 28).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -2993,7 +3028,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26 and 27)
+### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27 and 28)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
@@ -3002,12 +3037,12 @@ reviewed them; their dates and the account they ran as are not recorded. P10 ran
 block (revision 23), both below the table. On 2026-11-21, P4, P5 and P6 ran again as `deploy`, P5
 and P6 twice, and the budget block's last line and P8's UFW line as root (revision 25), below.
 P9's block ran as root, in the operator's SSH session, as the operator reported on 2026-11-21
-(revision 26), and P10's `deploy` block as root in that session (revision 27), both below. These
-are not the earlier readings of §2.3, which stay context only. "Not recorded" marks a field
-missing from the evidence given, not a block that did not run. The operator's `ok` or `STOP` is
-recorded for no row of the record's fact tables but P9's, whose verdict the operator gave
-(revision 26): their `ok / STOP` column says so row by row, and no reading counts as `ok` until
-the operator records it. P7 is G6's (§8, G6's review record).
+(revision 26), and P10's `deploy` block (revision 27) and its admin block (revision 28) as root
+in that session, all below. These are not the earlier readings of §2.3, which stay context only.
+"Not recorded" marks a field missing from the evidence given, not a block that did not run. The
+operator's `ok` or `STOP` is recorded for no row of the record's fact tables but P9's, whose
+verdict the operator gave (revision 26): their `ok / STOP` column says so row by row, and no
+reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's review record).
 
 | # | Fact | Read | Not recorded | ok / STOP |
 |---|---|---|---|---|
@@ -3023,9 +3058,9 @@ the operator records it. P7 is G6's (§8, G6's review record).
 | P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | Not recorded |
 | P6 | Listeners on the stack's ports | None; SSH is the only listener | — | Not recorded |
 | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | Not recorded |
-| P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time; whether P10's admin block ran in the same session, as P10's session rule asks. Revision 27's run there is P10's `deploy` block, not its admin block (below) | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
+| P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time. P10's admin block ran in the same session, as the operator confirms (revision 28, below); revision 27's run there is P10's `deploy` block | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
 | P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time. Revision 27's run of this block, as root, reads root's values, not `deploy`'s (below) | Not recorded |
-| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session (below) | Not recorded |
+| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session, and for P9's, revision 28's run in its session, with `MISSING: grep, as this account` (below) | Not recorded |
 
 - **P9's partial readings** [USER-REPORTED]. They are not P9's block:
   - **2026-11-19, with the operator's own commands:**
@@ -3053,9 +3088,9 @@ the operator records it. P7 is G6's (§8, G6's review record).
   - **the operator's decision:** P7a's run of 2026-11-19 and P7c's second run were in other
     sessions. Whether these runs meet P10's session rule for them is the operator's decision.
     Revision 22 records later runs of P7a and P7c, after P10's checks in their own session, for
-    which no such decision is needed (below). P9's run is revision 26's (below); whether P10's
-    admin block ran in its session is not recorded. Revision 27's run in that session is of P10's
-    `deploy` block, not of its admin block (below).
+    which no such decision is needed (below). P9's run is revision 26's (below). Revision 27's run
+    in that session is of P10's `deploy` block; revision 28 records the admin block's run there,
+    as the operator confirms (below).
 - **P10's `deploy` block, 2026-11-19** [USER-REPORTED], run as `deploy` after `su - deploy` from the
   root session: the values in the table.
   - **P10's expectations:** each holds in these values: `deploy` in `docker`, Bash 4 or later as
@@ -3347,11 +3382,11 @@ the operator records it. P7 is G6's (§8, G6's review record).
     that it may forward"). The decision, which also names the account that copies the archive, is
     the operator's to record (§13.3); C2 needs it (§4);
   - **P10's session rule:** P10 checks the tools of P7 and P9 "in the admin session that runs
-    them". Whether its admin block ran in this session is not recorded. If it did not, whether this
-    run meets the rule is the operator's decision, as revision 18 left it for P7a and P7c. The run
+    them". Revisions 26 and 27 did not record whether its admin block ran in this session. The run
     of P10 that revision 27 records in this session is its `deploy` block, which checks only
     `bash` and `awk` of P9's tools, and not, for example, `sudo`, `getent`, `grep`, `ssh-keygen`
-    or, through `sudo`, `sshd` (below);
+    or, through `sudo`, `sshd`. Revision 28 records the admin block's run in this session, as the
+    operator confirms, with one `MISSING:` line, `grep`'s, as this account (below);
   - **what it authorizes:** nothing. P9's PASS gives no consent of §4, authorizes neither C2 nor
     any other VPS operation, and changes no key, account or setting of sshd.
 - **P10's `deploy` block, as root, in P9's session, 2026-11-21** (revision 27) [VPS,
@@ -3381,11 +3416,94 @@ the operator records it. P7 is G6's (§8, G6's review record).
     neither meets nor fails them; the run of 2026-11-19, as `deploy`, stays P10's record for them;
   - **P10's admin block,** the tools of P7, P9 and §7.3, as the admin account and as root through
     `sudo`, was not part of the run. Of P9's tools, the run checks only `bash` and `awk`, and those
-    only in root's `PATH`. So whether P10's admin block ran in P9's session, as P10's session rule
-    asks, stays not recorded (revision 26, above);
+    only in root's `PATH`. So this run did not settle whether P10's admin block ran in P9's
+    session, as P10's session rule asks (revision 26, above). Revision 28 records that it did, as
+    the operator confirms (below);
   - **no verdict:** both P10 rows keep `Not recorded` as their `ok / STOP`, and the run is no PASS
     of P10;
   - **what it authorizes:** nothing: no consent of §4, C2 included, and no Compose command.
+- **P10's admin block, as root, in P9's session, 2026-11-21** (revision 28) [VPS, USER-REPORTED].
+  The block's code as P10 gives it, without its comment line, run as root at a root prompt; the
+  host's name in the prompt is not recorded (§5). Root is the administrative account of P9's run,
+  so the first loop reads root's own environment, "as this account", and the second root's
+  through `sudo`. The operator explicitly confirms that it ran in the same SSH session as P9. Its
+  date is 2026-11-21. Its time is not recorded: the operator does not remember it, and no time is
+  taken from another block's, such as revision 27's:
+  - **the output,** as the operator reported it:
+
+    ```text
+    admin: bash        /usr/bin/bash
+    admin: sudo        /usr/bin/sudo
+    admin: getent      /usr/bin/getent
+    admin: awk         /usr/bin/awk
+    MISSING: grep, as this account
+    admin: sed         /usr/bin/sed
+    admin: sort        /usr/bin/sort
+    admin: tr          /usr/bin/tr
+    admin: cut         /usr/bin/cut
+    admin: cat         /usr/bin/cat
+    admin: tail        /usr/bin/tail
+    admin: varlinkctl  /usr/bin/varlinkctl
+    admin: dpkg        /usr/bin/dpkg
+    admin: dpkg-query  /usr/bin/dpkg-query
+    admin: systemctl   /usr/bin/systemctl
+    admin: loginctl    /usr/bin/loginctl
+    admin: ssh-keygen  /usr/bin/ssh-keygen
+    admin: last        /usr/bin/last
+    admin: realpath    /usr/bin/realpath
+    root: sh /usr/bin/sh
+    root: ls /usr/bin/ls
+    root: cat /usr/bin/cat
+    root: grep /usr/bin/grep
+    root: awk /usr/bin/awk
+    root: getent /usr/bin/getent
+    root: dpkg /usr/bin/dpkg
+    root: sshd /usr/sbin/sshd
+    root: systemctl /usr/bin/systemctl
+    root: env /usr/bin/env
+    root: ss /usr/bin/ss
+    root: passwd /usr/bin/passwd
+    root: run-parts /usr/bin/run-parts
+    root: install /usr/bin/install
+    absent: atq, which is optional: P7b then lists no at job
+    absent: at, which is optional: P7b then lists no at job
+    ```
+
+  - **as this account:** 18 of the block's 19 tools found, each in `/usr/bin`, and one line,
+    `MISSING: grep, as this account`;
+  - **as root through `sudo`:** all 14 found, `sshd` in `/usr/sbin` and the others in `/usr/bin`,
+    `grep` as `/usr/bin/grep`. No `UNREAD:` line: `sudo` ran;
+  - **`atq` and `at`:** absent, which P10 makes optional; P7b then lists no `at` job. This is no
+    failure, and the same as on 2026-11-19;
+  - **the `grep` line, against the resolution of 2026-11-19** (above): the first admin run of that
+    day printed the same line. Its cause was established: the root shell had an alias,
+    `grep='grep --color=auto'`, so `command -v` printed the alias instead of a path, `[ -x ]`
+    failed, and the loop printed `MISSING:` while `grep` was present. Later runs, clean, then gave
+    P10's check its expected output, for the sessions that needed it. As the operator states, this
+    line is that issue, and no new finding [USER-REPORTED];
+  - **what the resolution carries over:** the line is no evidence of a missing tool, and no new
+    finding. This run shows `grep` present itself: `/usr/bin/grep` is executable as root, and
+    `/usr/bin` is on this account's `PATH`, where the loop found its other tools. So P10's blocking
+    condition, "a missing tool of P7 or P9", does not hold, and nothing about `grep` is to be
+    investigated again;
+  - **what it does not carry over by itself:** two things, which the record states instead of
+    assuming them:
+    - **the alias belongs to the session of 2026-11-19.** This output does not show what `grep`
+      was in P9's session. The same alias fits it [inference], and is not assumed;
+    - **the resolution met P10's expectation with a clean run,** not by accepting the line. P10
+      expects no `MISSING:` line, and G6's INCONCLUSIVE conditions name "a `MISSING:` tool in
+      P10's admin check", the line itself. This contract has no rule that an explained line meets
+      them;
+  - **what it settles:** P10's admin block ran in P9's session, as the operator confirms. That is
+    the question that revisions 26 and 27 left not recorded (above);
+  - **what it leaves:** only the record that the resolution of 2026-11-19 applies to this line:
+    the operator's confirmation of that, which is not yet recorded (§8, G6's review record). It is
+    no new investigation, and needs no new run. P9's PASS and its scope are unchanged;
+  - **not the `deploy` block:** this run and revision 27's are runs of P10's two different blocks,
+    and neither reads the other's values. P10's expectations for `deploy` stay with the run as
+    `deploy` of 2026-11-19 (above);
+  - **no verdict:** both P10 rows keep `Not recorded` as their `ok / STOP`, and P10 is not complete;
+  - **what it authorizes:** nothing: no consent of §4, C2 included.
 
 ## 7. S6.2 — Delivering the files and host configuration
 
@@ -4433,16 +4551,21 @@ of G6.
    run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
    - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row but P9's, the
      dates of P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded,
-     among them P9's time and whether P10's admin block ran in P9's session. Revision 27's run of
-     P10 in that session is its `deploy` block, not its admin block, so it leaves that field open.
-     Revision 25's runs of 2026-11-21 give P4's budget block, its last line and root's UFW reading
-     their times, and run P5's and P6's checks as written, as `deploy`, with `none_of` defined in
-     that shell. Revision 23's run records `deploy`'s Docker context, client and Compose, which
-     revision 22 listed here.
+     among them P9's time. Revision 25's runs of 2026-11-21 give P4's budget block, its last line
+     and root's UFW reading their times, and run P5's and P6's checks as written, as `deploy`, with
+     `none_of` defined in that shell. Revision 23's run records `deploy`'s Docker context, client
+     and Compose, which revision 22 listed here;
+   - **P10's check in P9's session:** the operator's confirmation that the resolution of
+     2026-11-19 applies to the run's one `MISSING:` line, `grep`'s, as this account. The resolution
+     and the run already show that `grep` is present and that the line is no new finding. They do
+     not show that the alias was active in P9's session, and the resolution met P10's expectation
+     with a clean run, not by accepting the line (§6, the preflight record).
 
    P9's block, which revision 25 listed here, has run for `root` and the selected key, and the
    operator accepted it as PASS (revision 26; §6, the preflight record). D2 stays open: §4.1 needs
-   it before C2 (step 2), not for G6.
+   it before C2 (step 2), not for G6. Whether P10's admin block ran in P9's session, which
+   revisions 26 and 27 listed here as not recorded, is recorded in revision 28: it ran there, as
+   the operator confirms. Revision 27's run in that session is P10's `deploy` block.
 
    Revision 22 records the rest that revision 21 listed here. P3's run of 2026-11-19 showed no
    container other than the four. P7a's and P7c's latest runs followed P10's checks in their own
