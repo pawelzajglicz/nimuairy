@@ -1,8 +1,7 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-21: draft for review (revision 25). S6.1, the read-only preflight, has started:
-P1 to P8 and P10 have run on the VPS, and P9 only in part. The deployment of the observability
-stack has not started.**
+**Status, 2026-11-21: draft for review (revision 27). S6.1, the read-only preflight, has started:
+P1 to P10 have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -20,14 +19,18 @@ stack has not started.**
   `deploy`, at 23:19:40 UTC, with P4's budget block, and root read UFW's state (revision 23). On
   2026-11-21, P4 ran again as `deploy`, with its budget block in one run; root ran the block's
   last line and P8's UFW line; and P5 and P6 ran as `deploy`, the second time as written
-  (revision 25). P9 has partial readings only (§6).
+  (revision 25). P9 ran as root, inside the operator's SSH session, and the operator accepted it
+  as PASS for that session's context, the account `root` and the selected existing key, as
+  reported on 2026-11-21 (revision 26; §6). In that session, root also ran P10's `deploy` block,
+  not its admin block, which P10's session rule asks for there; whether the admin block ran in
+  P9's session stays not recorded (revision 27; §6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
-  - **P7a: run and reviewed; one entry is not attributed.** In the review of P7a's run of
-    2026-11-17 (revision 13), the operator confirmed that the SSH keys are trusted, the recent
-    logins are recognized, `deploy`'s access to Docker is intended, the sudo rules are verified and
-    NSS's sources are complete. The operator then went on to P7b.
+  - **P7a: run and reviewed; one entry is not attributed, and is excepted.** In the review of
+    P7a's run of 2026-11-17 (revision 13), the operator confirmed that the SSH keys are trusted,
+    the recent logins are recognized, `deploy`'s access to Docker is intended, the sudo rules are
+    verified and NSS's sources are complete. The operator then went on to P7b.
     Further read-only findings followed (§8, G6's review record):
     - the accounts with UID 0 and NSS's sources;
     - a supplementary script's summary of the groups and `/etc/gshadow`, which is not P7a's
@@ -48,7 +51,8 @@ stack has not started.**
 
     Not attributed: `syslog`'s membership of `adm`. A read-only investigation of 2026-11-20 found
     the installed `rsyslog` package's mechanism for it, but no evidence that this mechanism created
-    it (revision 24). Its origin stays unresolved, and it is no entry of the exception register;
+    it (revision 24). Its origin stays unresolved. On 2026-11-21 the operator accepted its risk as
+    E15 of the exception register, pending Mikrus's answer (revision 26);
   - **P7b: run twice and reviewed; findings are open.** Its first run, of 2026-11-17, printed no
     `UNREAD:` and no `STOP`. The job `app-backup` was recognized as the application's backup,
     `nimuairy-backup` ([README, Database backups](../README.md#database-backups)). `pkg_file` gave
@@ -86,15 +90,16 @@ stack has not started.**
   supplementary script classified it on 2026-11-17, whose origin is unknown. The same day, the
   operator widened E2 to both `sysstat` files that P7b reports as `MODIFIED` (revision 20), and
   separately accepted the risk of E14, `/etc/crontab`, a `MODIFIED` package file, with the content
-  that its comparison with the package showed (revision 21). They stay unresolved.
+  that its comparison with the package showed (revision 21). On 2026-11-21 the operator
+  separately accepted that of E15, `syslog`'s membership of `adm`, whose origin the investigation
+  of 2026-11-20 did not establish, while awaiting the provider's answer (revision 26). They stay
+  unresolved.
   P7a's reading of 2026-11-19 shows E13's field as `locked`, which raises none of G6's conditions
   for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
-  so far does not show that. G6's review record (§8) lists what is missing:
-  - from the preflight, which G6 follows: P9's block for a tunnel candidate, and the record's
-    verdicts, dates and missing fields;
-  - from P7a, the attribution of `syslog`'s membership of `adm`, which the investigation of
-    2026-11-20 did not establish (revision 24).
+  so far does not show that, so accepting E15 does not complete G6. G6's review record (§8) lists
+  what is missing: from the preflight, which G6 follows, the record's verdicts for every row but
+  P9's, its dates and its missing fields.
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
@@ -103,11 +108,14 @@ stack has not started.**
   The operator's review of the keys and logins of P7a's run after P10's checks, which revision 22
   listed as missing, is recorded in revision 24. The times of P4's budget block and of root's UFW
   reading, and `none_of`'s check as `deploy`, which revision 23 listed as missing, are recorded in
-  revision 25.
+  revision 25. P9's block for a tunnel candidate, which revision 25 listed as missing, has run,
+  with the operator's PASS, and `syslog`'s membership of `adm`, which revision 25 also listed as
+  missing, from P7a, is E15 (revision 26).
   S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
-- The operator decisions D1 to D7 (§13.3) are open.
+- The operator decisions D1 to D7 (§13.3) are open. P9's PASS is the reading that D2's
+  recommendation waits for; D2 itself is not recorded.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -596,6 +604,70 @@ Revisions:
   - **G6 still has no outcome:** P9's block, the preflight record's verdicts and its other missing
     fields, and `syslog`'s membership of `adm` stay open, and D2 is open. E1 to E14 are unchanged;
     C2 is not authorized, and S6.2 has not started.
+- **26** (2026-11-21), P9's run, and the operator's explicit acceptance of one more G6 finding
+  [VPS, USER-REPORTED]. No procedure and no criterion changes, and E1 to E14 do not change:
+  - **P9:** its block ran as root, from inside the operator's active SSH session, for `root`. The
+    operator reported it on 2026-11-21; its time, and whether P10's admin block ran in that
+    session, are not recorded. Its readings (§6, the preflight record):
+    - `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`;
+    - two ED25519 keys for `root`. The operator selected an existing one, named here by its
+      comment, `pawel-laptop`, and found no restriction in its options that blocks forwarding;
+    - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`. That directory holds one
+      file, `60-cloudimg-settings.conf`, which holds only `PasswordAuthentication no`, and no
+      `Match` or `Include` line;
+  - **P9's verdict:** PASS, accepted by the operator for that session's connection context, the
+    account `root`, the selected key and forwarding to `127.0.0.1:3000`. It does not cover another
+    context, account or key, or V15's tunnel to a container address. No fingerprint, address or
+    host is recorded;
+  - **the deploy workflow's key,** `deploy`'s key with the comment `github-actions-deploy`, keeps
+    `restrict` and is not used for the tunnel;
+  - **D2 stays open:** P9's PASS is the reading that its recommendation, (b), waits for. The
+    decision, which also names the account that copies the archive, is the operator's to record
+    (§13.3);
+  - **E15**, a new entry of G6's exception register (§8): `syslog`'s membership of `adm`, which
+    revision 24's investigation did not attribute. Without the exception it is INCONCLUSIVE under
+    G6. The operator consciously accepted its residual risk on 2026-11-21, separately from E1 to
+    E14, while awaiting Mikrus's answer about the VPS's image and provisioning;
+  - **a narrow exception:** this membership only. It attributes the membership to no one: not to
+    `rsyslog`, Mikrus, `cloud-init` or the operator. Revision 24's facts and gaps stand as
+    recorded. G6's criteria, its other STOP and INCONCLUSIVE conditions, and E1 to E14 are
+    unchanged;
+  - **its revisit:** when Mikrus answers, on the evidence, not on the provider's statement alone,
+    with a further read-only check where it applies. E15 closes only in a later revision, on
+    evidence. An answer that leaves the provenance unresolved leaves E15 open and accepted, unless
+    the register's step 5 applies (§8, G6's exception register);
+  - **the status, §5's list of runs, the preflight record (§6), G6 (§8), §14 and §17** record
+    both. G6's list of what it lacks loses P9's block and `syslog`'s membership of `adm`, and keeps
+    the preflight record's verdicts, dates and missing fields;
+  - **G6 still has no outcome:** E15 excepts one finding and records no outcome of G6. Neither
+    P9's PASS nor E15 authorizes a VPS operation or gives a consent (§4); C2 is not authorized,
+    and S6.2 has not started.
+- **27** (2026-11-21), a run of P10's `deploy` block as root, in P9's session, and the wording of
+  §17 [VPS, USER-REPORTED]. No procedure and no criterion changes, no entry of the exception
+  register changes, and no exception is added:
+  - **the run:** P10's `deploy` block, its ten commands and nothing else, as root (UID 0), directly
+    in the SSH session that ran P9: not through `su`, `sudo -i` or another SSH connection. The
+    operator reports it on 2026-11-21 at 15:04:28, without a zone; the block prints no time.
+    Revision 25 records the same time, 15:04:28 UTC, as the start of the second run of P5 and P6,
+    as `deploy` through `su - deploy`; the two are not reconciled (§6, the preflight record);
+  - **its readings:** root's identity, home `/root` and shell `/bin/bash`; bash 5.2.21; umask
+    `0022`; the engine answering, 29.8.2; none of the listed variables set; `/var` and
+    `/var/nimuairy` as on 2026-11-19; `/var/run/docker.sock` `660 root:docker`; the ten tools
+    found; GNU Awk 5.2.1 at `/usr/bin/gawk`; and the line `deploy: passwordless sudo`;
+  - **what running as root leaves of them:** the paths are host facts. The account, shell, umask,
+    environment, Docker client, tools and `awk` are root's, in that session. The sudo line's text
+    is fixed: run as root, it reports root's `sudo -n -l`, not `deploy`'s, which P10 read as no
+    passwordless sudo on 2026-11-19. The run reads nothing of `deploy`, so it neither meets nor
+    fails P10's expectations, which are `deploy`'s;
+  - **P10's admin block** was not part of the run: the tools of P7, P9 and §7.3, as the admin
+    account and as root through `sudo`. So whether it ran in P9's session, as P10's session rule
+    asks, stays not recorded, and G6's review record keeps that gap (§8);
+  - **no verdict:** P10's rows keep `Not recorded` as their `ok / STOP`; the run is no PASS of P10;
+  - **§17:** its first paragraph says that no checklist item is complete yet, and that P9's PASS
+    and the accepted exceptions stand as recorded. "Every item is open" read as if they did not;
+  - **unchanged:** P9's PASS and its scope; E1 to E15; D2, open; G6, with no outcome. The run and
+    this revision authorize no VPS operation and give no consent (§4): not C2, and not a Compose
+    command, whatever the engine's answer. C2 is not authorized, and S6.2 has not started.
 
 ## 1. Purpose and scope
 
@@ -841,14 +913,14 @@ and a resolution that changes state needs its own consent (§11).
   key material from `authorized_keys`; a password field or a whole line of `/etc/gshadow`.
 - **The repository records no VPS host, SSH port, login or IP address**, and S6.7 keeps it so. It
   records facts such as "a public IPv6 address exists", not the address.
-- **Of these commands, P1 to P8 and P10 have run on the VPS,** in S6.1: P7a to P7c with P7's
+- **Of these commands, P1 to P10 have run on the VPS,** in S6.1: P7a to P7c with P7's
   helpers, P7a on 2026-11-17 and twice on 2026-11-19, P7b on 2026-11-17 and again on 2026-11-19,
   P7c three times, its second run on 2026-11-17 and its third on 2026-11-19; P10's two blocks on
   2026-11-19, once in the session of P7a's and P7c's latest runs; P1 to P6 and P8 on dates not
   recorded, and again on 2026-11-19, as root and then as `deploy`; P4, P5 and P6 again on
-  2026-11-21, as `deploy`, P5 and P6 twice, with P4's last line and P8's UFW line as root
-  (revisions 13, 14, 17, 18, 19, 22, 23 and 25). P9 has partial readings only (§6, the preflight
-  record).
+  2026-11-21, as `deploy`, P5 and P6 twice, with P4's last line and P8's UFW line as root; P9
+  once, as root, reported on 2026-11-21; and P10's `deploy` block once more, as root, in P9's
+  session (revisions 13, 14, 17, 18, 19, 22, 23, 25, 26 and 27).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -2921,7 +2993,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19, 22, 23 and 25)
+### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26 and 27)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
@@ -2929,11 +3001,13 @@ reviewed them; their dates and the account they ran as are not recorded. P10 ran
 `date -u` read 21:35:11 UTC (revision 22), and as `deploy`, at 23:19:40 UTC, with P4's budget
 block (revision 23), both below the table. On 2026-11-21, P4, P5 and P6 ran again as `deploy`, P5
 and P6 twice, and the budget block's last line and P8's UFW line as root (revision 25), below.
-These are not the earlier readings of §2.3, which stay context only. "Not recorded" marks a field
+P9's block ran as root, in the operator's SSH session, as the operator reported on 2026-11-21
+(revision 26), and P10's `deploy` block as root in that session (revision 27), both below. These
+are not the earlier readings of §2.3, which stay context only. "Not recorded" marks a field
 missing from the evidence given, not a block that did not run. The operator's `ok` or `STOP` is
-not recorded for any row of the record's fact tables: their `ok / STOP` column says so row by
-row, and no reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's review
-record).
+recorded for no row of the record's fact tables but P9's, whose verdict the operator gave
+(revision 26): their `ok / STOP` column says so row by row, and no reading counts as `ok` until
+the operator records it. P7 is G6's (§8, G6's review record).
 
 | # | Fact | Read | Not recorded | ok / STOP |
 |---|---|---|---|---|
@@ -2949,8 +3023,8 @@ record).
 | P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | Not recorded |
 | P6 | Listeners on the stack's ports | None; SSH is the only listener | — | Not recorded |
 | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | Not recorded |
-| P9 | Forwarding for the D2 account(s) | Partial readings only (below) | P9's block for a tunnel candidate; its verdict | Not recorded; P9's block has not run |
-| P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time | Not recorded |
+| P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time; whether P10's admin block ran in the same session, as P10's session rule asks. Revision 27's run there is P10's `deploy` block, not its admin block (below) | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
+| P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time. Revision 27's run of this block, as root, reads root's values, not `deploy`'s (below) | Not recorded |
 | P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session (below) | Not recorded |
 
 - **P9's partial readings** [USER-REPORTED]. They are not P9's block:
@@ -2963,8 +3037,9 @@ record).
     `disableforwarding no`, `permitopen any`, `permitlisten any`;
   - **the deploy workflow's key** has `restrict`, so it cannot open the tunnel. As P9 says, that
     key keeps its restriction, and the tunnel needs another key or account (D2);
-  - **still open:** the operator chooses the account and key for the tunnel (D2). Then P9's block
-    runs for them, with its own `Match` and `Include` listing, and gives the verdict.
+  - **what followed:** the operator selected `root` and an existing key for the tunnel, and P9's
+    block ran for them, with its own `Match` and `Include` listing, and gave the verdict
+    (revision 26, below). D2 is not recorded.
 - **P10's admin block, 2026-11-19** [USER-REPORTED], as root, three runs:
   - **the latest run** (revision 19), in the root session that then ran P7b again: every tool was
     found, as this account and as root through `sudo`; no `MISSING:` and no `UNREAD:` line; `at`
@@ -2976,9 +3051,11 @@ record).
       instead of a path;
     - the second, in a session whose `date -u` read 16:59 UTC, was clean;
   - **the operator's decision:** P7a's run of 2026-11-19 and P7c's second run were in other
-    sessions. Whether these runs meet P10's session rule for them is the operator's decision. P9's
-    session is still to come. Revision 22 records later runs of P7a and P7c, after P10's checks in
-    their own session, for which no such decision is needed (below).
+    sessions. Whether these runs meet P10's session rule for them is the operator's decision.
+    Revision 22 records later runs of P7a and P7c, after P10's checks in their own session, for
+    which no such decision is needed (below). P9's run is revision 26's (below); whether P10's
+    admin block ran in its session is not recorded. Revision 27's run in that session is of P10's
+    `deploy` block, not of its admin block (below).
 - **P10's `deploy` block, 2026-11-19** [USER-REPORTED], run as `deploy` after `su - deploy` from the
   root session: the values in the table.
   - **P10's expectations:** each holds in these values: `deploy` in `docker`, Bash 4 or later as
@@ -3242,6 +3319,73 @@ record).
   - **the namespace assumption** about `deploy`'s own SSH sessions stands (revision 22): B1, B3 and
     the second run came through `su - deploy` from a root shell. That does not establish the
     namespace context of an independent SSH session by `deploy`.
+- **P9, for `root`** (revision 26) [VPS, USER-REPORTED]. P9's block ran as root, from inside the
+  operator's active SSH session, for the account `root`. The operator reported it on 2026-11-21;
+  its date and time are not recorded. The context that `ssh_context` printed, the keys'
+  fingerprints, the addresses and the host stay with the operator (§5):
+  - **the forwarding settings,** from `sshd -T -C` for `root` in this session's context:
+    `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any` and `permitlisten any`. They
+    meet what P9 says the tunnel needs;
+  - **the keys:** two ED25519 `key:` lines for `root`. The operator selected an existing one, which
+    this record names by its comment, `pawel-laptop`. A comment is free text; the key's
+    fingerprint, which identifies it, stays with the operator (P9, §5). The operator checked the
+    key's options in `authorized_keys` and found no restriction that blocks forwarding;
+  - **the deploy workflow's key:** `deploy`'s key with the comment `github-actions-deploy` keeps
+    `restrict`, and is not used for the tunnel. It keeps that restriction in every option of D2
+    (§13.3);
+  - **`Match` and `Include`:** `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`.
+    That directory holds one file, `60-cloudimg-settings.conf`, which holds only
+    `PasswordAuthentication no`, and no further `Match` or `Include` line. The operator's report
+    names no `Match` line in `/etc/ssh/sshd_config` itself; the partial reading of 2026-11-19 found
+    no active `Match` block there (above);
+  - **the verdict** [USER-REPORTED]: the operator accepted P9 as PASS for this session's connection
+    context, the account `root`, the selected existing key and forwarding to `127.0.0.1:3000`;
+  - **what it does not cover:** a connection from another network, address or port, for which P9
+    runs again from such a session, or each `Match` block is reviewed by hand (P9); another account
+    or key; the Alloy UI tunnel of V15, to a container address. Grafana through the tunnel is V7's;
+  - **D2:** open. P9's PASS is the reading that D2's recommendation, (b), waits for ("if P9 shows
+    that it may forward"). The decision, which also names the account that copies the archive, is
+    the operator's to record (§13.3); C2 needs it (§4);
+  - **P10's session rule:** P10 checks the tools of P7 and P9 "in the admin session that runs
+    them". Whether its admin block ran in this session is not recorded. If it did not, whether this
+    run meets the rule is the operator's decision, as revision 18 left it for P7a and P7c. The run
+    of P10 that revision 27 records in this session is its `deploy` block, which checks only
+    `bash` and `awk` of P9's tools, and not, for example, `sudo`, `getent`, `grep`, `ssh-keygen`
+    or, through `sudo`, `sshd` (below);
+  - **what it authorizes:** nothing. P9's PASS gives no consent of §4, authorizes neither C2 nor
+    any other VPS operation, and changes no key, account or setting of sshd.
+- **P10's `deploy` block, as root, in P9's session, 2026-11-21** (revision 27) [VPS,
+  USER-REPORTED]. The operator ran the block's ten commands, and only these, as root (UID 0),
+  directly in the SSH session that ran P9: not through `su`, `sudo -i` or another SSH connection.
+  §5 runs this block as `deploy`; this run is recorded as it was:
+  - **the time:** the operator reports 15:04:28, without a zone. The block prints no time, so its
+    output does not give one. Revision 25 records the same time, 15:04:28 UTC, as the `date -u` at
+    the start of the second run of P5 and P6, which ran as `deploy`, through `su - deploy` from a
+    root shell, until 15:05:21 UTC (above). The two are not reconciled here;
+  - **the readings,** and what running as root leaves of each:
+
+    | Reading | Read | What it shows, run as root |
+    |---|---|---|
+    | `id` | `uid=0(root) gid=0(root) groups=0(root)` | Root's identity, not `deploy`'s |
+    | Home and shell | `/root`, `/bin/bash` | Root's |
+    | Bash and umask | `5.2.21(1)-release`; `0022` | This root shell's |
+    | The engine | It answered, with server version 29.8.2 | That root's Docker client, through its context, reached an engine of that version. Not that `deploy`'s client does, nor that a Compose command would succeed |
+    | The variables | None of the `COMPOSE_*`, `DOCKER_*`, `GRAFANA_AUTH` and `OBSERVABILITY_COMPOSE_FILES` variables set | This root session's environment only |
+    | `/var`, `/var/nimuairy` | `root:root` and `deploy:deploy`, both 755 | Host facts: these two paths' owners and modes, as `deploy`'s run of 2026-11-19 read them |
+    | `/var/run/docker.sock` | `660 root:docker` | A host fact, as on 2026-11-19 |
+    | The ten tools | `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` found | In root's `PATH`, in this session |
+    | `awk` | `/usr/bin/gawk`, GNU Awk 5.2.1 | Root's `awk`; the implementation and version that `deploy`'s run of 2026-11-19 read |
+    | The sudo line | `deploy: passwordless sudo` | Root's `sudo -n -l`: the line's text is fixed, whoever runs it. It shows only that `sudo -n -l` succeeded for root without a password, not which commands any rule allows. `deploy` has no passwordless sudo, as P10 read it as `deploy` on 2026-11-19 |
+
+  - **what it does not show:** anything of `deploy`. P10's expectations are `deploy`'s, so this run
+    neither meets nor fails them; the run of 2026-11-19, as `deploy`, stays P10's record for them;
+  - **P10's admin block,** the tools of P7, P9 and §7.3, as the admin account and as root through
+    `sudo`, was not part of the run. Of P9's tools, the run checks only `bash` and `awk`, and those
+    only in root's `PATH`. So whether P10's admin block ran in P9's session, as P10's session rule
+    asks, stays not recorded (revision 26, above);
+  - **no verdict:** both P10 rows keep `Not recorded` as their `ok / STOP`, and the run is no PASS
+    of P10;
+  - **what it authorizes:** nothing: no consent of §4, C2 included, and no Compose command.
 
 ## 7. S6.2 — Delivering the files and host configuration
 
@@ -3728,10 +3872,11 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
     that the register records, and U8 stays open for them (§14);
   - **what it cannot do:** waive any other finding. The register covers each entry as P7b's run
     and P7c's second run showed it, E13 as the operator's supplementary read-only script and
-    G6's review record showed it, and E14 as the operator's comparison of 2026-11-19 showed it. A
-    finding it does not name is an ordinary finding of G6, also a further file or drop-in of a
-    unit it names, and an INCONCLUSIVE or STOP finding of that kind blocks as above. Adding an
-    entry needs a new revision of this contract, with the operator's acceptance;
+    G6's review record showed it, E14 as the operator's comparison of 2026-11-19 showed it, and E15
+    as P7a's runs of 2026-11-19 and the investigation of 2026-11-20 showed it. A finding it does
+    not name is an ordinary finding of G6, also a further file or drop-in of a unit it names, and
+    an INCONCLUSIVE or STOP finding of that kind blocks as above. Adding an entry needs a new
+    revision of this contract, with the operator's acceptance;
   - **E13, the one group password excepted** (revision 16):
     - **what it excepts:** only the STOP that G6 gives the password field of the
       `systemd-journal` group, as the supplementary script classified it on 2026-11-17 (`set`),
@@ -3794,6 +3939,19 @@ operator accepts the risk of exactly one finding: `/etc/crontab`, which `pkg_fil
 unchanged. This acceptance applies to E14's finding only; E1 to E13 keep their acceptance and
 their status.
 
+**E15: accepted by the operator on 2026-11-21, separately** (revision 26) [USER-REPORTED]. The
+operator consciously accepts the residual risk of exactly one finding: `syslog`'s membership of
+`adm`, which P7a shows in `/etc/group` and `/etc/gshadow`, and whose origin the investigation of
+2026-11-20 did not establish (G6's review record). That risk is the one G6 guards against (G6,
+"Why it matters"), for one of the groups whose members G6 reviews (item 4). The operator accepts it
+while awaiting Mikrus's answer about the VPS's image and provisioning, and whether they create this
+membership; E15 is revisited when that answer comes (below), and has no expiry date. This
+acceptance applies to E15's finding only. It attributes the membership to no one: not to
+`rsyslog`, Mikrus, `cloud-init` or the operator. Any other finding about `adm` or `syslog`, such as
+another member or an administrator of `adm`, is an ordinary finding of G6. E1 to E14 keep their
+scope, their acceptance and their status. E15 does not close the finding, and authorizes no VPS
+operation, C2 included (§4).
+
 | # | Finding | From | Classification, as read | Under G6 as of revision 13, without this register | Status now | Known | Not known |
 |---|---|---|---|---|---|---|---|
 | E1 | `e2scrub_all` | P7b | `MODIFIED` (`pkg_file`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-17; unresolved | `pkg_file` reports the package file as `MODIFIED` | Who changed it, when, what and why. The modification is not explained or verified |
@@ -3810,6 +3968,7 @@ their status.
 | E12 | Two drop-ins that apply to `user@0.service`, and only these two files: `/usr/lib/systemd/system/user@0.service.d/10-login-barrier.conf` and `/usr/lib/systemd/system/user@.service.d/timeout.conf` | P7c, second run | Entries whose attribution is open | INCONCLUSIVE: entries not yet attributed; STOP if the operator considers their origin unknown | Excepted, accepted by the operator on 2026-11-17; unresolved | Their paths, as P7c showed them | Their origin and purpose; whether a package ships them unchanged, since P7c checks no drop-in with `pkg_file`. No other drop-in of `user@0.service` or `user@.service`, now or later, is covered |
 | E13 | The `systemd-journal` group: its password field, which the supplementary script classified as `set`, and whose origin is unknown | Operator's supplementary read-only script; G6's review record | `set` in the supplementary script's classification (2026-11-17, through `getent gshadow`); `locked` in P7a's (2026-11-19, `/etc/gshadow`). The two rules differ (G6's review record). Origin unknown | STOP: a set group password whose origin is unknown; nobody known to the operator is identified as having set it | Excepted, accepted by the operator on 2026-11-19; unresolved. P7a's reading of 2026-11-19 (`locked`) raises no G6 condition for a `set` group password. The historical STOP recorded in the previous column is not raised by this reading | The script found the field neither empty nor exactly `!`, `*` or `x`; P7a found that it starts with `!` or `*`. The operator consciously accepts leaving the current state unchanged | Its exact value, and whether it changed between the two reads. Who set it, when and why, and who knows its value. Its origin is not established |
 | E14 | `/etc/crontab`, with SHA-256 `acd4e3e13c57d9745416c2fd8e13b6f3090cc3e20938a76da8dd07754130a1c0` | The operator's package check and comparison, 2026-11-19; G6's review record | `MODIFIED` (`pkg_file`; package `cron-daemon-common`) | STOP: a `MODIFIED` package file | Excepted, accepted by the operator on 2026-11-19; unresolved | Against the package's file of the installed version, whose MD5 sum dpkg's database records, only the minute fields of the four `run-parts` lines differ; every other field and line is the package's. Its mtime is 2026-10-02 22:52:11 UTC, within 0.25 ms of the mtimes of `/etc/cron.d/sysstat` and `/etc/cron.d/e2scrub_all`; an mtime does not date the original change | When, how, by whom and why it was changed. No party is attributed, and a change by hand is not excluded |
+| E15 | `syslog`'s membership of `adm`, in `/etc/group` and `/etc/gshadow` and in both their backups, `/etc/group-` and `/etc/gshadow-` | P7a's runs of 2026-11-19; the operator's read-only investigation of 2026-11-20; G6's review record | An entry whose attribution is open | INCONCLUSIVE: an entry not yet attributed; STOP if the operator considers its origin unknown | Excepted, accepted by the operator on 2026-11-21; unresolved, pending Mikrus's answer | The membership, in all four files. The installed `rsyslog.postinst`, of 8.2312.0-3ubuntu9.4, runs `adduser syslog adm` in its `configure` branch, and `true` if it fails, which discards its exit status; dpkg configured the package on 2026-08-24 and 2026-10-01. No other mechanism was found among the packages' maintainer scripts, `sysusers.d` or `base-passwd`. `cloud-init` is installed, and no log of it is kept | That the script created the membership: with its exit status discarded, a run of the line shows no result either way. When, how and by whom the membership was made: the kept logs do not show it. The provider's provisioning, `cloud-init` and an earlier change by hand are not excluded. No party is attributed |
 
 Nothing in this register describes an entry as malicious or untrusted, and nothing in it marks
 one as verified because its name or apparent purpose looks familiar.
@@ -3837,6 +3996,14 @@ one as verified because its name or apparent purpose looks familiar.
    every entry stays open, and the register stays in this contract. S6.7 reports each entry's
    state.
 
+**E15's revisit** (revision 26) follows these steps. The question to Mikrus is whether the VPS's
+image or the provider's provisioning creates `syslog`'s membership of `adm`. The operator brings the
+answer and any evidence that comes with it (step 1). The membership is reassessed on that evidence,
+not on the provider's statement alone, and a further read-only check or investigation is planned
+where it applies (step 3). E15 is closed only in a later revision of this contract, when the
+evidence attributes or resolves the membership (step 4). An answer that leaves the membership's
+provenance unresolved leaves E15 open and accepted, unless step 5 applies.
+
 #### G6's review record
 
 **Reported by the operator on 2026-11-17, recorded in revision 15** [VPS, USER-REPORTED]. These
@@ -3849,7 +4016,9 @@ of the `systemd-journal` password field. Revision 18 adds the operator's review 
 run. Revision 19 adds P7b's run of 2026-11-19, E2's scope and `/etc/crontab`. Revision 20 adds the
 operator's decision on E2's scope. Revision 21 adds the operator's comparison of `/etc/crontab` with
 its package, and E14. Revision 22 adds P3's container list of 2026-11-19, and P7a's and P7c's runs
-after P10's checks, with the package checks of four unit files.
+after P10's checks, with the package checks of four unit files. Revision 24 adds the operator's
+acceptance of the review of P7a's latest run, and the investigation of `syslog`'s membership of
+`adm`. Revision 26 adds the operator's acceptance of that membership's risk, as E15.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -3914,8 +4083,8 @@ reviewed P7a's own listing, which stays with the operator (§5):
 - **`syslog` in `adm`:** P7a shows the membership in `/etc/group` and in `/etc/gshadow`.
   `rsyslog`'s `postinst` holds `adduser syslog adm || true`: a mechanism that could have added
   it, not evidence that it did. The operator leaves the membership's origin unresolved; it is not
-  presented as established, and it is no entry of the exception register. An entry not yet
-  attributed is INCONCLUSIVE under G6, so G6 cannot pass while it stays so.
+  presented as established. Revision 17 added no entry of the exception register for it, and an
+  entry not yet attributed is INCONCLUSIVE under G6. Revision 26 records it as E15 (below).
 
 **The `systemd-journal` group password:**
 - **state:** `set` in the supplementary script's classification (2026-11-17), and `locked` in
@@ -4144,8 +4313,9 @@ listings themselves are not recorded here (§5):
     rest of the echo matches the contract's text, and the output runs in the block's order through
     `last`. P7a is not taken as failed for it;
   - **`syslog` in `adm`:** still not attributed. This output adds no evidence of its origin. No
-    further investigation of it had run by revision 22, and no entry of the register is added for
-    it. Revision 24 records the investigation of 2026-11-20 (below);
+    further investigation of it had run by revision 22, and revision 22 added no entry of the
+    register for it. Revision 24 records the investigation of 2026-11-20, and revision 26 E15
+    (below);
 - **P7c, its third run.** Its block matches the contract's text, apart from comment lines outside
   its functions:
   - **the markers:** no `UNREAD:` line. Exactly four `REVIEW:` lines, the templates of E3 to E6,
@@ -4238,29 +4408,50 @@ its exit statuses, is not part of it, apart from the two comparisons of the back
 - **not excluded:** the provider's provisioning, `cloud-init`, whose logs are not kept, and a
   change by hand before the kept logs;
 - **for G6:** not attributed, and neither presented as made by `rsyslog` nor as unauthorized. An
-  entry not yet attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. No entry of the
-  exception register is added for it.
+  entry not yet attributed is INCONCLUSIVE. Revision 24 added no entry of the exception register
+  for it; revision 26 records the operator's acceptance of its risk as E15 (below).
+
+**`syslog` in `adm`: the operator's acceptance, 2026-11-21** [USER-REPORTED], recorded in revision
+26:
+- **the acceptance:** the operator consciously accepts the residual risk of this finding as E15 of
+  G6's exception register, while awaiting Mikrus's answer about the VPS's image and provisioning,
+  and whether they create this membership. E15 is revisited when that answer comes, and has no
+  expiry date (G6's exception register);
+- **what stays unresolved:** everything that the investigation of 2026-11-20 did not establish
+  (above). The membership stays not attributed: not to `rsyslog`, Mikrus, `cloud-init` or the
+  operator. E15 does not meet G6's requirement that every entry be attributed; it excepts it, for
+  this finding only (G6, PASS WITH RECORDED EXCEPTIONS);
+- **what it does not do:** change the scope, the acceptance or the status of E1 to E14; close
+  E15; record G6, which still has no outcome (below); authorize C2 or any other VPS operation, or
+  give a consent (§4). No change to the membership is requested or authorized.
 
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
 needs every requirement outside the register met, and the evidence above does not show that.
+Accepting E15 (revision 26) does not change this: it excepts one finding, and records no outcome
+of G6.
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
    run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
-   - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row, the dates of
-     P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded. Revision 25's
-     runs of 2026-11-21 give P4's budget block, its last line and root's UFW reading their times,
-     and run P5's and P6's checks as written, as `deploy`, with `none_of` defined in that shell.
-     Revision 23's run records `deploy`'s Docker context, client and Compose, which revision 22
-     listed here;
-   - **P9:** its block has not run for a tunnel candidate. D2 is open.
+   - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row but P9's, the
+     dates of P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded,
+     among them P9's time and whether P10's admin block ran in P9's session. Revision 27's run of
+     P10 in that session is its `deploy` block, not its admin block, so it leaves that field open.
+     Revision 25's runs of 2026-11-21 give P4's budget block, its last line and root's UFW reading
+     their times, and run P5's and P6's checks as written, as `deploy`, with `none_of` defined in
+     that shell. Revision 23's run records `deploy`'s Docker context, client and Compose, which
+     revision 22 listed here.
+
+   P9's block, which revision 25 listed here, has run for `root` and the selected key, and the
+   operator accepted it as PASS (revision 26; §6, the preflight record). D2 stays open: §4.1 needs
+   it before C2 (step 2), not for G6.
 
    Revision 22 records the rest that revision 21 listed here. P3's run of 2026-11-19 showed no
    container other than the four. P7a's and P7c's latest runs followed P10's checks in their own
    session, and those checks reported no `MISSING:` tool, so for these runs P10's session rule
    needs no decision. A `MISSING:` tool in P10's admin check leaves G6 INCONCLUSIVE.
-2. **P7a's own output:** the attribution of `syslog`'s membership of `adm`. The investigation of
-   2026-11-20 (revision 24, above) found the installed `rsyslog` script's mechanism for it, but no
-   evidence that this mechanism created it, or when or how it was made. An entry not yet
-   attributed is INCONCLUSIVE, so G6 cannot pass while it stays so. Revision 17 records the rest
+2. **P7a's own output:** `syslog`'s membership of `adm`, whose attribution revision 25 listed here,
+   is E15 (revision 26, above). The investigation of 2026-11-20 (revision 24, above) found the
+   installed `rsyslog` script's mechanism for it, but no evidence that this mechanism created it,
+   or when or how it was made; it stays not attributed and unresolved. Revision 17 records the rest
    that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
    `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
    usable passwords. P7a's run after P10's checks (revision 22) shows the same markers. The
@@ -5658,10 +5849,10 @@ Accepted together with this contract:
 | Compose reads `observability/.env` | Guide | G4 | Open |
 | `deploy`'s ownership, Docker access, shell, umask | Guide | P10, §7.2, G8 | Open for §7.2 and G8. Read by P10 on 2026-11-19 (§6, the preflight record): `deploy` in `docker`, `/bin/bash`, umask `0002`, `/var/nimuairy` `deploy:deploy` |
 | How the archive reaches `deploy` | Guide | D2, §7.3 | Open |
-| `sudo` for the log-size check | Guide | P10, V14 | Open for V14. Read by P10 on 2026-11-19: `deploy` has no passwordless sudo |
+| `sudo` for the log-size check | Guide | P10, V14 | Open for V14. Read by P10 on 2026-11-19: `deploy` has no passwordless sudo. The `deploy: passwordless sudo` of revision 27's run is root's reading, under the line's fixed text (§6, the preflight record) |
 | The secret's owner and mode; 472's read access; the production check's access | Guide, S4b §6.5 | D1, G5, G7, V1, V6 | Open |
 | No existing volumes, no listeners | Guide, S4b §12.3 | G1, G3 | Open |
-| SSH forwarding for the tunnel account | Guide | P9, V7 | Open |
+| SSH forwarding for the tunnel account | Guide | P9, V7 | Open for V7. P9 PASS, as the operator reported on 2026-11-21 (§6, the preflight record): `root` may forward to `127.0.0.1:3000` with the selected existing key, in the context of the session that ran P9 |
 | The Alloy UI tunnel to a container address | Guide | V15, optional | Open; may stay open |
 | A restart picks up a replaced file | Guide | D6 | Stays open until the first update |
 | The production check's tools and its run | Guide, B8 | P10, V6 | Tools present (P10, 2026-11-19); the run is open (V6) |
@@ -5735,11 +5926,14 @@ Accepted together with this contract:
 
 ## 17. Acceptance checklist
 
-S6.1, the read-only preflight, has started: P1 to P8 and P10 have run, and P9 has partial readings
-only. The review is not complete (the status at the top). G6 has not been recorded; the operator
-has accepted its exception register, E1 to E12 on 2026-11-17, and E13, E2's widened scope and E14
-on 2026-11-19 (§8, G6). G6's review record (§8) lists what G6 still lacks outside the register.
-The deployment of the observability stack has not started. Every item is open.
+S6.1, the read-only preflight, has started: P1 to P10 have run, and the operator accepted P9 as
+PASS for its session's context, `root` and the selected key. The review is not complete (the
+status at the top). G6 has not been recorded; the operator has accepted its exception register, E1
+to E12 on 2026-11-17, E13, E2's widened scope and E14 on 2026-11-19, and E15 on 2026-11-21 (§8,
+G6). Accepting the register does not record G6. G6's review record (§8) lists what G6 still lacks
+outside the register. The deployment of the observability stack has not started. P9's PASS and
+the accepted exceptions stand as recorded; they are steps toward the items below, not items of
+this checklist. No item below is complete yet, so every one is still open.
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
