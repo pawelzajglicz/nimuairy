@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-21: draft for review (revision 29). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 30). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
@@ -30,6 +30,18 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   `sudo` calls consistent with P9's block and with P10's admin loop in one login, `pts/4`, and
   entries that no recorded run accounts for. It gives no reading or verdict, and fills no field
   that the record marks as not recorded (revision 29; §6).
+- **C1 is not confirmed** [USER-REPORTED]. The operator does not remember whether C1 was given
+  before S6.1 began, and cannot confirm it. So no C1 is recorded for the past, and none is
+  presented as given before the preflight ran. The operator accepts this as a historical
+  procedural nonconformity. By the information available, P1 to P10 only read, and changed
+  nothing on the VPS; each is read-only as §6 gives it. Accepting the nonconformity is no C1,
+  given now or for the past. It changes no requirement of §4 for C2 or any later consent, and it
+  records no outcome of G6 (revision 30).
+- **The preflight's verdicts** [USER-REPORTED]: the operator confirms that the values recorded for
+  P1 to P6 and P8 meet this contract's conditions, and records `ok` for each of their rows
+  (revision 30). Each row also names the record's dated readings of its values; that attribution
+  is the record's own, from its evidence, not a further confirmation of the operator's. P9's PASS
+  stands (revision 26). P10's rows have no `ok` or `STOP` yet (§6, the preflight record).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -106,8 +118,9 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   for a `set` group password; E13 stays accepted. G6 can be recorded as PASS WITH RECORDED
   EXCEPTIONS only when every requirement of G6 outside the register is met. The evidence recorded
   so far does not show that, so accepting E15 does not complete G6. G6's review record (§8) lists
-  what is missing: from the preflight, which G6 follows, the record's verdicts for every row but
-  P9's, its dates and its missing fields.
+  what is missing: from the preflight, which G6 follows, the verdicts of P10's rows. The dates and
+  times that the record does not give are classified there, and none blocks a verdict
+  (revision 30).
 
   The decision on the `systemd-journal` password, which revision 15 listed as missing, is
   recorded as E13. `/etc/crontab`, which revision 19 listed as missing from P7b, is recorded as
@@ -119,7 +132,10 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   revision 25. P9's block for a tunnel candidate, which revision 25 listed as missing, has run,
   with the operator's PASS, and `syslog`'s membership of `adm`, which revision 25 also listed as
   missing, from P7a, is E15 (revision 26). Whether P10's admin block ran in P9's session, which
-  revisions 26 and 27 left not recorded, is recorded in revision 28.
+  revisions 26 and 27 left not recorded, is recorded in revision 28. The verdicts of P1 to P6 and
+  P8, which revision 29 listed as missing, are recorded in revision 30; the record's dates and
+  missing fields, which revision 29 also listed, are classified there as gaps in its detail, not
+  in its evidence.
   S6.1 is not complete, so the order of §4.1 stops before C2.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
@@ -767,6 +783,42 @@ Revisions:
     E1 to E15, E15 excepted, accepted and unresolved, pending Mikrus's answer; D1 to D7, open;
     G6, with no outcome. The report authorizes no VPS operation and gives no consent (§4); C2 is
     not authorized, and S6.2 has not started.
+- **30** (2026-11-22), the operator's verdicts on P1 to P6 and P8, the record of C1, and
+  clarifications of the record [USER-REPORTED]. No procedure and no criterion changes, no entry of
+  the exception register changes, and no exception is added:
+  - **C1:** the operator does not remember whether C1 was given before S6.1 began, and cannot
+    confirm it. No C1 is recorded for the past, and none is presented as given before the
+    preflight. The operator accepts this as a historical procedural nonconformity. By the
+    information available, P1 to P10 only read, and changed nothing on the VPS. Accepting the
+    nonconformity is no C1, now or for the past; it changes no requirement of §4 for C2 or any
+    later consent, and records no outcome of G6 (the status);
+  - **P1 to P6 and P8:** the operator confirms that their recorded values meet this contract's
+    conditions, and records `ok` for each of their rows in the preflight record's first table.
+    Each row names the record's dated readings of its values; that attribution is the record's,
+    from its evidence, not a separate confirmation of the operator's. No value, reading or result
+    of a command is added (§6, the preflight record);
+  - **P9:** its PASS stands, with its scope (revision 26);
+  - **P10's `MISSING: grep`** of 2026-11-21 (revision 28): its record now separates what was
+    printed; the operator's explanation, a shell alias [USER-REPORTED]; that `grep` exists; and the
+    assessment, drawn from these together, that the line shows no missing tool of P7 or P9. The
+    line alone does not show that. The line came from P10's admin block, not from P9. Where the
+    alias came from, and why a later run did not print the line, are not known. P10's script and
+    the preflight are unchanged, and P10's rows keep `Not recorded` as their `ok / STOP` (§6, the
+    preflight record);
+  - **the further sequences of P7a's and P7b's calls** that revision 29 found in the logs, of
+    2026-11-19 and 2026-11-21: the operator does not recall that they gave new information, and
+    their output is not available. The record attributes no result to them, takes them as no
+    evidence, and draws no conclusion from them; G6's review rests on the runs it records (§6, the
+    preflight record; §8, G6's review record);
+  - **dates and times:** a date or time that the record does not give is a gap in its detail, not
+    in its evidence. It blocks no verdict where the date or the session's context settles the
+    requirement. G6's review record classifies each such gap; none is material (§8);
+  - **G6's review record:** its list of what G6 lacks keeps P10's verdicts, and drops the verdicts
+    of P1 to P6 and P8, the dates of their earlier runs and the record's missing times;
+  - **unchanged:** P9's PASS and its scope; P10, not complete; E1 to E15, E15 excepted, accepted
+    and unresolved, pending Mikrus's answer; D1 to D7, open; G6, with no outcome. This revision
+    gives no consent of §4: not C1, C2, C5, C3a, C3b or C4. C2 is not authorized, and S6.2 has
+    not started.
 
 ## 1. Purpose and scope
 
@@ -3092,7 +3144,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27, 28 and 29)
+### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27, 28, 29 and 30)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
@@ -3106,28 +3158,35 @@ in that session, all below. Revision 29 records what an extract of the VPS's jou
 show of the logins and `sudo` calls of 2026-11-19 to 2026-11-21, below: the times and logins of
 commands, mostly as inference, and no reading or verdict. These are not the earlier readings of
 §2.3, which stay context only.
-"Not recorded" marks a field missing from the evidence given, not a block that did not run. The
-operator's `ok` or `STOP` is recorded for no row of the record's fact tables but P9's, whose
-verdict the operator gave (revision 26): their `ok / STOP` column says so row by row, and no
-reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's review record).
+"Not recorded" marks a field missing from the evidence given, not a block that did not run. A
+date or time marked so is a gap in the record's detail, not a missing reading: G6's review record
+classifies each one, and none blocks a verdict (revision 30; §8). The operator's `ok` or `STOP`
+is recorded, per fact, in the first table below: `ok` for every row of P1 to P6 and P8
+(revision 30), and P9's PASS (revision 26). P10's rows have none yet. The dated readings that
+each `ok` row names are the record's attribution, from the evidence below, not a separate
+confirmation of the operator's. The tables of the later runs keep `Not recorded` in that
+column, since a verdict is given per fact, in the first table, not per run. No reading counts as
+`ok` until the operator records it. P7 is G6's (§8, G6's review record). C1 is not confirmed for
+these runs, a historical procedural nonconformity that the operator accepts (revision 30; the
+status).
 
 | # | Fact | Read | Not recorded | ok / STOP |
 |---|---|---|---|---|
-| P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; systemd 255; LXC; UTC | — | Not recorded |
-| P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — | Not recorded |
-| P2 | Engine, Compose, runc versions | Docker 29.8.2; Compose v5.6.0; runc 1.5.1 | — | Not recorded |
-| P2 | cgroup version and driver | `2/systemd` | — | Not recorded |
-| P2 | `userns` in SecurityOptions; context | User namespaces not enabled; seccomp `builtin`; the cgroup namespace enabled; context `default` | — | Not recorded |
-| P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`, so none configured there; logging driver `json-file` | — | Not recorded |
-| P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU | `memtotal`; `warnings`. The run of revision 22 records them (below) | Not recorded |
-| P3 | Application containers | Listed and inspected: `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy`, `postgres-nimuairy`. The operator reviewed their status, health, restarts, OOM state and limits | The values; that this run's `docker ps -a` showed no other container, stopped ones included. The run of revision 22 shows that (below) | Not recorded |
-| P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | `MemTotal` 4352 MiB, 3798 MiB available, no swap in use; LXCFS overlays `/proc/meminfo` and `/proc/swaps`. Root cgroup: no finite `memory.max` or `memory.high`, current memory 905416704, no `memory.peak`, the memory events 0; CPU unlimited, cpuset 0, no throttling; PIDs unlimited, 164 current. Disk 45 GB, 7 % used. The host's effective memory limit: UNKNOWN (§2.3); 4352 MiB is what LXCFS shows, not a verified limit | The `memory.stat` field list (§10.3); the controllers; the pressure files; the backend's cgroup files. The run of revision 22 records them (below) | Not recorded |
-| P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | Not recorded |
-| P6 | Listeners on the stack's ports | None; SSH is the only listener | — | Not recorded |
-| P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | Not recorded |
+| P1 | Kernel, OS, `lxc`, systemd, time zone | Ubuntu 24.04.5 LTS; kernel `5.15.158-2-pve`; systemd 255; LXC; UTC | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P1 | `uid_map`, `gid_map` | `0 100000 65536`, both; evaluated in G7 | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P2 | Engine, Compose, runc versions | Docker 29.8.2; Compose v5.6.0; runc 1.5.1 | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P2 | cgroup version and driver | `2/systemd` | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P2 | `userns` in SecurityOptions; context | User namespaces not enabled; seccomp `builtin`; the cgroup namespace enabled; context `default` | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P2 | Log rotation in `daemon.json` | No `/etc/docker/daemon.json`, so none configured there; logging driver `json-file` | — | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P2 | `docker info`'s other fields | Storage `overlayfs`; root `/var/lib/docker`; live restore disabled; one CPU | `memtotal`; `warnings`. The run of revision 22 records them (below) | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23 (below) |
+| P3 | Application containers | Listed and inspected: `cloudflared-nimuairy`, `frontend-nimuairy`, `backend-nimuairy`, `postgres-nimuairy`. The operator reviewed their status, health, restarts, OOM state and limits | The values; that this run's `docker ps -a` showed no other container, stopped ones included. The run of revision 22 shows that (below) | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23, and P4's block in revision 25 (below) |
+| P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | `MemTotal` 4352 MiB, 3798 MiB available, no swap in use; LXCFS overlays `/proc/meminfo` and `/proc/swaps`. Root cgroup: no finite `memory.max` or `memory.high`, current memory 905416704, no `memory.peak`, the memory events 0; CPU unlimited, cpuset 0, no throttling; PIDs unlimited, 164 current. Disk 45 GB, 7 % used. The host's effective memory limit: UNKNOWN (§2.3); 4352 MiB is what LXCFS shows, not a verified limit | The `memory.stat` field list (§10.3); the controllers; the pressure files; the backend's cgroup files. The run of revision 22 records them (below) | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22, 23 and 25 (below) |
+| P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | `ok`, the operator's (revision 30). Dated readings in the record: revision 22 and revision 25's second run (below) |
+| P6 | Listeners on the stack's ports | None; SSH is the only listener | — | `ok`, the operator's (revision 30). Dated readings in the record: revision 22 and revision 25's second run (below) |
+| P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | `ok`, the operator's (revision 30). Dated readings in the record: revisions 22 and 23, and revision 25's B4 (below) |
 | P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time. The journal holds two sequences of `sudo` calls consistent with its block, for `root`, on 2026-11-21, from 15:37:31 and 15:38:01 UTC, in the login on `pts/4`, and does not show which gave the output (revision 29, below). P10's admin block ran in the same session, as the operator confirms (revision 28, below); revision 27's run there is P10's `deploy` block | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
 | P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time. Revision 27's run of this block, as root, reads root's values, not `deploy`'s (below) | Not recorded |
-| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session, and for P9's, revision 28's run in its session, with `MISSING: grep, as this account` (below). The journal holds `sudo` calls consistent with root's loop of these runs, whose times are inference (revision 29, below) | Not recorded |
+| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session, and for P9's, revision 28's run in its session, with `MISSING: grep, as this account`, which is assessed as showing no missing tool of P7 or P9 (revision 30, below). The journal holds `sudo` calls consistent with root's loop of these runs, whose times are inference (revision 29, below) | Not recorded |
 
 - **P9's partial readings** [USER-REPORTED]. They are not P9's block:
   - **2026-11-19, with the operator's own commands:**
@@ -3547,23 +3606,33 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
     `grep` as `/usr/bin/grep`. No `UNREAD:` line: `sudo` ran;
   - **`atq` and `at`:** absent, which P10 makes optional; P7b then lists no `at` job. This is no
     failure, and the same as on 2026-11-19;
-  - **the resolution of 2026-11-19** (above): the first admin run of that day printed the same
-    line. Its cause was established in that session: the root shell had an alias,
-    `grep='grep --color=auto'`, so `command -v` printed the alias instead of a path, `[ -x ]`
-    failed, and the loop printed `MISSING:` although `grep` was present. Later runs, clean, gave
-    P10's check its expected output in the sessions that needed it;
-  - **what this run's output shows:**
-    - **that `grep` exists:** `/usr/bin/grep` is executable as root, and `/usr/bin` is on this
-      account's `PATH`, where the loop found its other tools;
-    - **why the line was printed, in part:** with an executable `grep` in `PATH`, `command -v`
-      printed something other than the path that `PATH` gives, as an alias or a function, for
-      example, makes it. The `sudo` check shows that `grep` exists, not what `command -v`
-      printed, and the alias itself is not in this output;
-  - **the operator's identification** [USER-REPORTED]: the line is the issue resolved on
-    2026-11-19, and no new finding. That the alias was active in P9's session rests on this
-    identification, not on the output. On it, the resolution applies: the line is no missing
-    executable, nothing about `grep` is investigated again, and no decision of the operator is
-    pending for it;
+  - **the `MISSING: grep` line, in four parts** (revision 30), which keep apart what was printed,
+    the operator's explanation, what the output shows and what follows:
+    1. **what was printed** [VPS, USER-REPORTED]: `MISSING: grep, as this account`, by the first
+       loop of P10's admin block, which checks the tools of P7, P9 and §7.3 as the admin account.
+       P9 did not print it: P9's block prints no `MISSING:` line [CONFIG], and the operator
+       confirms that the line came from P10's admin block, not from P9 [USER-REPORTED];
+    2. **the operator's explanation** [USER-REPORTED]: the loop takes each tool's path from
+       `command -v "$t"` and requires `[ -x "$v" ]` [CONFIG]. In an interactive shell,
+       `command -v` can print an alias's definition instead of an executable's path; `[ -x ]`
+       then fails, and the loop prints `MISSING:` for a tool that exists. The operator identifies
+       this line as the issue of 2026-11-19, in the first admin run of that day, whose cause was
+       established in that session: the root shell had an alias, `grep='grep --color=auto'`, and
+       later runs, clean, gave P10's check its expected output in the sessions that needed it
+       (above). This run's output does not show what `command -v` printed, an alias's definition
+       or, for example, a function's name, and the alias is not in it. So the mechanism, and that
+       an alias was active in P9's session, rest on the operator's identification, not on the
+       output or on the VPS's logs. Where the alias came from, and why a later run did not print
+       the line, are not known. The later clean runs of the block in this record are those of
+       2026-11-19; it records no later run of the block on 2026-11-21;
+    3. **that `grep` exists** [VPS, USER-REPORTED], from this output: the second loop found
+       `/usr/bin/grep`, executable as root through `sudo`, and the first loop found this
+       account's other tools in `/usr/bin`, so `/usr/bin` is on its `PATH`;
+    4. **the assessment:** the line is assessed as showing no missing tool of P7 or P9. The line
+       alone does not show that: the assessment rests on parts 1 to 3 together, that the line came
+       from P10's admin block and not from P9, the operator's explanation [USER-REPORTED], and that
+       `grep` exists. Nothing about `grep` is investigated again, and no decision of the operator
+       is pending for the line;
   - **P10's criteria, as written:**
     - **its rule for G6:** "a missing tool of P7 or P9, or an `UNREAD:` here, leaves G6
       INCONCLUSIVE, because the listing that needs it cannot be complete". `grep` exists, the
@@ -3692,7 +3761,11 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
       record names, and a second, shorter sequence of P7b's calls; on 2026-11-21, the
       `su - deploy` session and root's `du` of 14:46, P7a's two sequences of calls on `pts/4`,
       and the two `su - deploy` sessions after 17:36. Their output is not in the evidence, and
-      none of them is reviewed;
+      none of them is reviewed. **Revision 30** [USER-REPORTED]: the operator does not recall that
+      the sequences consistent with P7b's calls, of 2026-11-19, and with P7a's, of 2026-11-21,
+      gave any new information, and their output is not available. So the record attributes no
+      result to them, takes them as no evidence, and draws no conclusion from them about the
+      VPS's state (§8, G6's review record). The other entries stay as read;
     - **root's UFW reading in revision 23's run:** the extract holds no root `sudo ufw` entry after
       `deploy`'s refusal at 23:21:39. A run at root's prompt without `sudo` would leave none, so
       that reading's time stays not recorded;
@@ -4347,7 +4420,9 @@ its package, and E14. Revision 22 adds P3's container list of 2026-11-19, and P7
 after P10's checks, with the package checks of four unit files. Revision 24 adds the operator's
 acceptance of the review of P7a's latest run, and the investigation of `syslog`'s membership of
 `adm`. Revision 26 adds the operator's acceptance of that membership's risk, as E15. Revision 29
-adds what the VPS's logs show of that investigation.
+adds what the VPS's logs show of that investigation. Revision 30 adds that the further sequences
+of P7a's and P7b's calls in those logs are no evidence, and classifies the dates and times that
+the preflight record does not give.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -4809,16 +4884,66 @@ the logins and `su` sessions, not their output; a command run without `sudo` is 
   answer. Its scope, its revisit and the rest of the register are unchanged, and G6 still has no
   outcome (below).
 
+**Further sequences of P7a's and P7b's calls in the VPS's logs** [USER-REPORTED], recorded in
+revision 30. Revision 29's log report holds sequences of `sudo` calls consistent with P7b's, on
+2026-11-19 from 19:48:40 UTC, and with P7a's, twice on 2026-11-21, from 15:48:45 and 15:49:37
+UTC, which no revision records as runs (§6, the preflight record):
+- the operator does not recall that they gave any new information, and their output is not
+  available;
+- so this record attributes no result to them, takes them as no evidence, and draws no conclusion
+  from them about the VPS's state;
+- G6's review rests on the runs of P7a and P7b recorded above, as they were reviewed; nothing here
+  changes them.
+
+**Dates and times that the preflight record does not give**, recorded in revision 30. The approach
+is the operator's [USER-REPORTED]; the table applies it to each such gap, from the facts that this
+record holds (§6, the preflight record):
+- **the approach:** a missing exact time is a gap in the record's detail, not a missing reading.
+  It blocks no row's `ok / STOP` and no outcome of G6 where the date or the session's context
+  settles the requirement in question. Only a gap on which a requirement's order, session or
+  freshness depends would block. The dated later readings and the operator's confirmations stay
+  the basis of P1 to P6's and P8's verdicts. G6's criteria are unchanged;
+- **what this contract asks of time here:** §6's record holds, per fact, the value read and `ok`
+  or `STOP`, with no field for a time; P10's session rule asks for the session in which the tools
+  are checked, not for a time or an order; G6's own record carries the date on which the operator
+  records it (G6). The times that S6 requires later, such as G13b's reading for C3b, are taken
+  when those steps run;
+- **the classes:** *Not required*: the requirement does not depend on the time. *Date
+  sufficient*: the date settles it. *Approximate time sufficient*: a known window or order settles
+  it. *Unrecoverable but non-blocking*: the time cannot be established, and no requirement depends
+  on it. *Material gap*: a requirement depends on more precision than the evidence gives.
+
+| Gap | Class | Why |
+|---|---|---|
+| The dates, and the account, of P1 to P6's and P8's earlier runs | Unrecoverable but non-blocking | The record has none, and revision 29's log report places none. Each fact has dated later readings, of revisions 22, 23 and 25, on which, with the operator's confirmation, revision 30's `ok` rests |
+| The times of revision 23's budget samples, P5 listings, root's UFW reading and log sizes, and of P8's commands in revision 22's run | Not required | Revision 25's timed runs read the same facts: B1, B2, B4, and the second run of P5 and P6 |
+| P9's date and time | Not required | P9's PASS is scoped to its session's context, the account and the key, not to a time. P10's session rule is met by the operator's confirmation that the admin block ran in that session (revision 28). The journal's `sudo` calls consistent with P9's block, from 15:37:31 and 15:38:01 UTC on 2026-11-21 in the login on `pts/4`, agree [inference] |
+| The times of P10's `deploy` block, run as `deploy` on 2026-11-19 (revisions 19 and 22) | Date sufficient | No session rule applies to this block, whose readings are `deploy`'s account and host facts |
+| The time of P10's admin block before P7b's run of 2026-11-19 (revision 19) | Not required | What P10's session rule needs is the session that the block shared with P7b's run, which the operator confirmed. The journal's order agrees: the call at 18:53:20, P7b's from 18:54:21 [inference] |
+| The time of revision 22's session: P10's two blocks, then P7a, then P7c, after 21:16 UTC | Approximate time sufficient | The order is what P10's session rule needs, and the operator confirmed it. The journal agrees: the admin block's call at 21:43:25, P7a's and P7c's from 21:44:26 to 21:45:52 [inference] |
+| The time of P10's admin block in P9's session, 2026-11-21 (revision 28) | Unrecoverable but non-blocking | The operator does not remember it. Its session is the operator's confirmation; the journal's one consistent call is at 16:47:54, in the login on `pts/4` [inference]. P10 sets no order between its check and P7's or P9's runs |
+| The time of revision 22's four `pkg_file` checks | Not required | G6 counts their result. The journal holds the four `dpkg --verify` calls at 21:40:07 to 21:40:08 [inference] |
+| The time of revision 27's run of P10's `deploy` block as root: 15:04:28 reported, now considered probably incorrect | Unrecoverable but non-blocking | The run reads root's values, and neither meets nor fails P10's expectations, which are `deploy`'s |
+
+No gap is a *Material gap*. The fields stay marked as not recorded in §6; no time is inferred
+into them.
+
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
 needs every requirement outside the register met, and the evidence above does not show that.
 Accepting E15 (revision 26) does not change this: it excepts one finding, and records no outcome
 of G6.
 1. **The rest of the preflight.** G6 comes after P1 to P10 (§4.1, step 1). P1 to P6 and P8 have
    run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
-   - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row but P9's, the
-     dates of P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded,
-     among them P9's time. Revision 29's log report dates commands of several runs, mostly as
-     inference, and fills none of these as reported (§6, the preflight record). Revision 25's
+   - **the preflight record:** it lacks the operator's `ok` or `STOP` for P10's rows. The `ok` of
+     P1 to P6 and P8, which revision 29 listed here, is recorded in revision 30, and P9's PASS in
+     revision 26. The dates of P1 to P6's and P8's earlier runs, and the times that the record
+     marks as not recorded, P9's among them, which revision 29 also listed here, are gaps in the
+     record's detail, not in its evidence: none is material, and none blocks a verdict (above,
+     the dates and times that the preflight record does not give). Revision 29's log report dates
+     commands of several runs, mostly as inference, and fills none of these as reported (§6, the
+     preflight record). C1 is not confirmed for the preflight, a historical procedural
+     nonconformity that the operator accepts; that acceptance is no C1, and meets no requirement
+     of G6 (revision 30; the status). Revision 25's
      runs of 2026-11-21 give P4's budget block, its last line and root's UFW reading their times,
      and run P5's and P6's checks as written, as `deploy`, with
      `none_of` defined in that shell. Revision 23's run records `deploy`'s Docker context, client
@@ -4849,13 +4974,15 @@ of G6.
    usable passwords. P7a's run after P10's checks (revision 22) shows the same markers. The
    operator's review of its `key:` lines and of `last`'s logins (G6, items 3 and 6), which
    revision 22 listed here, is accepted (revision 24, above); revision 13 records that review for
-   the run of 2026-11-17.
+   the run of 2026-11-17. The further sequences of P7a's calls on 2026-11-21, in the VPS's logs,
+   are no evidence (revision 30, above).
 3. **P7b:** `/etc/crontab`, which revision 19 listed here as a STOP finding outside the register,
    is E14 (revision 21); its origin stays unresolved (above). Revision 20 records E2's scope: both
    `sysstat` files, which E2 now names. Revision 19 records the rest: P7b's run of 2026-11-19
    printed no `UNREAD:` and no `REVIEW:` line, and every other entry of `/etc/cron.d` and of the
    periodic directories is a verified package file or the application's backup entry; there is no
-   user crontab, and `at` is not installed.
+   user crontab, and `at` is not installed. The further sequence of P7b's calls on 2026-11-19, in
+   the VPS's logs, is no evidence (revision 30, above).
 4. **P7c:** the unit files of `docker.service`, `systemd-journald.service`,
    `systemd-logind.service` and `user@.service`, which revision 21 listed here, are verified by
    `pkg_file` (revision 22, above), so G6 counts them as their packages'. P7c's third run, after
@@ -4867,7 +4994,8 @@ Revision 15 also listed a decision on the `systemd-journal` password that G6 acc
 operator's judgement on G6's STOP. Revision 16 records both, as E13 of the exception register; the
 password's origin stays unresolved.
 
-Until each holds, G6 has no outcome, and the order of §4.1 stops before C2.
+Until each holds, G6 has no outcome, and the order of §4.1 stops before C2. When each holds, G6's
+outcome is still the operator's to record (G6); this record gives none.
 
 ### G7. U9: identity mapping, before the start
 
