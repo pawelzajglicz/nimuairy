@@ -1,8 +1,11 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 31). S6.1, the read-only preflight, has started:
-P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). The
-deployment of the observability stack has not started.**
+**Status, 2026-11-22: draft for review (revision 33). S6.1, the read-only preflight, has started:
+P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
+the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
+resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
+operator has decided D1, A, and D2, (b) (revision 33). C2 is not authorized, and S6.2 is not
+authorized and has not started. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -40,6 +43,21 @@ deployment of the observability stack has not started.**
   records no outcome of G6 (revision 30). G6's outcome, which revision 31 records, changes none of
   this: it grants no C1, retroactively or now, is no exception of G6's register, and does not
   close §4.1's step 1. Revision 31 draws no conclusion about that step.
+
+  **The operator's decision on step 1** (revision 32) [USER-REPORTED]. On 2026-11-22 the operator
+  explicitly accepted this historical nonconformity as a basis for continuing S6, and explicitly
+  permitted the order to go on past §4.1's step 1 despite it. On that decision, step 1 is treated
+  as resolved for sequencing, and the order may go on to step 2 (§4.1). The decision:
+  - **is no C1:** it grants no C1, retroactively or now. It does not say that C1 was given before
+    S6.1, and does not record step 1's C1 as fulfilled: whether C1 was given stays unconfirmed,
+    and the nonconformity stays recorded as revision 30 records it;
+  - **changes nothing of G6:** not its criteria, not its outcome of revision 31, and not E1 to E15,
+    which stay accepted and unresolved. It is no exception of G6's register;
+  - **authorizes nothing further:** it gives no C2 and does not authorize S6.2. D1 and D2, which
+    step 2 needs before C2, stay open until the operator decides each of them (their state at
+    revision 32; the operator decided both in revision 33, below). C2, C5, C3a, C3b and C4 each
+    stay a separate consent, with the requirements that §4 gives it. It authorizes no VPS
+    operation.
 - **The preflight's verdicts** [USER-REPORTED]: the operator confirms that the values recorded for
   P1 to P6 and P8 meet this contract's conditions, and records `ok` for each of their rows
   (revision 30). Each row also names the record's dated readings of its values; that attribution
@@ -154,12 +172,33 @@ deployment of the observability stack has not started.**
   in its evidence. The verdicts of P10's rows, which revision 30 listed as missing, are recorded
   in revision 31.
   G6's outcome does not close §4.1's step 1, which begins with C1, and revision 31 draws no
-  conclusion about that step (C1, above). It authorizes neither C2 nor S6.2: C2 is not authorized,
-  and D1 and D2, which step 2 needs, are open.
+  conclusion about that step. The operator's separate decision of revision 32 treats step 1 as
+  resolved for sequencing (C1, above); it is no part of G6's outcome, and changes nothing of it.
+  Neither authorizes C2 or S6.2: C2 is not authorized. D1 and D2, which step 2 needs, are decided
+  by the operator's separate decisions of revision 33 (below), which give no C2 either.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
-- The operator decisions D1 to D7 (§13.3) are open. P9's PASS is the reading that D2's
-  recommendation waits for; D2 itself is not recorded.
+- **D1 and D2 are decided** [USER-REPORTED] (revision 33). On 2026-11-22 the operator explicitly
+  selected D1's option A and D2's option (b) (§13.3):
+  - **D1 = A:** the Grafana secret owned by `deploy`, with mode 0644, in a directory owned by
+    `deploy` with mode 0700, and §7.5's password rule kept: at least 32 letters and digits. It is
+    the operator's selection of A, not only an acceptance of its recommendation. §7.5's
+    requirements, its evidence that A works and its rationale are unchanged;
+  - **D2 = (b):** the existing administrative SSH account `root`. The archive is first copied to
+    `root`, and §7.3's hand-over transfers it to `deploy`; the SSH tunnels use `root` and the
+    selected existing key. The selection rests on P9's PASS, which applies only to `root`, the
+    selected existing key and the context of the operator's SSH session that ran P9, as §6
+    records them. It verifies no other account, key, connection context or SSH configuration,
+    and what P9 does not cover stays uncovered (§6). No new account and no `authorized_keys`
+    entry is introduced; no key changes, and the deploy workflow's key keeps its restrictions.
+    Whether to add a tunnel-only account for routine Grafana access later stays a separate
+    decision (§13.3);
+  - **what they are not:** permission to carry out the design they decide. They give no C2, and
+    authorize neither S6.2 nor any VPS operation. C2 stays a separate consent, with every
+    requirement that §4 gives it, and so do C5, C3a, C3b and C4. They change neither C1's record
+    nor revision 32's decision on step 1, and nothing of G6, its outcome or E1 to E15.
+
+  D3 to D7 (§13.3) are open.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -875,6 +914,55 @@ Revisions:
     scope; D1 to D7, open. This revision gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
     C2 is not authorized, S6.2 is not authorized and has not started, and no VPS operation is
     authorized.
+- **32** (2026-11-22), the operator's decision on C1's historical nonconformity and §4.1's step 1
+  [USER-REPORTED]. No procedure and no criterion changes, no entry of the exception register
+  changes, and no exception is added:
+  - **the decision:** on 2026-11-22 the operator explicitly accepts the historical procedural
+    nonconformity that revision 30 records, that C1 cannot be confirmed for S6.1, as a basis for
+    continuing S6, and explicitly permits the order to go on past §4.1's step 1 despite it. On
+    that decision, step 1 is treated as resolved for sequencing, and the order may go on to step
+    2 (the status; §4.1);
+  - **what it is not:** no C1, retroactively or now. It does not say that C1 was given before
+    S6.1, and does not record step 1's C1 as fulfilled: whether C1 was given stays unconfirmed.
+    Revision 30's record of the nonconformity stands, and revisions 30 and 31, which drew no
+    conclusion about step 1, stay as written;
+  - **G6:** its criteria, its outcome of revision 31 and E1 to E15 are unchanged. The decision is
+    no exception of G6's register, and G6's review record (§8) is unchanged;
+  - **the status, §4.1 and §17** record the decision;
+  - **unchanged:** P9's PASS and its scope; the preflight record (§6); D1 to D7, open, D1 and D2
+    until the operator decides each of them (their state at revision 32; the operator decided
+    both in revision 33). This revision gives no consent of §4: not C1, C2, C5, C3a, C3b or C4,
+    each still separate, with the requirements that §4 gives it. C2 is not authorized, S6.2 is
+    not authorized and has not started, and no VPS operation is authorized.
+- **33** (2026-11-22), the operator's decisions D1 and D2 [USER-REPORTED]. No procedure and no
+  criterion changes, no entry of the exception register changes, and no exception is added:
+  - **D1 = A:** on 2026-11-22 the operator explicitly selects option A, not only its
+    recommendation: the Grafana secret owned by `deploy`, with mode 0644, in a directory owned by
+    `deploy` with mode 0700, with §7.5's password rule kept, at least 32 letters and digits.
+    §7.5's requirements, its evidence that A works and its rationale are unchanged; its password
+    rule is no longer marked as proposed (§7.5, §13.3);
+  - **D2 = (b):** on 2026-11-22 the operator explicitly selects option (b), with the existing
+    administrative SSH account `root`: the archive is first copied to `root`, §7.3's hand-over
+    transfers it to `deploy`, and the SSH tunnels use `root` and the selected existing key. It
+    rests on P9's PASS, which applies only to `root`, the selected existing key and the context
+    of the operator's SSH session that ran P9, as §6 records them; it verifies no other account,
+    key, connection context or SSH configuration. No new account and no `authorized_keys` entry
+    is introduced; no key changes, and the deploy workflow's key keeps its restrictions. A
+    tunnel-only account for routine Grafana access stays a separate decision (§13.3);
+  - **what the decisions are:** decisions about the intended design, not permission to carry it
+    out. §4's requirement for C2 that D1 and D2 be decided now holds. C2's other requirements are
+    not assessed here, and C2 is still given separately, by the operator, at its point of §4;
+  - **the status, §4.1, §7.5, §13.3, §14 and §17** record the decisions;
+  - **the passages that call D1 or D2 open** keep their wording, each with a note that it gives
+    their state at that recorded review and that revision 33 decides them: revision 32's, in the
+    status, its entry and §4.1; the preflight record's P9 entries (§6); and G6's review record
+    (§8). The entries of this history before revision 32 are not annotated: each gives its own
+    revision's state;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; G6's
+    criteria, its outcome and E1 to E15; P9's PASS and its scope; D3 to D7, open; the requirements
+    of every consent (§4). This revision gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
+    C2 is not authorized, S6.2 is not authorized and has not started, and no VPS operation is
+    authorized.
 
 ## 1. Purpose and scope
 
@@ -1074,6 +1162,21 @@ Each step needs every step above it. No step needs a step below it, so the order
 
 A step that does not pass stops the order there. Its resolution is recorded before the order goes on,
 and a resolution that changes state needs its own consent (§11).
+
+**Step 1 in this S6** (revision 32) [USER-REPORTED]. Step 1 begins with C1, which is not confirmed
+for S6.1, a historical procedural nonconformity (the status). On 2026-11-22 the operator explicitly
+accepted that nonconformity as a basis for continuing S6, and explicitly permitted the order to go
+on past step 1 despite it. On that decision, step 1 is treated as resolved for sequencing, and the
+order may go on to step 2. The decision is no C1, given now or for the past, and does not record
+step 1's C1 as fulfilled. It changes neither the preflight record (§6) nor G6's criteria, outcome
+or register (§8). Step 2 still needs D1 and D2 decided (their state at revision 32; the operator
+decided both in revision 33, below), and then C2, given as §4 requires; every later consent stays
+separate, with the requirements that §4 gives it.
+
+**Step 2 in this S6** (revision 33) [USER-REPORTED]. On 2026-11-22 the operator decided D1, A, and
+D2, (b) (§13.3): the first part of step 2. C2 is not given, and the delivery and the host
+configuration (S6.2) are not authorized and have not started. C2 is still given separately, with
+the requirements that §4 gives it.
 
 ## 5. Conventions
 
@@ -3200,7 +3303,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27, 28, 29, 30 and 31)
+### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27, 28, 29, 30, 31 and 33)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
@@ -3257,7 +3360,8 @@ status).
     key keeps its restriction, and the tunnel needs another key or account (D2);
   - **what followed:** the operator selected `root` and an existing key for the tunnel, and P9's
     block ran for them, with its own `Match` and `Include` listing, and gave the verdict
-    (revision 26, below). D2 is not recorded.
+    (revision 26, below). D2 is not recorded (its state at revision 26; the operator decided it in
+    revision 33: (b), with `root`, §13.3).
 - **P10's admin block, 2026-11-19** [USER-REPORTED], as root, three runs:
   - **the latest run** (revision 19), in the root session that then ran P7b again: every tool was
     found, as this account and as root through `sudo`; no `MISSING:` and no `UNREAD:` line; `at`
@@ -3561,9 +3665,10 @@ status).
   - **what it does not cover:** a connection from another network, address or port, for which P9
     runs again from such a session, or each `Match` block is reviewed by hand (P9); another account
     or key; the Alloy UI tunnel of V15, to a container address. Grafana through the tunnel is V7's;
-  - **D2:** open. P9's PASS is the reading that D2's recommendation, (b), waits for ("if P9 shows
-    that it may forward"). The decision, which also names the account that copies the archive, is
-    the operator's to record (§13.3); C2 needs it (§4);
+  - **D2:** open (its state at revision 26; the operator decided it in revision 33: (b), with
+    `root`, §13.3). P9's PASS is the reading that D2's recommendation, (b), waits for ("if P9
+    shows that it may forward"). The decision, which also names the account that copies the
+    archive, is the operator's to record (§13.3); C2 needs it (§4);
   - **P10's session rule:** P10 checks the tools of P7 and P9 "in the admin session that runs
     them". Revisions 26 and 27 did not record whether its admin block ran in this session. The run
     of P10 that revision 27 records in this session is its `deploy` block, which checks only
@@ -4009,6 +4114,10 @@ argument, a log or a chat.
 **Recommendation: A.** It needs no root, keeps the production check and the guide's check usable
 as `deploy`, and B protects nothing further on this host.
 
+**Decided: A** (D1, revision 33) [USER-REPORTED]. On 2026-11-22 the operator explicitly selected
+option A, with the password rule below: a selection of the option, not only an acceptance of the
+recommendation. The requirements above, the evidence below and the rationale are unchanged.
+
 **Evidence that A works**, all required:
 - `stat`: directory `deploy:<group> mode 700`, file `regular file, deploy:<group> mode 644` (G5);
 - G7: UID 472 is mapped in the LXC;
@@ -4018,7 +4127,7 @@ as `deploy`, and B protects nothing further on this host.
   so the database holds the file's password.
 
 **The password** comes from the password manager.
-- Proposed rule: at least 32 characters, only `A–Z`, `a–z` and `0–9`. No whitespace, quotes or
+- The rule (D1): at least 32 characters, only `A–Z`, `a–z` and `0–9`. No whitespace, quotes or
   backslashes, which the production check's curl configuration and the rotation procedure would
   have to escape. CI uses a 64-character hex string.
 - The second entry is compared in the shell, without output, so a wrong paste cannot become the
@@ -5025,10 +5134,11 @@ them (below).
      and Compose, which revision 22 listed here.
 
    P9's block, which revision 25 listed here, has run for `root` and the selected key, and the
-   operator accepted it as PASS (revision 26; §6, the preflight record). D2 stays open: §4.1 needs
-   it before C2 (step 2), not for G6. Whether P10's admin block ran in P9's session, which
-   revisions 26 and 27 listed here as not recorded, is recorded in revision 28: it ran there, as
-   the operator confirms. Revision 27's run in that session is P10's `deploy` block. The admin
+   operator accepted it as PASS (revision 26; §6, the preflight record). D2 stays open (its state
+   when this item was recorded; the operator decided it in revision 33: (b), with `root`, §13.3):
+   §4.1 needs it before C2 (step 2), not for G6. Whether P10's admin block ran in P9's session,
+   which revisions 26 and 27 listed here as not recorded, is recorded in revision 28: it ran there,
+   as the operator confirms. Revision 27's run in that session is P10's `deploy` block. The admin
    run's one `MISSING:` line, `grep`'s, is the issue resolved on 2026-11-19, as the operator
    identifies it. `grep` exists, so neither P10's rule for G6, a missing tool, nor G6's condition
    for it, "a `MISSING:` tool in P10's admin check" (below), which G6 lists as an `UNREAD:` line,
@@ -5117,7 +5227,8 @@ decision, after reviewing revision 30 in full as G6's final control:
   outcome grants no C1, retroactively or now, and does not close §4.1's step 1; this record draws
   no conclusion about that step;
 - **what it authorizes:** nothing. It gives no consent of §4: not C1, C2, C5, C3a, C3b or C4. It
-  authorizes neither C2 nor S6.2, nor any VPS operation. D1 to D7 stay open; C2 needs D1 and D2
+  authorizes neither C2 nor S6.2, nor any VPS operation. D1 to D7 stay open (their state at G6's
+  outcome, revision 31; the operator decided D1 and D2 in revision 33, §13.3); C2 needs D1 and D2
   decided (§4).
 
 ### G7. U9: identity mapping, before the start
@@ -6448,10 +6559,13 @@ Accepted together with this contract:
 
 ### 13.3 Open: decisions for the operator
 
+D1 and D2 are decided: on 2026-11-22 the operator explicitly selected D1's A and D2's (b)
+(revision 33). Their rows keep their question, options and rationale. D3 to D7 are open.
+
 | # | Question | Options | Recommendation |
 |---|---|---|---|
-| D1 | The Grafana secret's owner and mode | A: 0644, `deploy`, in a 0700 `deploy` directory. B: 0400, UID 472 | **A** (§7.5): no root, the production check runs as `deploy`, and B protects nothing further on this host. Also the password rule of §7.5: 32 or more letters and digits |
-| D2 | The SSH account that copies the archive and opens the tunnels | (a) `deploy` with a key of its own for the operator, without `restrict`: a new `authorized_keys` entry, itself a VPS change. (b) The operator's existing administrative account: `scp` to it, then §7.3's hand-over; the tunnel through it. (c) A new tunnel-only account whose key allows only `port-forwarding` to `127.0.0.1:3000`: least privilege, but a new account, and the Alloy UI tunnel would need a wider `permitopen` | **(b) for S6**, if P9 shows that it may forward: it needs no new account or key. Whether to add (c) for routine Grafana access later is a separate decision. The key the deploy workflow uses keeps its restrictions in every option |
+| D1 | The Grafana secret's owner and mode | A: 0644, `deploy`, in a 0700 `deploy` directory. B: 0400, UID 472 | **Decided: A**, the operator's explicit selection of 2026-11-22 (revision 33), with the password rule of §7.5: 32 or more letters and digits. The recommendation was **A** (§7.5): no root, the production check runs as `deploy`, and B protects nothing further on this host |
+| D2 | The SSH account that copies the archive and opens the tunnels | (a) `deploy` with a key of its own for the operator, without `restrict`: a new `authorized_keys` entry, itself a VPS change. (b) The operator's existing administrative account: `scp` to it, then §7.3's hand-over; the tunnel through it. (c) A new tunnel-only account whose key allows only `port-forwarding` to `127.0.0.1:3000`: least privilege, but a new account, and the Alloy UI tunnel would need a wider `permitopen` | **Decided: (b) for S6**, the operator's explicit selection of 2026-11-22 (revision 33), with the existing administrative SSH account `root`: the archive is first copied to `root`, §7.3's hand-over transfers it to `deploy`, and the SSH tunnels use `root` and the selected existing key. It rests on P9's PASS, which applies only to `root`, the selected existing key and the session context that §6 records; no new account or `authorized_keys` entry is introduced. The recommendation was **(b) for S6**, if P9 shows that it may forward: it needs no new account or key. Whether to add (c) for routine Grafana access later is a separate decision. The key the deploy workflow uses keeps its restrictions in every option |
 | D3 | The measurement procedure and its thresholds, before and after the start | The parts below | **As proposed**, part by part below |
 | D4 | Releases and image updates during S6 | Freeze: no `release.yml` from the start of the pre-start sampler (G11) to the end of the window; #103 to #108 stay unmerged until S6 closes. Or no freeze | **Freeze.** The measurements stay attributable, and the deployed images are those CI verified at `ff0139a`. After S6, the guide's update sequence takes one image at a time |
 | D5 | Docker's JSON log rotation | Record only in S6. Or configure rotation: daemon-wide in `daemon.json`, which needs a daemon restart, affects the application and applies only to containers created afterwards [S, Docker's logging documentation, not re-read for this contract]; or per service with Compose's `logging`, a repository change that the limits check's allowlist would have to admit for the overlay | **Record only in S6** (V14, R3). Decide afterwards from the measured growth, in a separate change |
@@ -6491,9 +6605,9 @@ Accepted together with this contract:
 | U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open |
 | Compose reads `observability/.env` | Guide | G4 | Open |
 | `deploy`'s ownership, Docker access, shell, umask | Guide | P10, §7.2, G8 | Open for §7.2 and G8. Read by P10 on 2026-11-19 (§6, the preflight record): `deploy` in `docker`, `/bin/bash`, umask `0002`, `/var/nimuairy` `deploy:deploy` |
-| How the archive reaches `deploy` | Guide | D2, §7.3 | Open |
+| How the archive reaches `deploy` | Guide | D2, §7.3 | Decided, D2 = (b) (revision 33): copied first to `root`, the existing administrative SSH account, then §7.3's hand-over to `deploy`. The delivery is open (§7.3, under C2) |
 | `sudo` for the log-size check | Guide | P10, V14 | Open for V14. Read by P10 on 2026-11-19: `deploy` has no passwordless sudo. The `deploy: passwordless sudo` of revision 27's run is root's reading, under the line's fixed text (§6, the preflight record) |
-| The secret's owner and mode; 472's read access; the production check's access | Guide, S4b §6.5 | D1, G5, G7, V1, V6 | Open |
+| The secret's owner and mode; 472's read access; the production check's access | Guide, S4b §6.5 | D1, G5, G7, V1, V6 | The owner and mode decided, D1 = A (revision 33). 472's read access and the production check's access open (G5, G7, V1, V6) |
 | No existing volumes, no listeners | Guide, S4b §12.3 | G1, G3 | Open |
 | SSH forwarding for the tunnel account | Guide | P9, V7 | Open for V7. P9 PASS, as the operator reported on 2026-11-21 (§6, the preflight record): `root` may forward to `127.0.0.1:3000` with the selected existing key, in the context of the session that ran P9 |
 | The Alloy UI tunnel to a container address | Guide | V15, optional | Open; may stay open |
@@ -6575,12 +6689,15 @@ for its session's context, `root` and the selected key, and recorded `ok` for P1
 register, E1 to E12 on 2026-11-17, E13, E2's widened scope and E14 on 2026-11-19, and E15 on
 2026-11-21 (§8, G6). Accepting the register did not record G6; the operator recorded G6 as PASS
 WITH RECORDED EXCEPTIONS on 2026-11-22 (revision 31; §8, G6's review record), which meets the
-condition of G6's item below. C1 is not confirmed (the status at the top); this checklist draws no
-conclusion about S6.1's item or §4.1's step 1. The deployment of the observability stack has not
-started. P9's PASS, the verdicts and the accepted exceptions stand as recorded; they are steps
-toward the items below, not items of this checklist. Apart from G6's, no item below is met yet, so
-every other one is still open. No box below is ticked before the close-out, which updates the
-acceptance checklist (§12).
+condition of G6's item below. C1 is not confirmed (the status at the top). The operator's decision
+of 2026-11-22 treats §4.1's step 1 as resolved for sequencing (revision 32; §4.1); it is no C1,
+and no item of this checklist. This checklist draws no conclusion about S6.1's item. The operator
+decided D1 and D2 on 2026-11-22 (revision 33), a step toward the first item below, which also
+needs D3 and D4 decided, D7 if G9 asks for it, and D5 and D6 recorded. The deployment of the
+observability stack has not started. P9's PASS, the verdicts and the accepted exceptions stand as
+recorded; they are steps toward the items below, not items of this checklist. Apart from G6's, no
+item below is met yet, so every other one is still open. No box below is ticked before the
+close-out, which updates the acceptance checklist (§12).
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
