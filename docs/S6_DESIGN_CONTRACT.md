@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 36). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 37). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -1204,6 +1204,23 @@ Revisions:
     C4. C2 is not authorized, S6.2 is not authorized and has not started, C5 is not given, and no
     VPS operation is authorized. No file has been created or changed on the VPS for S6.2, and for
     S6 no image has been pulled and no `docker compose up` has run.
+- **37** (2026-11-22), §2.3's UFW row and §12's row for `docs/VPS_FIREWALL.md`, brought up to date
+  after revision 36. No reading, verdict, gate criterion, threshold, decision, consent, procedure
+  or command changes:
+  - **§2.3's UFW row** said that `configure-ufw.sh` configured UFW and that UFW's state was not
+    read for S6. The rules' origin is not shown, and S6.1 has read UFW since. The row now names the
+    script as what applies the policy, and gives the latest reading, P8's for G9 after the
+    correction (revision 36), with the TCP rule's comment, `SSH administration`, which is not the
+    one the script writes. Like the rest of §2.3, it is context; the record is §6's and G9's;
+  - **§12's row for `docs/VPS_FIREWALL.md`** said that UFW and the policy are unchanged. The policy
+    is; UFW's rules were corrected, outside S6. The close-out now records UFW as P8 read it for G9,
+    and the correction as the operator's own change, which neither this contract nor D7
+    authorized, and keeps the policy apart from the rule's comment. It stays a close-out item,
+    after S6.5's acceptance;
+  - **unchanged:** `docs/VPS_FIREWALL.md` and `scripts/configure-ufw.sh`; the preflight record's
+    readings (§6); G9's criteria and its PASS; D1 to D7; the operator's acceptance of P8's
+    procedural deviation (§4); the entries of this history, which are not annotated. This revision
+    gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1288,7 +1305,7 @@ replaces the old one for every S6 decision.
 | The stack on the VPS | Never started. Whether `nimuairy-observability_*` volumes exist was left unconfirmed by P0 [PLAN] | [S4b §7.3](S4b_DESIGN_CONTRACT.md#73-volumes) |
 | `jq` on the VPS | Not guaranteed | [S4b §12.3](S4b_DESIGN_CONTRACT.md#123-dependencies-for-s6-and-s7) |
 | `awk` on the VPS | Never recorded. Ubuntu's default is mawk; which implementation and version the VPS runs is [UNKNOWN] until P10 | — |
-| UFW | Configured by `scripts/configure-ufw.sh`, which requires `IPV6=yes` [CONFIG]; its current state was not read for S6 | [VPS_FIREWALL.md](VPS_FIREWALL.md#policy) |
+| UFW | `scripts/configure-ufw.sh` applies the policy and requires `IPV6=yes` [CONFIG]. Not read for S6 before S6.1. The latest reading, P8's for G9, after the operator's correction outside S6, reported on 2026-11-22 [VPS, USER-REPORTED]: active, `IPV6=yes`, logging `on (low)`, default deny incoming, allow outgoing and deny routed, and only the TCP rule for the SSH port, with its IPv6 copy. The rule's comment is `SSH administration`, not the script's; its origin is not shown | [VPS_FIREWALL.md](VPS_FIREWALL.md#policy); §6, the preflight record; §8, G9 |
 
 ### 2.4 Implementation facts S6 relies on [CONFIG]
 
@@ -6928,7 +6945,7 @@ before the deployment has succeeded.
 | Document | Change | From |
 |---|---|---|
 | `README.md`, Observability | The stack runs in production on the VPS, from `/var/nimuairy-observability`, monitoring itself until S7; a link to the production guide | V1, V6 |
-| `docs/VPS_FIREWALL.md` | The sentence that the production Compose files publish no host ports gets the stack's exception: Grafana's `127.0.0.1:3000`, loopback only, reached through SSH. Prometheus, Loki, Tempo, Alloy and the proxy publish nothing. UFW and the policy are unchanged. U12's result, without the address | V5, V6, G9, V15 |
+| `docs/VPS_FIREWALL.md` | The sentence that the production Compose files publish no host ports gets the stack's exception: Grafana's `127.0.0.1:3000`, loopback only, reached through SSH. Prometheus, Loki, Tempo, Alloy and the proxy publish nothing. The policy is unchanged. UFW as P8 read it for G9, reported on 2026-11-22, and the correction before that reading, the operator's own change outside S6, which neither this contract nor D7 authorized: only the TCP rule for the SSH port, with its IPv6 copy, with the comment `SSH administration`, not the one the script writes; the policy sets no comment. U12's result, without the address | V5, V6, G9 and the preflight record (§6), V15 |
 | `docs/VPS_RESOURCE_BUDGET.md` | The stack in the services table as running; a section with the measurements: G13's pre-start baseline, what the pre-start sampler saw during the first start, R1's settings, R3's maxima per container and at the root, the window and its coverage, the events; the O-idle row of Outstanding verification; the `memory.stat` field list; the open questions of §10.4 | G13, §10.3 |
 | `docs/S4b_DESIGN_CONTRACT.md` | U7 to U10 and U12 in §12.1 closed or updated with their evidence; U1 only if a Linux engine's behaviour was observed; §12.3's items marked done; a revision line | G4, G6–G9, V6, V11, V12 |
 | `docs/OBSERVABILITY_PRODUCTION.md` | Its status ("not deployed yet"); each **Verify at S6** item that S6 settled, with the result; the open-items table; and corrections where the VPS behaved differently from the guide | The relevant V and G results |
