@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 37). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 38). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -10,8 +10,9 @@ file, and D7, fix the firewall first (revision 35). On 2026-11-22 the operator c
 firewall in a separate change outside S6; P8 ran again, and the operator evaluated G9 as PASS
 (revision 36). P8's runs for G9 deviated from §4's rule for read-only checks; on 2026-11-22 the
 operator accepted that deviation as historical, and the acceptance gives no consent (revision
-36). C2 is not authorized, and S6.2 is not authorized and has not started; C5 is not given. The
-deployment of the observability stack has not started.**
+36). On 2026-11-22 the operator gave C2, for S6.2 within §7.2 to §7.5 only; S6.2 has not started
+(revision 38). C5, C3a, C3b and C4 are not given. The deployment of the observability stack has
+not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -180,8 +181,9 @@ deployment of the observability stack has not started.**
   G6's outcome does not close §4.1's step 1, which begins with C1, and revision 31 draws no
   conclusion about that step. The operator's separate decision of revision 32 treats step 1 as
   resolved for sequencing (C1, above); it is no part of G6's outcome, and changes nothing of it.
-  Neither authorizes C2 or S6.2: C2 is not authorized. D1 and D2, which step 2 needs, are decided
-  by the operator's separate decisions of revision 33 (below), which give no C2 either.
+  Neither authorizes C2 or S6.2: C2 is not authorized (its state at revision 32; the operator gave
+  C2 in revision 38, below). D1 and D2, which step 2 needs, are decided by the operator's separate
+  decisions of revision 33 (below), which give no C2 either.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
   VPS, created there or started there.
 - **D1 and D2 are decided** [USER-REPORTED] (revision 33). On 2026-11-22 the operator explicitly
@@ -271,9 +273,10 @@ deployment of the observability stack has not started.**
   - **G9: PASS,** the technical outcome: the operator's evaluation of that output, by G9's
     criteria, unchanged (§8, G9). It closes D7's follow-up; D7 itself is unchanged;
   - **the procedural deviation:** neither session was started under C2, C5, C3a or C3b, none of
-    which has been given, and no confirmation of C1 is documented for either session; revision
-    32's decision on step 1 is no C1. So both runs deviate from §4's rule that read-only checks run
-    only inside an S6 session started under C1, C2, C5, C3a or C3b (§4);
+    which has been given (their state at revision 36; the operator gave C2 in revision 38, below,
+    for §7.2 to §7.5 only, which do not include P8), and no confirmation of C1 is documented for
+    either session; revision 32's decision on step 1 is no C1. So both runs deviate from §4's rule
+    that read-only checks run only inside an S6 session started under C1, C2, C5, C3a or C3b (§4);
   - **its acceptance:** on 2026-11-22 the operator explicitly accepted the deviation as
     historical, for this run of P8 and its repeat only. G9's PASS stays on their technical
     evidence, and the deviation is not, by itself, a reason to run P8 again or to change G9's
@@ -285,6 +288,27 @@ deployment of the observability stack has not started.**
     3 needs C2 and S6.2 (step 2). No file has been created or changed on the VPS for S6.2, and for
     S6 no image has been pulled and no `docker compose up` has run. They change nothing of C1's
     record, revision 32's decision on step 1, D1 to D7, G6, its outcome or E1 to E15.
+- **C2 is given** [USER-REPORTED] (revision 38). On 2026-11-22 the operator explicitly gave C2, in
+  these words, translated: "I give consent C2 to carry out S6.2 in accordance with the current S6
+  Design Contract, within the scope of §7.2–7.5." This record rests on that statement:
+  - **its scope:** §7.2 to §7.5 of this contract, and nothing else: the directory (§7.2); the
+    archive, its copy, its hand-over to `deploy`, its check and its extraction, which writes
+    `REVISION` (§7.3); `observability/.env` (§7.4); and the Grafana secret (§7.5). This revision
+    changes none of their procedures;
+  - **§7.1, apart from it:** the commit and its local check are outside the consent's scope, and
+    §4's requirements for C2 do not include them, so giving C2 does not carry them out. §7.1 stays
+    a separate step, before S6.2's first operation on the VPS (§7);
+  - **what it does not cover:** C5, C3a, C3b and C4, which are not given and stay separate
+    consents, each with the requirements that §4 gives it; any operation outside §7.2 to §7.5; any
+    later step of S6; and S7 (§4). It changes no requirement, criterion, threshold, condition or
+    exception of this contract, none of D1 to D7, and neither the order of §4.1 nor any step's
+    needs;
+  - **given, not carried out:** S6.2 has not started, and no step of §7.1 to §7.5 is recorded as
+    done. No file has been created or changed on the VPS for S6.2, and for S6 no image has been
+    pulled and no `docker compose up` has run. No gate's state changes: G1 to G5, G7, G8, G10 and
+    G12 have not run, G11 and G13 come after C5, and G6's and G9's outcomes stand as recorded;
+  - **what it leaves as it is:** C1's record, revision 32's decision on step 1, D1 to D7, G6, its
+    outcome, E1 to E15, G9's PASS, and the operator's acceptance of P8's procedural deviation (§4).
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1221,6 +1245,38 @@ Revisions:
     readings (§6); G9's criteria and its PASS; D1 to D7; the operator's acceptance of P8's
     procedural deviation (§4); the entries of this history, which are not annotated. This revision
     gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
+- **38** (2026-11-22), the operator's consent C2 [USER-REPORTED]. No reading, verdict, gate
+  criterion, threshold, decision, procedure or command changes, no entry of the exception register
+  changes, and no exception is added:
+  - **C2:** on 2026-11-22 the operator explicitly gave C2, in these words, translated: "I give
+    consent C2 to carry out S6.2 in accordance with the current S6 Design Contract, within the
+    scope of §7.2–7.5." The record rests on that statement;
+  - **its scope:** §7.2 to §7.5 of this contract, and nothing else: the directory, the archive with
+    its copy, hand-over, check and extraction, `observability/.env` and the Grafana secret. This
+    revision changes none of their procedures (§7);
+  - **§7.1, apart from it:** the commit and its local check are outside the consent's scope, and
+    §4's requirements for C2 do not include them, so giving C2 does not carry them out. §7.1 stays
+    a separate step, before S6.2's first operation on the VPS (§7);
+  - **what it does not cover:** C5, C3a, C3b and C4, which are not given and stay separate
+    consents, each with the requirements that §4 gives it; any operation outside §7.2 to §7.5; any
+    later step of S6; and S7 (§4);
+  - **given, not carried out:** S6.2 has not started, and no step of §7.1 to §7.5 is recorded as
+    done. No gate's state changes: G1 to G5, G7, G8, G10 and G12 have not run, and G6's and G9's
+    outcomes stand as recorded;
+  - **the status, §4.1, §7 and §17** record it;
+  - **the passages that give C2 as not given:** the status's sentences of revisions 32 and 36, §4's
+    paragraph of revision 36, §4.1's paragraphs of revisions 32 to 36, and the preflight record's
+    part of revision 36 (§6) keep their wording, each with a note of revision 38. The notes on
+    revision 36's passages also say that C2's scope does not include P8, so the procedural
+    deviation that the operator accepted stands as recorded. The entries of this history are not
+    annotated: each gives its own revision's state;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7;
+    G6's criteria, its outcome and E1 to E15; G9's criteria and its PASS; the operator's acceptance
+    of P8's procedural deviation (§4); the preflight record's readings and verdicts (§6); every
+    gate's criteria and thresholds; the requirements and the order of every consent (§4, §4.1),
+    and §4's rule for read-only checks; every VPS procedure and command. This revision records C2,
+    which the operator gave; it gives no consent itself, and records no other consent as given: not
+    C1, C5, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1404,10 +1460,12 @@ These are accepted and are not reopened here.
 correction of the firewall, a separate change outside S6, P8 ran in a newly opened SSH session,
 and then, to be sure, its six commands ran again in another newly opened session (§6, the
 preflight record). Neither session was started under C2, C5, C3a or C3b, none of which has been
-given. No confirmation of C1 is documented for either session: C1 is not confirmed (the status),
-and revision 32's decision on step 1 is no C1. So P8's run and its repeat deviate from the rule
-above: a procedural deviation, apart from C1's historical nonconformity (the status) and apart
-from G9's technical outcome (§8, G9). On 2026-11-22 the operator explicitly accepted it:
+given (their state at revision 36; the operator gave C2 in revision 38, §4.1, for §7.2 to §7.5
+only, which do not include P8). No confirmation of C1 is documented for either session: C1 is not
+confirmed (the status), and revision 32's decision on step 1 is no C1. So P8's run and its repeat
+deviate from the rule above: a procedural deviation, apart from C1's historical nonconformity (the
+status) and apart from G9's technical outcome (§8, G9). On 2026-11-22 the operator explicitly
+accepted it:
 - **as historical,** for this run of P8 and its repeat only. The acceptance covers no other check,
   and makes no exception to the rule above for any later one;
 - **with G9's PASS kept** on the technical evidence of these readings. The deviation is not, by
@@ -1445,19 +1503,22 @@ on past step 1 despite it. On that decision, step 1 is treated as resolved for s
 order may go on to step 2. The decision is no C1, given now or for the past, and does not record
 step 1's C1 as fulfilled. It changes neither the preflight record (§6) nor G6's criteria, outcome
 or register (§8). Step 2 still needs D1 and D2 decided (their state at revision 32; the operator
-decided both in revision 33, below), and then C2, given as §4 requires; every later consent stays
-separate, with the requirements that §4 gives it.
+decided both in revision 33, below), and then C2, given as §4 requires (its state at revision 32;
+the operator gave C2 in revision 38, below); every later consent stays separate, with the
+requirements that §4 gives it.
 
 **Step 2 in this S6** (revision 33) [USER-REPORTED]. On 2026-11-22 the operator decided D1, A, and
 D2, (b) (§13.3): the first part of step 2. C2 is not given, and the delivery and the host
 configuration (S6.2) are not authorized and have not started. C2 is still given separately, with
-the requirements that §4 gives it.
+the requirements that §4 gives it (their state at revision 33; the operator gave C2 in revision
+38, below).
 
-**D3 and D4 in this S6** (revision 34) [USER-REPORTED]. On 2026-11-22, while step 2 waits for C2,
-the operator decided D3, as proposed, and D4, Freeze (§13.3). Step 4's condition that D3 and D4 be
-decided is met ahead of its place; step 4 is not reached, and the order and each step's needs are
-unchanged. C5 still needs step 3, and is given separately, with the requirements that §4 gives it.
-The decisions give no C2 and no C5.
+**D3 and D4 in this S6** (revision 34) [USER-REPORTED]. On 2026-11-22, while step 2 waits for C2
+(its state at revision 34; the operator gave C2 in revision 38, below), the operator decided D3,
+as proposed, and D4, Freeze (§13.3). Step 4's condition that D3 and D4 be decided is met ahead of
+its place; step 4 is not reached, and the order and each step's needs are unchanged. C5 still
+needs step 3, and is given separately, with the requirements that §4 gives it. The decisions give
+no C2 and no C5.
 
 **D5 to D7 in this S6** (revision 35) [USER-REPORTED]. On 2026-11-22 the operator decided D5,
 record only in S6; D6, at the first update that changes a configuration file; and D7, fix the
@@ -1465,17 +1526,25 @@ firewall first (§13.3). D7 settles how step 3 treats G9: G9 must pass, evaluate
 criteria on P8 run again after a separate correction of the firewall, outside S6 (§8, G9). While
 the discrepancy that P8's readings record stays unresolved, the order does not go past step 3,
 and C5 is not given. D5 and D6 change no step. The order and each step's other needs are
-unchanged, and step 2 still waits for C2. The decisions give no C2 and no C5, and authorize no
-change of the firewall.
+unchanged, and step 2 still waits for C2 (its state at revision 35; the operator gave C2 in
+revision 38, below). The decisions give no C2 and no C5, and authorize no change of the firewall.
 
 **G9 in this S6** (revision 36) [USER-REPORTED]. On 2026-11-22 the operator corrected the firewall,
 in a separate change outside S6; P8 ran again, and the operator evaluated G9 as PASS by its
 existing criteria (§8, G9). Step 3's condition on G9 is met ahead of its place, as D7 provides;
-step 3 is not reached. Step 2 still waits for C2, and step 3's other gates, G1 to G5, G7, G8, G10
-and G12, have not run. C5 still needs them, and is given separately, with the requirements that §4
-gives it. G9's PASS gives no C2 and no C5. P8's runs for G9 deviated from §4's rule for read-only
-checks, a deviation that the operator accepted as historical on 2026-11-22; that acceptance gives
-no consent either (§4).
+step 3 is not reached. Step 2 still waits for C2 (its state at revision 36; the operator gave C2
+in revision 38, below), and step 3's other gates, G1 to G5, G7, G8, G10 and G12, have not run. C5
+still needs them, and is given separately, with the requirements that §4 gives it. G9's PASS gives
+no C2 and no C5. P8's runs for G9 deviated from §4's rule for read-only checks, a deviation that
+the operator accepted as historical on 2026-11-22; that acceptance gives no consent either (§4).
+
+**C2 in this S6** (revision 38) [USER-REPORTED]. On 2026-11-22 the operator explicitly gave C2, for
+S6.2 within §7.2 to §7.5 only (the status; §7). With D1 and D2 decided (revision 33), step 2's
+first two parts are met. Its third, the delivery and the host configuration (S6.2), has not
+started, so step 2 is not complete, and step 3 is not reached. §7.1, the commit and its local
+check, stays a separate step, before S6.2's first operation on the VPS. The order and each step's
+needs are unchanged. C2 gives no C5, C3a, C3b or C4: each is still given separately, with the
+requirements that §4 gives it.
 
 ## 5. Conventions
 
@@ -4316,9 +4385,11 @@ status).
     rule's comment is not the one that `configure-ufw.sh` writes, `SSH (port from sshd -T)`, and
     the rule's origin stays not shown;
   - **the procedural standing:** neither session was started under C2, C5, C3a or C3b, none of
-    which has been given, and no confirmation of C1 is documented for either, so both runs deviate
-    from §4's rule for read-only checks. On 2026-11-22 the operator accepted the deviation as
-    historical, for these two runs only; the acceptance is no consent (§4);
+    which has been given (their state at revision 36; the operator gave C2 in revision 38, §4.1,
+    for §7.2 to §7.5 only, which do not include P8), and no confirmation of C1 is documented for
+    either, so both runs deviate from §4's rule for read-only checks. On 2026-11-22 the operator
+    accepted the deviation as historical, for these two runs only; the acceptance is no consent
+    (§4);
   - **the verdict:** G9's PASS, the technical outcome: the operator's evaluation of the repeat's
     output by G9's criteria (§8, G9). P8's row in the first table keeps revision 30's `ok`, on its
     earlier readings;
@@ -4328,6 +4399,13 @@ status).
 
 **Consent:** C2. It needs S6.1 recorded without an open STOP outside G6's exception register, G6
 recorded as PASS or as PASS WITH RECORDED EXCEPTIONS (§8, G6), and D1 and D2 decided (§4).
+
+**Given** (C2, revision 38) [USER-REPORTED]. On 2026-11-22 the operator gave C2, for S6.2 as this
+contract gives it, within §7.2 to §7.5 only (the status; §4.1). §7.1 is outside that scope: the
+commit is chosen and checked locally, and §4's requirements for C2 do not include it, so giving C2
+does not carry it out. It stays a separate step, before S6.2's first operation on the VPS. S6.2
+has not started, and no step of §7.1 to §7.5 is recorded as done. This revision changes no
+procedure, block or expectation of §7.
 
 ### 7.1 The commit
 
@@ -7128,7 +7206,9 @@ contract did not authorize. The operator made it on 2026-11-22; P8 ran again, an
 evaluated G9 as PASS by its existing criteria (revision 36; §8, G9). P8's runs for it deviated
 from §4's rule for read-only checks; on 2026-11-22 the operator accepted the deviation as
 historical, which is no consent and no item of this checklist (§4). G9 is part of S6.3's first
-item below, which stays open: G1 to G5, G7, G8, G10 and G12 have not run. The deployment of the
+item below, which stays open: G1 to G5, G7, G8, G10 and G12 have not run. On 2026-11-22 the
+operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1). A consent is not its
+execution: S6.2 has not started, and its item below stays open. The deployment of the
 observability stack has not started. P9's PASS, G9's PASS, the verdicts and the accepted
 exceptions stand as recorded; they are steps toward the items below, not items of this checklist.
 Apart from G6's and the first item's, no item below is met yet, so every other one is still open.
