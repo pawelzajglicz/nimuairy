@@ -4775,17 +4775,18 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
     not know, without a confirmation, and ended with `Host key verification failed` and
     `Connection closed`. It reported no transfer;
   - **`pscp`:** then PuTTY's `pscp -P <ssh-port> -i <key file> <archive> root@<vps-host>:`, to
-    `root`'s home, as D2 (b) gives. It asked for the key file's passphrase, naming the key by its
-    comment, `eddsa-key-20261026`, showed no host-key prompt, and reported 100 % of 80 kB;
+    `root`'s home, as D2 (b) gives. It asked for the key file's passphrase, naming the key by the
+    key file's comment, showed no host-key prompt, and reported 100 % of 80 kB;
   - **the deviation:** another client than the guide's `scp`, with the same account and
     destination. On 2026-11-22 the operator explicitly accepted it, for this copy only. The
     acceptance is no consent, makes no exception for a later copy, and changes neither the guide's
     command nor §7.3. The copy's integrity rests on step 4's checksum, which matched;
   - **the key:** P9 names the selected existing key by its comment in `root`'s keys,
     `pawel-laptop`, and P9's PASS and D2 (b)'s tunnels apply to that key only (§6, P9; §13.3, D2).
-    A PuTTY key file's comment need not equal that comment, so this record does not establish
-    whether `pscp` used the selected key. The copy does not depend on it; nothing is concluded for
-    the tunnels.
+    The comment that `pscp` showed is not established to be the selected key's: a PuTTY key
+    file's comment need not equal the one in `root`'s keys. So this record does not establish
+    which key `pscp` used, or whether it was the selected key. The copy does not depend on it;
+    nothing is concluded for the tunnels.
 - **A read-only check outside §7.3's steps**, as `root`, in the C2 session (§4's rule for
   read-only checks): `sha256sum` and `tar -tf` of `root`'s copy printed the local value and the
   same 18 entries.
@@ -7387,13 +7388,16 @@ from §4's rule for read-only checks; on 2026-11-22 the operator accepted the de
 historical, which is no consent and no item of this checklist (§4). G9 is part of S6.3's first
 item below, which stays open: G1 to G5, G7, G8, G10 and G12 have not run. On 2026-11-22 the
 operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1), and then carried out
-§7.1 and S6.2, without a `STOP` (revision 39; §7, the delivery record). This checklist draws no
-conclusion about S6.2's item. The stack has not been started: for S6 no image has been pulled and
-no `docker compose up` has run. P9's PASS, G9's PASS, the verdicts and the accepted exceptions
-stand as recorded; they are steps toward the items below, not items of this checklist. Apart from
-G6's and the first item's, which are met, and S6.2's, no item below is met yet, so every other one
-is still open. No box below is ticked before the close-out, which updates the acceptance checklist
-(§12).
+§7.1 and S6.2, without a `STOP` (revision 39; §7, the delivery record), which meets the condition
+of S6.2's item below: the archive from a verified commit, extracted, `REVISION` written, and
+`.env` and the secret created, with no password in the reviewed outputs, after the operator had
+closed terminal logging and screen sharing. Its box stays unticked until the close-out. It is no
+gate's outcome: G1 to G5, G7, G8, G10 and G12, G4, G5 and G8 among them, have not run, and
+S6.3's item stays open. The stack has not been started: for S6 no image has been pulled and no
+`docker compose up` has run. P9's PASS, G9's PASS, the verdicts and the accepted exceptions stand
+as recorded; they are steps toward the items below, not items of this checklist. Apart from G6's,
+the first item's and S6.2's, no item below is met yet, so every other one is still open. No box
+below is ticked before the close-out, which updates the acceptance checklist (§12).
 
 - [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
