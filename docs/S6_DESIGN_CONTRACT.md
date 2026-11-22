@@ -1,12 +1,14 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 34). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 35). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
-operator has decided D1, A, and D2, (b) (revision 33), and D3, as proposed, and D4, Freeze
-(revision 34). C2 is not authorized, and S6.2 is not authorized and has not started; C5 is not
-given. The deployment of the observability stack has not started.**
+operator has decided D1, A, and D2, (b) (revision 33); D3, as proposed, and D4, Freeze
+(revision 34); and D5, record only in S6, D6, at the first update that changes a configuration
+file, and D7, fix the firewall first (revision 35). G9 has not been evaluated. C2 is not
+authorized, and S6.2 is not authorized and has not started; C5 is not given. The deployment of
+the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -200,7 +202,7 @@ given. The deployment of the observability stack has not started.**
     nor revision 32's decision on step 1, and nothing of G6, its outcome or E1 to E15.
 
   D3 to D7 (§13.3) are open (their state at revision 33; the operator decided D3 and D4 in
-  revision 34, below).
+  revision 34, and D5 to D7 in revision 35, below).
 - **D3 and D4 are decided** [USER-REPORTED] (revision 34). On 2026-11-22 the operator explicitly
   accepted D3 as proposed and selected D4's freeze (§13.3):
   - **D3 = as proposed:** every part of §13.3's "D3 in parts", with no alternative value, among
@@ -223,7 +225,32 @@ given. The deployment of the observability stack has not started.**
     They change neither C1's record nor revision 32's decision on step 1, nor D1 and D2, and
     nothing of G6, its outcome or E1 to E15.
 
-  D5 to D7 (§13.3) are open.
+  D5 to D7 (§13.3) are open (their state at revision 34; the operator decided them in revision
+  35, below).
+- **D5, D6 and D7 are decided** [USER-REPORTED] (revision 35). On 2026-11-22 the operator
+  explicitly accepted these decisions (§13.3):
+  - **D5 = Record only in S6:** S6 changes neither the Docker daemon's logging configuration nor
+    the Compose files, which get no per-service `logging`. It records the existing configuration
+    (P2, V14) and collects the measurements that this contract already requires (V14, R3). Any
+    later change to log rotation is a separate decision, on the evidence collected. No rotation
+    policy is introduced, and recording the configuration does not show that it is sufficient:
+    the logs stay without rotation, and that risk stays (§15);
+  - **D6 = At the first update that changes a configuration file:** S6 makes no configuration
+    change and no restart only to test whether a restart picks up a replaced file. The behaviour
+    is verified at the first real update that changes a configuration file. Until then the
+    guide's restart instructions stay as they are, and the verification is deferred: nothing has
+    verified it (§14);
+  - **D7 = Fix the firewall first:** S6 does not go past G9 while the firewall discrepancy that
+    P8's readings record stays unresolved (§8, G9). The correction is a separate change, outside
+    S6. After it, the operator runs P8 again and evaluates G9 by its existing criteria; C5, and
+    every step after it, needs G9 passed (§4.1). G9 has not been evaluated, and its criteria are
+    unchanged;
+  - **what they are not:** permission to carry anything out. D7 authorizes no change of UFW, no
+    firewall correction and no VPS command, and this contract gives no procedure for the
+    correction. The decisions give no C2 and no C5, and authorize neither S6.2 nor any VPS
+    operation; C2, C5, C3a, C3b and C4 each stay a separate consent, with every requirement that
+    §4 gives it. They change neither C1's record nor revision 32's decision on step 1, nor D1 to
+    D4, and nothing of G6, its outcome or E1 to E15.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1043,6 +1070,52 @@ Revisions:
     §4.1); every VPS procedure and command. This revision gives no consent of §4: not C1, C2, C5,
     C3a, C3b or C4. C2 is not authorized, S6.2 is not authorized and has not started, C5 is not
     given, and no VPS operation is authorized.
+- **35** (2026-11-22), the operator's decisions D5, D6 and D7 [USER-REPORTED]. No gate criterion,
+  threshold, procedure or command changes, no entry of the exception register changes, and no
+  exception is added:
+  - **D5 = Record only in S6:** on 2026-11-22 the operator explicitly accepts it. S6 changes
+    neither the Docker daemon's logging configuration nor the Compose files, which get no
+    per-service `logging`; it records the existing configuration (P2, V14) and collects the
+    measurements that this contract already requires (V14, R3). Any later change to log rotation
+    is a separate decision, on the evidence collected. No rotation policy is introduced, and
+    recording the configuration does not show that it is sufficient (§15);
+  - **D6 = At the first update that changes a configuration file:** on 2026-11-22 the operator
+    explicitly accepts it. S6 makes no artificial configuration change and no restart only to
+    test whether a restart picks up a replaced file. The behaviour is verified at the first real
+    update that changes a configuration file; until then the guide's restart instructions stay,
+    and the verification is deferred. Nothing has verified it (§14);
+  - **D7 = Fix the firewall first:** on 2026-11-22 the operator explicitly accepts it, for the
+    discrepancy that P8's readings record (§6, the preflight record). As root read it at 14:49:15
+    UTC on 2026-11-21 (B4, exit status 0), with the same state as on 2026-11-19, UFW allows the
+    SSH port in from anywhere, over IPv4 and IPv6, by two rules: one for any protocol, without a
+    comment, and one for TCP, with the comment `SSH administration`. VPS_FIREWALL.md's policy
+    allows only TCP to sshd's port, and `scripts/configure-ufw.sh` adds only `<port>/tcp`, with
+    the comment `SSH (port from sshd -T)`. S6 does not go past G9 while the discrepancy stays
+    unresolved. The correction is a separate change, outside S6. After it, the operator runs P8
+    again and evaluates G9 by its existing criteria, and C5 and every later step need G9 passed
+    (§4, §4.1; §8, G9). D7's other option, going ahead with the gap recorded, is not taken;
+  - **what D7 is not:** no evaluation of G9, which has not run, and no change of its criteria; no
+    statement of UFW's current state, which no reading after 2026-11-21 shows, or of the rules'
+    origin, which is not shown; and no record of a correction. Whether a corrected state meets G9
+    is G9's question, by its criteria; D7 adds none. It authorizes no change of UFW, no firewall
+    correction and no VPS command, and this contract gives no procedure for the correction;
+  - **what the decisions are:** decisions about how S6 goes on, not permission to carry anything
+    out. They give no C2 and no C5. C5 still needs §4.1's step 3, with G9 passed, and step 3
+    needs C2 and S6.2 (step 2): none of them has run;
+  - **the status, §4, §4.1, the preflight record (§6), G9 (§8), §13.3, §14 and §17** record the
+    decisions. §13.3's heading now names D1 to D7 as decided. §4's C5 row and §4.1's step 3 no
+    longer read "G9 resolved by D7 where G9 asks for it": under D7, G9 must pass;
+  - **the passages that call D5 to D7 open:** the status's sentences of revisions 33 and 34 keep
+    their wording, each with a note that revision 35 decides them, and so does the preflight
+    record's note on UFW's two rules (§6). The entries of this history, and G6's review record
+    (§8), which gives D1 to D7's state at G6's outcome, are not annotated: each gives its own
+    revision's state;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D4
+    (revisions 33 and 34); G6's criteria, its outcome and E1 to E15; G9's criteria, and G10's and
+    G13's thresholds; P9's PASS and its scope; the preflight record's readings and verdicts (§6);
+    every VPS procedure and command; VPS_FIREWALL.md and `scripts/configure-ufw.sh`. This revision
+    gives no consent of §4: not C1, C2, C5, C3a, C3b or C4. C2 is not authorized, S6.2 is not
+    authorized and has not started, C5 is not given, and no VPS operation is authorized.
 
 ## 1. Purpose and scope
 
@@ -1200,7 +1273,7 @@ These are accepted and are not reopened here.
   |---|---|---|
   | C1 | The read-only preflight of S6.1 | This contract accepted |
   | C2 | Creating or changing files on the VPS in S6.2: `/var/nimuairy-observability`, the archive in `deploy`'s home, its extraction, `REVISION`, `observability/.env`, `observability/secrets/` | S6.1 recorded with no open STOP outside G6's exception register; G6 recorded as PASS, or as PASS WITH RECORDED EXCEPTIONS: every G6 finding outside the register resolved, and the register complete and accepted by the operator (§8, G6); D1 and D2 decided |
-  | C5 | The sampling of §10.3: saving `~/s6-sampler.sh` and `~/s6-readout.awk` in `deploy`'s home, the readout's self-test, and running the sampler in the background, first before the start (G11, G13) and then for the window, with its logs in that home | G1 to G10 and G12 passed, with G9 resolved by D7 where G9 asked for it; D3 and D4 decided. C5 does not depend on G11 or G13: they depend on it |
+  | C5 | The sampling of §10.3: saving `~/s6-sampler.sh` and `~/s6-readout.awk` in `deploy`'s home, the readout's self-test, and running the sampler in the background, first before the start (G11, G13) and then for the window, with its logs in that home | G1 to G10 and G12 passed, G9 included: under D7 (revision 35), the firewall corrected in a separate change outside S6, then P8 run again and G9 passed by its criteria; D3 and D4 decided. C5 does not depend on G11 or G13: they depend on it |
   | C3a | The image `pull` of S6.4, step 4, and nothing else | G11 passed; then, immediately before the pull, G1 to G3 repeated and G13a passed |
   | C3b | The **first `docker compose up`** of S6.4, step 6 | The pull done with its readings, and G13b passed, R-p included. It is given only after G13b, for an `up` that starts within 15 min of G13b's reading; otherwise it lapses, and G13b runs again before a new C3b. Neither C3a nor any earlier statement stands in for it |
   | C4 | **One** run of `scripts/observability-prod-check.sh runtime` (V6) | V1 to V5 passed |
@@ -1230,7 +1303,7 @@ Each step needs every step above it. No step needs a step below it, so the order
 |---|---|---|
 | 1 | C1, then the preflight P1 to P10 (S6.1), then G6: PASS, or PASS WITH RECORDED EXCEPTIONS (§8) | This contract accepted |
 | 2 | D1 and D2 decided, C2, then the delivery and the host configuration (S6.2) | 1 |
-| 3 | G1 to G5, G7 to G10 and G12 (S6.3), read-only; G9 resolved by D7 where it asks for it. G6 has passed in step 1 | 2 |
+| 3 | G1 to G5, G7 to G10 and G12 (S6.3), read-only; G9 passed on P8 run again after the firewall's separate correction (D7, revision 35). G6 has passed in step 1 | 2 |
 | 4 | D3 and D4 decided, then C5 | 3 |
 | 5 | Save the sampler and the readout, run the self-test, take R0's first reading, start the pre-start sampler (§10.3) | 4 |
 | 6 | G11, with the sampler running: timing, the release freeze, the self-test's result | 5 |
@@ -1264,6 +1337,15 @@ the operator decided D3, as proposed, and D4, Freeze (§13.3). Step 4's conditio
 decided is met ahead of its place; step 4 is not reached, and the order and each step's needs are
 unchanged. C5 still needs step 3, and is given separately, with the requirements that §4 gives it.
 The decisions give no C2 and no C5.
+
+**D5 to D7 in this S6** (revision 35) [USER-REPORTED]. On 2026-11-22 the operator decided D5,
+record only in S6; D6, at the first update that changes a configuration file; and D7, fix the
+firewall first (§13.3). D7 settles how step 3 treats G9: G9 must pass, evaluated by its existing
+criteria on P8 run again after a separate correction of the firewall, outside S6 (§8, G9). While
+the discrepancy that P8's readings record stays unresolved, the order does not go past step 3,
+and C5 is not given. D5 and D6 change no step. The order and each step's other needs are
+unchanged, and step 2 still waits for C2. The decisions give no C2 and no C5, and authorize no
+change of the firewall.
 
 ## 5. Conventions
 
@@ -3724,7 +3806,9 @@ status).
     port, and `scripts/configure-ufw.sh` adds only `<port>/tcp`, with the comment `SSH (port from
     sshd -T)`. B4 shows a rule for any protocol as well, and the TCP rule with another comment.
     Both are recorded as read; their origin is not shown. Whether they meet G9's "only the SSH
-    rule" is G9's question, and D7's if G9 asks for it (§8, G9; §13.3);
+    rule" is G9's question, and D7's if G9 asks for it (§8, G9; §13.3). (D7's state at revision
+    25; the operator decided D7 in revision 35: the firewall fixed first, in a separate change,
+    then P8 run again and G9 evaluated by its criteria, §8, G9);
   - **the namespace assumption** about `deploy`'s own SSH sessions stands (revision 22): B1, B3 and
     the second run came through `su - deploy` from a root shell. That does not establish the
     namespace context of an independent SSH session by `deploy`.
@@ -5374,8 +5458,29 @@ find . ! -user deploy -print
   other inbound rules; or an IPv6 wildcard listener the operator cannot account for.
   - That is a gap on the host that predates S6.
   - D7 decides whether S6 goes ahead with the gap recorded, or the firewall is fixed first in a
-    separate change.
-- **Next allowed action:** on PASS, the next gate; otherwise D7, and C5 only after it (§4.1).
+    separate change. The operator decided: fixed first (revision 35, below).
+- **D7 in this S6** (revision 35) [USER-REPORTED]. On 2026-11-22 the operator decided D7: fix the
+  firewall first (§13.3). It applies to the discrepancy that P8's readings record (§6, the
+  preflight record). As root read it at 14:49:15 UTC on 2026-11-21 (B4, exit status 0), with the
+  same state as on 2026-11-19, UFW allows the SSH port in from anywhere, over IPv4 and IPv6, by two
+  rules: one for any protocol, without a comment, and one for TCP, with the comment
+  `SSH administration`. VPS_FIREWALL.md's policy allows only TCP to sshd's port, and
+  `scripts/configure-ufw.sh` adds only `<port>/tcp`, with the comment `SSH (port from sshd -T)`.
+  The rules' origin is not shown, and no reading after 2026-11-21 shows UFW's state. So:
+  - S6 does not go past G9 while the discrepancy stays unresolved;
+  - the correction is a separate change, outside S6. This contract gives no procedure for it and
+    authorizes none;
+  - after the correction, the operator runs P8 again, and G9 is evaluated on that reading by its
+    criteria above, unchanged. Whether the corrected state meets them is G9's question; D7 adds no
+    criterion;
+  - C5, and every step after it, needs G9 passed (§4, §4.1). D7's other option, going ahead with
+    the gap recorded, is not taken.
+
+  G9 has not been evaluated. The decision is no outcome of G9, records no correction, and
+  authorizes no VPS operation: no change of UFW and no command.
+- **Next allowed action:** on PASS, the next gate; otherwise D7, decided in revision 35: the
+  firewall fixed first, in a separate change outside S6, then P8 again and G9 again, and C5 only
+  after G9 passes (§4.1).
 
 ### G10. Disk space
 
@@ -6647,12 +6752,14 @@ Accepted together with this contract:
   them (revision 34);
 - the recovery table (§11) and the close-out (§12).
 
-### 13.3 Decisions for the operator: D1 to D4 decided, D5 to D7 open
+### 13.3 Decisions for the operator: D1 to D7 decided
 
 D1 and D2 are decided: on 2026-11-22 the operator explicitly selected D1's A and D2's (b)
 (revision 33). D3 and D4 are decided: on 2026-11-22 the operator explicitly accepted every part of
-D3 as proposed, and selected D4's freeze (revision 34). Their rows keep their question, options and
-rationale. D5 to D7 are open.
+D3 as proposed, and selected D4's freeze (revision 34). D5 to D7 are decided: on 2026-11-22 the
+operator explicitly accepted D5, record only in S6; D6, at the first update that changes a
+configuration file; and D7, fix the firewall first (revision 35). Their rows keep their question,
+options and rationale.
 
 | # | Question | Options | Recommendation |
 |---|---|---|---|
@@ -6660,9 +6767,9 @@ rationale. D5 to D7 are open.
 | D2 | The SSH account that copies the archive and opens the tunnels | (a) `deploy` with a key of its own for the operator, without `restrict`: a new `authorized_keys` entry, itself a VPS change. (b) The operator's existing administrative account: `scp` to it, then §7.3's hand-over; the tunnel through it. (c) A new tunnel-only account whose key allows only `port-forwarding` to `127.0.0.1:3000`: least privilege, but a new account, and the Alloy UI tunnel would need a wider `permitopen` | **Decided: (b) for S6**, the operator's explicit selection of 2026-11-22 (revision 33), with the existing administrative SSH account `root`: the archive is first copied to `root`, §7.3's hand-over transfers it to `deploy`, and the SSH tunnels use `root` and the selected existing key. It rests on P9's PASS, which applies only to `root`, the selected existing key and the session context that §6 records; no new account or `authorized_keys` entry is introduced. The recommendation was **(b) for S6**, if P9 shows that it may forward: it needs no new account or key. Whether to add (c) for routine Grafana access later is a separate decision. The key the deploy workflow uses keeps its restrictions in every option |
 | D3 | The measurement procedure and its thresholds, before and after the start | The parts below | **Decided: as proposed**, every part below, the operator's explicit acceptance of 2026-11-22 (revision 34), with no alternative value. The values are criteria, not measurements. The recommendation was **as proposed**, part by part below |
 | D4 | Releases and image updates during S6 | Freeze: no `release.yml` from the start of the pre-start sampler (G11) to the end of the window; #103 to #108 stay unmerged until S6 closes. Or no freeze | **Decided: Freeze**, the operator's explicit selection of 2026-11-22 (revision 34): no `release.yml` from the start of the pre-start sampler (G11) to the end of the window, #103 to #108 unmerged until S6 closes, and G11's rule of no other manual operation on the application in that time. The recommendation was **Freeze.** The measurements stay attributable, and the deployed images are those CI verified at `ff0139a`. After S6, the guide's update sequence takes one image at a time |
-| D5 | Docker's JSON log rotation | Record only in S6. Or configure rotation: daemon-wide in `daemon.json`, which needs a daemon restart, affects the application and applies only to containers created afterwards [S, Docker's logging documentation, not re-read for this contract]; or per service with Compose's `logging`, a repository change that the limits check's allowlist would have to admit for the overlay | **Record only in S6** (V14, R3). Decide afterwards from the measured growth, in a separate change |
-| D6 | Whether a restart picks up a configuration file that an extraction replaced | Test it in S6 with a re-extraction and a restart. Or at the first real update | **At the first update that changes a configuration file:** after `restart prometheus`, `docker exec prometheus wget -qO- http://localhost:9090/api/v1/status/config` must show the new content. S6 delivers fresh files and replaces none; until then the guide's restart instruction stays, and its item stays open |
-| D7 | U12, if G9 is not a PASS | Go ahead with the gap recorded. Or fix the firewall first, in a separate change | **Decide from P8's facts.** The stack adds no IPv6 listener in either case |
+| D5 | Docker's JSON log rotation | Record only in S6. Or configure rotation: daemon-wide in `daemon.json`, which needs a daemon restart, affects the application and applies only to containers created afterwards [S, Docker's logging documentation, not re-read for this contract]; or per service with Compose's `logging`, a repository change that the limits check's allowlist would have to admit for the overlay | **Decided: record only in S6**, the operator's explicit acceptance of 2026-11-22 (revision 35): no change to the daemon's logging configuration and no per-service `logging` in the Compose files; S6 records the existing configuration (P2, V14) and collects the measurements this contract already requires (V14, R3). Any later change to log rotation is a separate decision, on the evidence collected. Recording the configuration does not show that it is sufficient. The recommendation was **Record only in S6** (V14, R3). Decide afterwards from the measured growth, in a separate change |
+| D6 | Whether a restart picks up a configuration file that an extraction replaced | Test it in S6 with a re-extraction and a restart. Or at the first real update | **Decided: at the first update that changes a configuration file**, the operator's explicit acceptance of 2026-11-22 (revision 35): S6 makes no artificial configuration change and no restart only to test it, and the verification is deferred to that update; nothing has verified it. The recommendation was **At the first update that changes a configuration file:** after `restart prometheus`, `docker exec prometheus wget -qO- http://localhost:9090/api/v1/status/config` must show the new content. S6 delivers fresh files and replaces none; until then the guide's restart instruction stays, and its item stays open |
+| D7 | U12, if G9 is not a PASS | Go ahead with the gap recorded. Or fix the firewall first, in a separate change | **Decided: fix the firewall first, in a separate change**, the operator's explicit decision of 2026-11-22 (revision 35), for the discrepancy that P8's readings record (§8, G9): S6 does not go past G9 while it stays unresolved; the correction is outside S6; after it, P8 runs again and G9 is evaluated by its existing criteria; C5 and every later step need G9 passed. It authorizes no change of UFW and no VPS command. The recommendation was **Decide from P8's facts.** The stack adds no IPv6 listener in either case |
 
 **D3 in parts.** The operator accepted every part as proposed, with no alternative value (revision
 34). Each value is an accepted criterion; none is a measured fact about the VPS.
@@ -6695,7 +6802,7 @@ rationale. D5 to D7 are open.
 | `varlinkctl` runs on the VPS, and PID 1's `io.systemd.DynamicUser` answers NoRecordFound for a missing name | This contract | P7 (`userdb_none`), G6 | Open. Ubuntu 24.04's `systemd` package ships `varlinkctl`; the local systemd 259 answered so. Without either, every missing account or group is `UNREAD` |
 | U9: the LXC maps UIDs 10001, 472 and 473 | S4b §12.1 | G7, V11, V12 | Open |
 | U10: the extraction leaves the files readable | S4b §12.1 | G8 | Open |
-| U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open |
+| U12: a public IPv6 address | S4b §12.1 | G9, V15 | Open. A global IPv6 address exists (P8). D7 = fix the firewall first (revision 35): G9 is evaluated on P8 run again after a separate correction, outside S6; G9 has not been evaluated |
 | Compose reads `observability/.env` | Guide | G4 | Open |
 | `deploy`'s ownership, Docker access, shell, umask | Guide | P10, §7.2, G8 | Open for §7.2 and G8. Read by P10 on 2026-11-19 (§6, the preflight record): `deploy` in `docker`, `/bin/bash`, umask `0002`, `/var/nimuairy` `deploy:deploy` |
 | How the archive reaches `deploy` | Guide | D2, §7.3 | Decided, D2 = (b) (revision 33): copied first to `root`, the existing administrative SSH account, then §7.3's hand-over to `deploy`. The delivery is open (§7.3, under C2) |
@@ -6704,11 +6811,11 @@ rationale. D5 to D7 are open.
 | No existing volumes, no listeners | Guide, S4b §12.3 | G1, G3 | Open |
 | SSH forwarding for the tunnel account | Guide | P9, V7 | Open for V7. P9 PASS, as the operator reported on 2026-11-21 (§6, the preflight record): `root` may forward to `127.0.0.1:3000` with the selected existing key, in the context of the session that ran P9 |
 | The Alloy UI tunnel to a container address | Guide | V15, optional | Open; may stay open |
-| A restart picks up a replaced file | Guide | D6 | Stays open until the first update |
+| A restart picks up a replaced file | Guide | D6 | Stays open until the first update. D6 = at the first update that changes a configuration file (revision 35): deferred, not verified; the guide's restart instructions stay |
 | The production check's tools and its run | Guide, B8 | P10, V6 | Tools present (P10, 2026-11-19); the run is open (V6) |
 | `grafana cli admin reset-admin-password --password-from-stdin` | Guide | Not needed with a new `grafana-data` (G1, V3) | **Not validated**; S6 does not validate it |
 | Grafana's failed-login threshold and lockout time | Guide | Not determined by S6; V6 and V7 keep failures to one | Unknown |
-| Docker's log rotation; disk growth | Guide, budget | D5, V14, R3 | Open |
+| Docker's log rotation; disk growth | Guide, budget | D5, V14, R3 | Open. D5 = record only in S6 (revision 35): no rotation is configured in S6; V14 and R3 record the configuration and the growth, and any change is a separate decision |
 | The stack's limits and use on the VPS | Guide, budget | §10.3 | Open |
 | §8 of S4.4 for the stack's containers (`memory.oom.group`, `Delegate`, `OOMPolicy`) | S4.4 §8 | R1 | Open |
 | The `memory.stat` fields of the VPS's kernel | Budget | P4; the sampler's header | Read by P4 on 2026-11-19, and again on 2026-11-21 with the same fields (§6, the preflight record): no `kernel` field, and of its parts no `vmalloc`, so kernel memory is an [ESTIMATE]. Every other field the sampler needs is present |
@@ -6785,15 +6892,19 @@ WITH RECORDED EXCEPTIONS on 2026-11-22 (revision 31; §8, G6's review record), w
 condition of G6's item below. C1 is not confirmed (the status at the top). The operator's decision
 of 2026-11-22 treats §4.1's step 1 as resolved for sequencing (revision 32; §4.1); it is no C1,
 and no item of this checklist. This checklist draws no conclusion about S6.1's item. The operator
-decided D1 and D2 (revision 33) and D3 and D4 (revision 34) on 2026-11-22, which meets the first
-item's "D1 to D4 decided"; the item also needs D7 if G9 asks for it, and D5 and D6 recorded, so it
-stays open, and its box unticked. The deployment of the observability stack has not started. P9's
-PASS, the verdicts and the accepted exceptions stand as recorded; they are steps toward the items
-below, not items of this checklist. Apart from G6's, no item below is met yet, so every other one
-is still open. No box below is ticked before the close-out, which updates the acceptance checklist
-(§12).
+decided D1 and D2 (revision 33), D3 and D4 (revision 34), and D5 to D7 (revision 35), all on
+2026-11-22, so each of D1 to D7 (§13.3) is decided, which meets the condition of the first item
+below; its box stays unticked until the close-out. A decision is not its execution. D7, fix the
+firewall first, needs a correction of the firewall in a separate change, outside S6, which this
+contract does not authorize and of which no correction is recorded; after it, P8 runs again, and
+G9 must pass by its existing criteria before C5 (§4.1; §8, G9). That is part of S6.3's item below,
+which stays open: G9 has not been evaluated. The deployment of the observability stack has not
+started. P9's PASS, the verdicts and the accepted exceptions stand as recorded; they are steps
+toward the items below, not items of this checklist. Apart from G6's and the first item's, no item
+below is met yet, so every other one is still open. No box below is ticked before the close-out,
+which updates the acceptance checklist (§12).
 
-- [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
+- [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
 - [ ] G6 PASS, or PASS WITH RECORDED EXCEPTIONS with its register accepted, recorded before C2
       (§4.1, step 1).
