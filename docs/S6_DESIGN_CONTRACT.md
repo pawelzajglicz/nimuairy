@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 38). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 39). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -10,9 +10,10 @@ file, and D7, fix the firewall first (revision 35). On 2026-11-22 the operator c
 firewall in a separate change outside S6; P8 ran again, and the operator evaluated G9 as PASS
 (revision 36). P8's runs for G9 deviated from §4's rule for read-only checks; on 2026-11-22 the
 operator accepted that deviation as historical, and the acceptance gives no consent (revision
-36). On 2026-11-22 the operator gave C2, for S6.2 within §7.2 to §7.5 only; S6.2 has not started
-(revision 38). C5, C3a, C3b and C4 are not given. The deployment of the observability stack has
-not started.**
+36). On 2026-11-22 the operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38), and
+then carried out §7.1, locally, and S6.2, §7.2 to §7.5, on the VPS, without a `STOP` (revision
+39). C5, C3a, C3b and C4 are not given. The stack's files are on the VPS, but the stack has not
+been started: for S6 no image has been pulled and no `docker compose up` has run.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -185,7 +186,8 @@ not started.**
   C2 in revision 38, below). D1 and D2, which step 2 needs, are decided by the operator's separate
   decisions of revision 33 (below), which give no C2 either.
 - **The deployment has not started:** nothing of the observability stack has been delivered to the
-  VPS, created there or started there.
+  VPS, created there or started there (its state at revision 38; S6.2 delivered the stack's files
+  in revision 39, below).
 - **D1 and D2 are decided** [USER-REPORTED] (revision 33). On 2026-11-22 the operator explicitly
   selected D1's option A and D2's option (b) (§13.3):
   - **D1 = A:** the Grafana secret owned by `deploy`, with mode 0644, in a directory owned by
@@ -285,9 +287,10 @@ not started.**
     and records none as given. They give no C2 and no C5, and authorize neither S6.2, nor any VPS
     operation, nor any further step of S6. G9's PASS removes the firewall's blocker at G9; C5 still
     needs the rest of §4.1's step 3, G1 to G5, G7, G8, G10 and G12, none of which has run, and step
-    3 needs C2 and S6.2 (step 2). No file has been created or changed on the VPS for S6.2, and for
-    S6 no image has been pulled and no `docker compose up` has run. They change nothing of C1's
-    record, revision 32's decision on step 1, D1 to D7, G6, its outcome or E1 to E15.
+    3 needs C2 and S6.2 (step 2). No file has been created or changed on the VPS for S6.2 (its
+    state at revision 36; the operator carried out S6.2 in revision 39, below), and for S6 no image
+    has been pulled and no `docker compose up` has run. They change nothing of C1's record,
+    revision 32's decision on step 1, D1 to D7, G6, its outcome or E1 to E15.
 - **C2 is given** [USER-REPORTED] (revision 38). On 2026-11-22 the operator explicitly gave C2, in
   these words, translated: "I give consent C2 to carry out S6.2 in accordance with the current S6
   Design Contract, within the scope of §7.2–7.5." This record rests on that statement:
@@ -304,9 +307,10 @@ not started.**
     exception of this contract, none of D1 to D7, and neither the order of §4.1 nor any step's
     needs;
   - **given, not carried out:** S6.2 has not started, and no step of §7.1 to §7.5 is recorded as
-    done. No file has been created or changed on the VPS for S6.2, and for S6 no image has been
-    pulled and no `docker compose up` has run. No gate's state changes: G1 to G5, G7, G8, G10 and
-    G12 have not run, G11 and G13 come after C5, and G6's and G9's outcomes stand as recorded;
+    done. No file has been created or changed on the VPS for S6.2 (their state at revision 38; the
+    operator carried out §7.1 to §7.5 in revision 39, below), and for S6 no image has been pulled
+    and no `docker compose up` has run. No gate's state changes: G1 to G5, G7, G8, G10 and G12 have
+    not run, G11 and G13 come after C5, and G6's and G9's outcomes stand as recorded;
   - **§4's requirement on S6.1, confirmed** [USER-REPORTED]: on 2026-11-22, after the review of
     this revision's draft (PR #145), the operator explicitly confirmed that §4's requirement for C2
     "S6.1 recorded with no open STOP outside G6's exception register" is met. It is the operator's
@@ -329,6 +333,29 @@ not started.**
       requirements are not assessed here" stays as that revision's state;
   - **what it leaves as it is:** C1's record, revision 32's decision on step 1, D1 to D7, G6, its
     outcome, E1 to E15, G9's PASS, and the operator's acceptance of P8's procedural deviation (§4).
+- **S6.2 carried out** [VPS, USER-REPORTED] (revision 39). On 2026-11-22, under C2, the operator
+  carried out §7.1, locally, and §7.2 to §7.5, with every command on the VPS in one SSH session
+  opened under C2, and sent each block's output for review before the next step (§5). The record
+  is §7's
+  [Delivery record, S6.2](#delivery-record-s62-revision-39):
+  - **the commit:** `d386acb36426aac9a6ae75ec14ec0d41fa0b77a2`, whose archived paths equal those of
+    `ff0139a`, and whose CI run on `master` succeeded, as the operator checked in GitHub's Actions
+    view (§7.1);
+  - **on the VPS:** `/var/nimuairy-observability`, `deploy:deploy`, mode 755 (§7.2); the archive,
+    with the same SHA-256 locally and in `deploy`'s home, extracted, and `REVISION` written, with no
+    stale file (§7.3); `observability/.env` with `DOCKER_SOCKET_GID=988` (§7.4); and
+    `observability/secrets/`, `deploy:deploy`, mode 700, with the Grafana secret written, after
+    the operator had closed terminal logging and screen sharing (§7.5). Every block printed its
+    `ok` line, and none printed `STOP`;
+  - **a deviation, accepted:** the archive was copied with PuTTY's `pscp` instead of the guide's
+    `scp`, to the same account and destination. On 2026-11-22 the operator explicitly accepted the
+    deviation, for this copy only; the acceptance is no consent, and changes neither the guide's
+    command nor §7.3 (§7);
+  - **what it is not:** no gate's outcome. G1 to G5, G7, G8, G10 and G12 have not run, and the
+    properties that G4, G5 and G8 read are not concluded from this record. It gives no consent: C5,
+    C3a, C3b and C4 are not given. For S6 no image has been pulled and no `docker compose up` has
+    run. It changes nothing of C1's record, revision 32's decision on step 1, D1 to D7, G6, its
+    outcome, E1 to E15, G9's PASS, or the operator's acceptance of P8's procedural deviation (§4).
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1310,6 +1337,37 @@ Revisions:
     and §4's rule for read-only checks; every VPS procedure and command. This revision records C2,
     which the operator gave; it gives no consent itself, and records no other consent as given: not
     C1, C5, C3a, C3b or C4.
+- **39** (2026-11-22), S6.2 carried out, and a deviation at the copy, accepted [VPS,
+  USER-REPORTED]. No gate criterion, threshold, decision, procedure or command changes, no entry of
+  the exception register changes, and no exception is added:
+  - **§7.1:** the operator chose `d386acb36426aac9a6ae75ec14ec0d41fa0b77a2`; its local check
+    printed `ok`, and the operator checked in GitHub's Actions view that its CI run on `master`
+    succeeded (CI run #422);
+  - **§7.2 to §7.5:** run under C2, every command on the VPS in one SSH session opened under it,
+    as `root` for §7.2 and §7.3's hand-over and as `deploy` after `su - deploy` from that session
+    for the rest, each block's output reviewed before the next step. Every block printed its `ok`
+    line and none printed `STOP`; the outputs are in §7's new
+    [Delivery record, S6.2](#delivery-record-s62-revision-39);
+  - **the copy:** OpenSSH's `scp` stopped at its host-key prompt and reported no transfer; PuTTY's
+    `pscp` then copied the archive to `root`'s home, over its own connection. On 2026-11-22 the
+    operator explicitly accepted that deviation from the guide's command, for this copy only; it
+    is no consent. Whether `pscp` used the selected existing key of P9 is not established, and
+    nothing is concluded for the tunnels;
+  - **two read-only reads outside §7.3's steps,** in that session: root's copy checked with
+    `sha256sum` and `tar -tf` before the hand-over, and `REVISION` read with the guide's `cat`;
+  - **the status, §4.1, §5, §7 and §17** record S6.2. The passages that gave S6.2 as not started
+    or no file as created for it keep their wording, each with a note of revision 39: the status's
+    bullet "The deployment has not started" and its sentences of revisions 36 and 38, §4.1's
+    paragraph of revision 38, §7's paragraph of revision 38, and G9's outcome (§8). The entries of
+    this history are not annotated;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7;
+    G6's criteria, its outcome and E1 to E15; G9's criteria and its PASS; the operator's acceptance
+    of P8's procedural deviation (§4); the preflight record (§6); every gate's criteria and
+    thresholds, and every gate's state: G1 to G5, G7, G8, G10 and G12 have not run; the
+    requirements and the order of every consent (§4, §4.1), and §4's rule for read-only checks;
+    every VPS procedure and command, the guide's included. This revision records S6.2, which the
+    operator carried out, and the operator's acceptance of the copy's deviation; it gives no
+    consent itself, and records no other consent as given: not C1, C5, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1574,10 +1632,18 @@ the operator accepted as historical on 2026-11-22; that acceptance gives no cons
 **C2 in this S6** (revision 38) [USER-REPORTED]. On 2026-11-22 the operator explicitly gave C2, for
 S6.2 within §7.2 to §7.5 only (the status; §7). With D1 and D2 decided (revision 33), step 2's
 first two parts are met. Its third, the delivery and the host configuration (S6.2), has not
-started, so step 2 is not complete, and step 3 is not reached. §7.1, the commit and its local
-check, stays a separate step, before S6.2's first operation on the VPS. The order and each step's
-needs are unchanged. C2 gives no C5, C3a, C3b or C4: each is still given separately, with the
-requirements that §4 gives it.
+started, so step 2 is not complete, and step 3 is not reached (their state at revision 38; the
+operator carried out S6.2 in revision 39, below). §7.1, the commit and its local check, stays a
+separate step, before S6.2's first operation on the VPS. The order and each step's needs are
+unchanged. C2 gives no C5, C3a, C3b or C4: each is still given separately, with the requirements
+that §4 gives it.
+
+**S6.2 in this S6** (revision 39) [VPS, USER-REPORTED]. On 2026-11-22 the operator carried out
+§7.1, locally, and then S6.2, §7.2 to §7.5, under C2, and no block printed `STOP` (the status;
+§7, the delivery record). Step 2's three parts are met: D1 and D2 decided, C2, and S6.2. Step 3
+is next: G1 to G5, G7, G8, G10 and G12, which only read and have not run; G6's and G9's outcomes
+stand as recorded. The order and each step's needs are unchanged. S6.2 gives no C5, C3a, C3b or
+C4: C5 still needs step 3, and each is given separately, with the requirements that §4 gives it.
 
 ## 5. Conventions
 
@@ -1633,7 +1699,9 @@ requirements that §4 gives it.
   once, as root, reported on 2026-11-21; P10's `deploy` block and its admin block once more, as
   root, in P9's session; and P8 twice more, after the firewall's correction outside S6, each time
   in a newly opened SSH session, reported on 2026-11-22 (revisions 13, 14, 17, 18, 19, 22, 23, 25,
-  26, 27, 28 and 36).
+  26, 27, 28 and 36). §7.1's block and the guide's archive build ran locally, and §7.2 to §7.5's
+  blocks, with the guide's check, extraction and stale-file blocks, on the VPS, once each, on
+  2026-11-22, in S6.2 (revision 39; §7, the delivery record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -4437,8 +4505,14 @@ recorded as PASS or as PASS WITH RECORDED EXCEPTIONS (§8, G6), and D1 and D2 de
 contract gives it, within §7.2 to §7.5 only (the status; §4.1). §7.1 is outside that scope: the
 commit is chosen and checked locally, and §4's requirements for C2 do not include it, so giving C2
 does not carry it out. It stays a separate step, before S6.2's first operation on the VPS. S6.2
-has not started, and no step of §7.1 to §7.5 is recorded as done. This revision changes no
+has not started, and no step of §7.1 to §7.5 is recorded as done (their state at revision 38;
+the operator carried out §7.1 to §7.5 in revision 39, below). This revision changes no
 procedure, block or expectation of §7.
+
+**Carried out** (revision 39) [VPS, USER-REPORTED]. On 2026-11-22 the operator carried out §7.1,
+locally, and §7.2 to §7.5, on the VPS, under C2, without a `STOP`; the outputs and what they
+establish are in the [Delivery record, S6.2](#delivery-record-s62-revision-39), after §7.6. No
+procedure, block or expectation of §7 changes.
 
 ### 7.1 The commit
 
@@ -4669,6 +4743,78 @@ set -o history
   archive's paths, and Git ignores both, so no archive contains them
   ([Copy and extract](OBSERVABILITY_PRODUCTION.md#copy-and-extract)). Never delete the directory
   or its contents before an extraction.
+
+### Delivery record, S6.2 (revision 39)
+
+[VPS, USER-REPORTED] On 2026-11-22, after C2 (revision 38), the operator carried out §7.1,
+locally, and §7.2 to §7.5, on the VPS, in that order, and sent each block's output for review
+before the next step (§5). Every command on the VPS ran in one SSH session, opened under C2, as
+`root`, the account of D2 (b); from §7.3's step 4 on, as `deploy`, after `su - deploy` from that
+session. The copy, §7.3's step 2, ran from the operator's machine, over its own connection. No
+time is recorded apart from `REVISION`'s, and no host, port, address, fingerprint or key path
+(§5).
+
+- **§7.1, the commit** [Local, USER-REPORTED; CI]: `d386acb36426aac9a6ae75ec14ec0d41fa0b77a2`,
+  `master` after PR #145. The block printed `ok: the archived paths at d386acb… equal those of
+  ff0139a`. The operator checked in GitHub's Actions view that the commit's CI run on `master`
+  succeeded. That run is CI run #422, on `push`, `success` [CI, read with `gh run view` on
+  2026-11-22].
+- **§7.2, the directory**, as `root`: no `STOP` line, so the directory did not exist; `stat`
+  printed `deploy:deploy mode 755 /var/nimuairy-observability`, as expected: `deploy`'s group, by
+  `id -gn deploy`, is `deploy`.
+- **§7.3, step 1, the build** [Local, USER-REPORTED], in Bash, whose prompt names the `UCRT64`
+  environment; `tar` and `sha256sum` both ran:
+  - the block's `OK:` line;
+  - the listing's 18 entries, exactly the set the guide allows: the directory `observability/`
+    with 15 entries under it, the directory entry `scripts/`, and
+    `scripts/observability-prod-check.sh`;
+  - SHA-256 `ef17bbfe4ae2610b9b8219c3b9e8ab25ee5a5fc9d1009197d3cad0ab657fc1d3`. The local
+    `sha256sum` marked the file name with `*`, its binary mode; only the value is compared.
+- **§7.3, step 2, the copy** [Local, USER-REPORTED]:
+  - **`scp`:** the guide's command, to `root`, stopped at OpenSSH's prompt for a host key it did
+    not know, without a confirmation, and ended with `Host key verification failed` and
+    `Connection closed`. It reported no transfer;
+  - **`pscp`:** then PuTTY's `pscp -P <ssh-port> -i <key file> <archive> root@<vps-host>:`, to
+    `root`'s home, as D2 (b) gives. It asked for the key file's passphrase, naming the key by the
+    key file's comment, showed no host-key prompt, and reported 100 % of 80 kB;
+  - **the deviation:** another client than the guide's `scp`, with the same account and
+    destination. On 2026-11-22 the operator explicitly accepted it, for this copy only. The
+    acceptance is no consent, makes no exception for a later copy, and changes neither the guide's
+    command nor §7.3. The copy's integrity rests on step 4's checksum, which matched;
+  - **the key:** P9 names the selected existing key by its comment in `root`'s keys,
+    `pawel-laptop`, and P9's PASS and D2 (b)'s tunnels apply to that key only (§6, P9; §13.3, D2).
+    The comment that `pscp` showed is not established to be the selected key's: a PuTTY key
+    file's comment need not equal the one in `root`'s keys. So this record does not establish
+    which key `pscp` used, or whether it was the selected key. The copy does not depend on it;
+    nothing is concluded for the tunnels.
+- **A read-only check outside §7.3's steps**, as `root`, in the C2 session (§4's rule for
+  read-only checks): `sha256sum` and `tar -tf` of `root`'s copy printed the local value and the
+  same 18 entries.
+- **§7.3, step 3, the hand-over**, as `root`:
+  `ok: /home/deploy/nimuairy-observability-d386acb….tar, owner 1000:1000, mode 0644`, and no
+  `STOP`. UID 1000 and the home `/home/deploy` are P10's readings (§6); GID 1000 is `deploy`'s
+  primary group, `deploy` [inference: §7.2's `stat`]. `install` copies, so `root`'s copy stays in
+  its home: §7.6 names only `deploy`'s, and this contract gives no step that removes `root`'s.
+- **§7.3, step 4, the check and the extraction**, as `deploy`: `sha256sum` printed the local
+  value and `tar -tf` the same 18 entries; then the extraction printed `extracted d386acb…;
+  REVISION updated`. The guide's read-only `cat /var/nimuairy-observability/REVISION`, outside
+  §7.3's steps, printed `d386acb36426aac9a6ae75ec14ec0d41fa0b77a2 2026-11-22T21:11:17Z`.
+- **§7.3, step 5, stale files**, as `deploy`: no output, as §7.3 expects.
+- **§7.4**, as `deploy`: `ok: observability/.env holds DOCKER_SOCKET_GID=988`, and no `STOP`, so
+  the file did not exist. 988 is the `docker` group's GID that P10 read (§6). Whether the render
+  reads the file is G4's (§8).
+- **§7.5**, as `deploy`: the operator confirms that terminal logging was off and that the screen
+  was neither shared nor recorded. The first block printed `directory deploy:deploy mode 700
+  observability/secrets`. The second showed its two silent prompts and printed `ok:
+  observability/secrets/grafana_admin_password written`, and no `STOP`. So the block's own checks
+  passed: the first entry has 32 or more characters, only letters and digits, and the second
+  equals it. No password appears in the outputs that were reviewed. The file's owner, mode and
+  size were not read: G5 reads them (§8).
+- **What this record does not establish:** any gate's outcome. G1 to G5, G7, G8, G10 and G12 have
+  not run: the render's reading of `.env` is G4's, the secret's properties are G5's, and the modes
+  that the extraction left are G8's. That no image, network, volume or container of the stack
+  exists (§7.6) is for G1 and G2 to show; for S6, no image has been pulled and no
+  `docker compose up` has run.
 
 ## 8. S6.3 — Pre-start gates
 
@@ -5815,7 +5961,8 @@ find . ! -user deploy -print
   - **what it authorizes:** nothing. It gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
     G9's PASS meets step 3's condition on G9 ahead of step 3's place; step 3 is not reached. C5
     still needs G1 to G5, G7, G8, G10 and G12 passed, none of which has run, and step 3 needs C2
-    and S6.2 (§4.1). S6.2 has not started: no file has been created or changed on the VPS for it.
+    and S6.2 (§4.1). S6.2 has not started: no file has been created or changed on the VPS for it
+    (its state at revision 36; the operator carried out S6.2 in revision 39, §7).
 - **Next allowed action:** on PASS, the next gate; otherwise D7, decided in revision 35: the
   firewall fixed first, in a separate change outside S6, then P8 again and G9 again, and C5 only
   after G9 passes (§4.1).
@@ -7240,12 +7387,17 @@ evaluated G9 as PASS by its existing criteria (revision 36; §8, G9). P8's runs 
 from §4's rule for read-only checks; on 2026-11-22 the operator accepted the deviation as
 historical, which is no consent and no item of this checklist (§4). G9 is part of S6.3's first
 item below, which stays open: G1 to G5, G7, G8, G10 and G12 have not run. On 2026-11-22 the
-operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1). A consent is not its
-execution: S6.2 has not started, and its item below stays open. The deployment of the
-observability stack has not started. P9's PASS, G9's PASS, the verdicts and the accepted
-exceptions stand as recorded; they are steps toward the items below, not items of this checklist.
-Apart from G6's and the first item's, no item below is met yet, so every other one is still open.
-No box below is ticked before the close-out, which updates the acceptance checklist (§12).
+operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1), and then carried out
+§7.1 and S6.2, without a `STOP` (revision 39; §7, the delivery record), which meets the condition
+of S6.2's item below: the archive from a verified commit, extracted, `REVISION` written, and
+`.env` and the secret created, with no password in the reviewed outputs, after the operator had
+closed terminal logging and screen sharing. Its box stays unticked until the close-out. It is no
+gate's outcome: G1 to G5, G7, G8, G10 and G12, G4, G5 and G8 among them, have not run, and
+S6.3's item stays open. The stack has not been started: for S6 no image has been pulled and no
+`docker compose up` has run. P9's PASS, G9's PASS, the verdicts and the accepted exceptions stand
+as recorded; they are steps toward the items below, not items of this checklist. Apart from G6's,
+the first item's and S6.2's, no item below is met yet, so every other one is still open. No box
+below is ticked before the close-out, which updates the acceptance checklist (§12).
 
 - [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
