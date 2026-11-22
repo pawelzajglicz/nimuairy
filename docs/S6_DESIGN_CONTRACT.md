@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 39). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 40). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -12,8 +12,10 @@ firewall in a separate change outside S6; P8 ran again, and the operator evaluat
 operator accepted that deviation as historical, and the acceptance gives no consent (revision
 36). On 2026-11-22 the operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38), and
 then carried out §7.1, locally, and S6.2, §7.2 to §7.5, on the VPS, without a `STOP` (revision
-39). C5, C3a, C3b and C4 are not given. The stack's files are on the VPS, but the stack has not
-been started: for S6 no image has been pulled and no `docker compose up` has run.**
+39). G1 to G5, G7, G8, G10 and G12 then ran, read-only, and the operator evaluated each as PASS,
+so §4.1's step 3 is complete (revision 40). C5, C3a, C3b and C4 are not given. The stack's files
+are on the VPS, but the stack has not been started: for S6 no image has been pulled and no
+`docker compose up` has run.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -286,8 +288,9 @@ been started: for S6 no image has been pulled and no `docker compose up` has run
   - **what they are not:** no consent of §4. The acceptance gives no C1, C2, C5, C3a, C3b or C4,
     and records none as given. They give no C2 and no C5, and authorize neither S6.2, nor any VPS
     operation, nor any further step of S6. G9's PASS removes the firewall's blocker at G9; C5 still
-    needs the rest of §4.1's step 3, G1 to G5, G7, G8, G10 and G12, none of which has run, and step
-    3 needs C2 and S6.2 (step 2). No file has been created or changed on the VPS for S6.2 (its
+    needs the rest of §4.1's step 3, G1 to G5, G7, G8, G10 and G12, none of which has run (their
+    state at revision 36; they passed in revision 40, below), and step 3 needs C2 and S6.2 (step
+    2). No file has been created or changed on the VPS for S6.2 (its
     state at revision 36; the operator carried out S6.2 in revision 39, below), and for S6 no image
     has been pulled and no `docker compose up` has run. They change nothing of C1's record,
     revision 32's decision on step 1, D1 to D7, G6, its outcome or E1 to E15.
@@ -310,7 +313,8 @@ been started: for S6 no image has been pulled and no `docker compose up` has run
     done. No file has been created or changed on the VPS for S6.2 (their state at revision 38; the
     operator carried out §7.1 to §7.5 in revision 39, below), and for S6 no image has been pulled
     and no `docker compose up` has run. No gate's state changes: G1 to G5, G7, G8, G10 and G12 have
-    not run, G11 and G13 come after C5, and G6's and G9's outcomes stand as recorded;
+    not run (their state at revision 38; they passed in revision 40, below), G11 and G13 come after
+    C5, and G6's and G9's outcomes stand as recorded;
   - **§4's requirement on S6.1, confirmed** [USER-REPORTED]: on 2026-11-22, after the review of
     this revision's draft (PR #145), the operator explicitly confirmed that §4's requirement for C2
     "S6.1 recorded with no open STOP outside G6's exception register" is met. It is the operator's
@@ -351,11 +355,40 @@ been started: for S6 no image has been pulled and no `docker compose up` has run
     `scp`, to the same account and destination. On 2026-11-22 the operator explicitly accepted the
     deviation, for this copy only; the acceptance is no consent, and changes neither the guide's
     command nor §7.3 (§7);
-  - **what it is not:** no gate's outcome. G1 to G5, G7, G8, G10 and G12 have not run, and the
-    properties that G4, G5 and G8 read are not concluded from this record. It gives no consent: C5,
-    C3a, C3b and C4 are not given. For S6 no image has been pulled and no `docker compose up` has
-    run. It changes nothing of C1's record, revision 32's decision on step 1, D1 to D7, G6, its
-    outcome, E1 to E15, G9's PASS, or the operator's acceptance of P8's procedural deviation (§4).
+  - **what it is not:** no gate's outcome. G1 to G5, G7, G8, G10 and G12 have not run (their state
+    at revision 39; they passed in revision 40, below), and the properties that G4, G5 and G8 read
+    are not concluded from this record. It gives no consent: C5, C3a, C3b and C4 are not given. For
+    S6 no image has been pulled and no `docker compose up` has run. It changes nothing of C1's
+    record, revision 32's decision on step 1, D1 to D7, G6, its outcome, E1 to E15, G9's PASS, or
+    the operator's acceptance of P8's procedural deviation (§4).
+- **Step 3's gates: PASS** [VPS, USER-REPORTED] (revision 40). On 2026-11-22, after S6.2, G1 to
+  G5, G7, G8, G10 and G12 ran as `deploy`, read-only, in the SSH session that S6.2 used, opened
+  under C2, as §4's rule for read-only checks allows. Each block's output was reviewed, and the
+  operator evaluated each gate as PASS by its criteria, unchanged. Each outcome is in its gate's
+  section (§8):
+  - **G1 to G3:** no volume, network or container of the stack, and no listener on Grafana's port
+    or the removed ports;
+  - **G4:** the production render on the VPS's Compose, `v5.6.0`, as expected, with
+    `65534:988` for the proxy: Compose reads `observability/.env`. The optional
+    `prod-check static` also ran, and ended with `All checks passed`;
+  - **G5:** the secret a non-empty regular file, not `admin`, of at least 32 bytes,
+    `deploy:deploy`, mode 644, in a directory with mode 700;
+  - **G7:** every listed UID and GID mapped, in one range per map;
+  - **G8:** the expected modes and owners, and both check lists empty. `REVISION` reads
+    `-rw-rw-r--`, a mode that G8's expectation does not name and that neither list covers; the
+    operator evaluated G8 as PASS with it;
+  - **G10:** 40171 MiB available, against D3's 10240;
+  - **G12:** cgroup v2 with the `systemd` driver and the three limits, no user-namespace
+    remapping, and each application container in a `docker-<id>.scope` with
+    `Delegate=yes OOMPolicy=continue`;
+  - **what it means for the order:** with G6 (revision 31) and G9 (revision 36), every gate of
+    §4.1's step 3 has passed, so step 3 is complete (§4.1). G1 to G3 run again immediately before
+    the pull (§8's rules);
+  - **what it is not:** no consent. C5 is not given, and neither are C3a, C3b or C4. No file was
+    changed for the gates, no image has been pulled and no `docker compose up` has run. It changes
+    no criterion or threshold, and nothing of C1's record, revision 32's decision on step 1, D1 to
+    D7, G6, its outcome, E1 to E15, G9's PASS, S6.2's record, or the operator's acceptances of
+    P8's and the copy's deviations.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1368,6 +1401,33 @@ Revisions:
     every VPS procedure and command, the guide's included. This revision records S6.2, which the
     operator carried out, and the operator's acceptance of the copy's deviation; it gives no
     consent itself, and records no other consent as given: not C1, C5, C3a, C3b or C4.
+- **40** (2026-11-22), step 3's gates: PASS [VPS, USER-REPORTED]. No gate criterion, threshold,
+  decision, procedure or command changes, no entry of the exception register changes, and no
+  exception is added:
+  - **the runs:** G1 to G5, G7, G8, G10 and G12, each once, as `deploy`, in the SSH session that
+    S6.2 used, opened under C2, as §4's rule for read-only checks allows; G4's optional
+    `prod-check static` too. No time is recorded;
+  - **the outcomes:** the operator evaluated each of the nine as PASS by its criteria, on
+    2026-11-22. Each gate's section in §8 records its outcome and readings. A common paragraph in
+    §8 records the session;
+  - **G8 and `REVISION`:** `REVISION` reads `-rw-rw-r--`. G8's expectation names no mode for it, and
+    neither of its check lists covers it; the operator evaluated G8 as PASS with that reading. The
+    mode is attributed to `deploy`'s umask [inference]. G8's criteria are unchanged;
+  - **G5's size:** recorded as at least 32 bytes, not as the exact reading;
+  - **the order:** with G6 and G9, every gate of §4.1's step 3 has passed, so step 3 is complete.
+    Step 4 needs C5, which is not given;
+  - **the status, §4.1, §5, §8 and §17** record the gates. The passages that gave them as not
+    run keep their wording, each with a note of revision 40: the status's bullets of revisions
+    36, 38 and 39, §4.1's paragraphs of revisions 36 and 39, the delivery record (§7), and G9's
+    outcome (§8). §17's introduction is rewritten for the current state. The entries of this
+    history are not annotated;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7;
+    G6's criteria, its outcome and E1 to E15; G9's criteria and its PASS; every gate's criteria and
+    thresholds; the preflight record (§6) and the delivery record's readings (§7); the operator's
+    acceptances of P8's and the copy's deviations; the requirements and the order of every consent
+    (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command. This
+    revision records the gates' outcomes, which the operator gave; it gives no consent itself,
+    and records no further consent as given: not C1, C5, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1624,8 +1684,9 @@ revision 38, below). The decisions give no C2 and no C5, and authorize no change
 in a separate change outside S6; P8 ran again, and the operator evaluated G9 as PASS by its
 existing criteria (§8, G9). Step 3's condition on G9 is met ahead of its place, as D7 provides;
 step 3 is not reached. Step 2 still waits for C2 (its state at revision 36; the operator gave C2
-in revision 38, below), and step 3's other gates, G1 to G5, G7, G8, G10 and G12, have not run. C5
-still needs them, and is given separately, with the requirements that §4 gives it. G9's PASS gives
+in revision 38, below), and step 3's other gates, G1 to G5, G7, G8, G10 and G12, have not run
+(their state at revision 36; they passed in revision 40, below). C5 still needs them, and is
+given separately, with the requirements that §4 gives it. G9's PASS gives
 no C2 and no C5. P8's runs for G9 deviated from §4's rule for read-only checks, a deviation that
 the operator accepted as historical on 2026-11-22; that acceptance gives no consent either (§4).
 
@@ -1641,9 +1702,19 @@ that §4 gives it.
 **S6.2 in this S6** (revision 39) [VPS, USER-REPORTED]. On 2026-11-22 the operator carried out
 §7.1, locally, and then S6.2, §7.2 to §7.5, under C2, and no block printed `STOP` (the status;
 §7, the delivery record). Step 2's three parts are met: D1 and D2 decided, C2, and S6.2. Step 3
-is next: G1 to G5, G7, G8, G10 and G12, which only read and have not run; G6's and G9's outcomes
-stand as recorded. The order and each step's needs are unchanged. S6.2 gives no C5, C3a, C3b or
-C4: C5 still needs step 3, and each is given separately, with the requirements that §4 gives it.
+is next: G1 to G5, G7, G8, G10 and G12, which only read and have not run (their state at revision
+39; they passed in revision 40, below); G6's and G9's outcomes stand as recorded. The order and
+each step's needs are unchanged. S6.2 gives no C5, C3a, C3b or C4: C5 still needs step 3, and
+each is given separately, with the requirements that §4 gives it.
+
+**Step 3 in this S6** (revision 40) [VPS, USER-REPORTED]. On 2026-11-22 G1 to G5, G7, G8, G10 and
+G12 ran, read-only, and the operator evaluated each as PASS by its criteria (the status; §8). With
+G6's outcome (revision 31) and G9's PASS (revision 36), every gate of step 3 has passed, so step 3
+is complete. Step 4 is next: D3 and D4 are decided (revision 34), and C5 is not given. C5's row in
+§4 names G1 to G10 and G12 passed, G9 included, and D3 and D4 decided; each of these now has its
+record. C5 is still given separately, by the operator, with the requirements that §4 gives it.
+The order and each step's needs are unchanged, and G1 to G3 run again, with G13a, immediately
+before the pull (step 7). The gates' outcomes give no C5, C3a, C3b or C4.
 
 ## 5. Conventions
 
@@ -1701,7 +1772,9 @@ C4: C5 still needs step 3, and each is given separately, with the requirements t
   in a newly opened SSH session, reported on 2026-11-22 (revisions 13, 14, 17, 18, 19, 22, 23, 25,
   26, 27, 28 and 36). §7.1's block and the guide's archive build ran locally, and §7.2 to §7.5's
   blocks, with the guide's check, extraction and stale-file blocks, on the VPS, once each, on
-  2026-11-22, in S6.2 (revision 39; §7, the delivery record).
+  2026-11-22, in S6.2 (revision 39; §7, the delivery record). G1 to G5, G7, G8, G10 and G12's
+  blocks, with G4's optional `prod-check static`, ran on the VPS, once each, on 2026-11-22, after
+  S6.2 (revision 40; §8).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -4811,8 +4884,9 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
   equals it. No password appears in the outputs that were reviewed. The file's owner, mode and
   size were not read: G5 reads them (§8).
 - **What this record does not establish:** any gate's outcome. G1 to G5, G7, G8, G10 and G12 have
-  not run: the render's reading of `.env` is G4's, the secret's properties are G5's, and the modes
-  that the extraction left are G8's. That no image, network, volume or container of the stack
+  not run (their state at revision 39; they passed in revision 40, §8): the render's reading of
+  `.env` is G4's, the secret's properties are G5's, and the modes that the extraction left are
+  G8's. That no image, network, volume or container of the stack
   exists (§7.6) is for G1 and G2 to show; for S6, no image has been pulled and no
   `docker compose up` has run.
 
@@ -4849,6 +4923,14 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
 | G13a | The VPS's memory, pressure, events and the application, over at least 30 min, before the pull | Whether the pull may begin (C3a) |
 | G13b | The same over the samples that include the pull, and the pull's own memory stall (R-p), after it | Whether the first `up` may begin (C3b) |
 
+**Step 3's gates in this S6** (revision 40) [VPS, USER-REPORTED]. On 2026-11-22, after S6.2, the
+operator ran G1 to G5, G7, G8, G10 and G12, in that order, each once, as `deploy`, in the SSH
+session that S6.2 used, opened under C2 (§7, the delivery record), as §4's rule for read-only
+checks allows, and sent each output for review. No time is recorded. The operator evaluated each
+gate as PASS by its criteria, unchanged; each outcome is in its gate's section. With G6 (revision
+31) and G9 (revision 36), every gate of §4.1's step 3 has passed. G11 and G13 come after C5, and
+G1 to G3 run again immediately before the pull (the rules above).
+
 ### G1. Existing volumes
 
 - **Command:** P5's first two `none_of` lines (§6), as `deploy`.
@@ -4868,6 +4950,11 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
   remove the volume, with its own approval. S6 does none of these.
 - **On a repeated attempt** after S6.6: volumes that this S6 created at the recorded time of its
   first `up` (V3) are expected. Only a volume older than that is a STOP.
+- **G1's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G1: PASS`**, the
+  operator's evaluation by the criteria above. P5's first two `none_of` lines, with the helper
+  defined in that shell, printed `ok:   volumes named nimuairy-observability*: none` and
+  `ok:   volumes of the project nimuairy-observability: none`. No volume was listed, so none was
+  inspected. G1 runs again before the pull (§8's rules).
 
 ### G2. Networks and container names
 
@@ -4879,6 +4966,10 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
   - A container named like one of the six makes `up` fail on the name.
 - **Next allowed action:** find out what created it. S6 does not remove, rename or reuse another
   object.
+- **G2's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G2: PASS`**. P5's
+  third to fifth `none_of` lines printed `ok` for networks named `nimuairy-observability*`, for
+  containers with the stack's names, and for containers of the project `nimuairy-observability`.
+  G2 runs again before the pull.
 
 ### G3. Host ports
 
@@ -4890,6 +4981,11 @@ time is recorded apart from `REVISION`'s, and no host, port, address, fingerprin
   - on the removed ports, P-R2 would fail by design, and the runtime check would prove nothing.
 - **Next allowed action:** identify the process (P6's optional line). S6 stops no other service; a
   change to one is a separate decision.
+- **G3's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G3: PASS`**. P6's
+  `none_of` line printed
+  `ok:   TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345: none`. P6's first line, the
+  full `ss -Hltn` listing, did not run: G3's command is the `none_of` line. G3 runs again before
+  the pull.
 
 ### G4. The production render
 
@@ -4943,6 +5039,28 @@ ignores the secret's content, so `config` succeeds even without the file
 **Next allowed action:** a difference in the render is a repository question. The VPS's files are
 not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
 
+**G4's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G4: PASS`**, the
+operator's evaluation by the expectations above, each of which the output meets:
+- no variable listed, and no top-level `.env`;
+- Compose `v5.6.0`: the version that this render tests (U7), and the one P10 read as `deploy`;
+- the six services;
+- one `published`, `"3000"`, and one `host_ip: 127.0.0.1`, both in the numbered lines between
+  `grafana:` and the next service, `loki:`;
+- `network_mode` 0;
+- only `GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password`, in Grafana's
+  lines, and no `GF_SECURITY_ADMIN_PASSWORD:` line;
+- `file: /var/nimuairy-observability/observability/secrets/grafana_admin_password`;
+- the users `473:473` in Alloy's lines, `65534:988` in the proxy's and `10001:10001` in Tempo's,
+  unquoted. `65534:988`, with the socket group 988, shows that the VPS's Compose reads
+  `observability/.env`
+  ([The Docker socket's group](OBSERVABILITY_PRODUCTION.md#the-docker-sockets-group));
+- 6 for `mem_limit`, `memswap_limit`, `pids_limit` and `oom_score_adj: 500`.
+
+The optional `bash scripts/observability-prod-check.sh static` also ran, as P10's `jq` allows (P10
+found it as `deploy`, on 2026-11-19), and ended with `All checks passed`: P-S1 to P-S6 `ok`, P-S1
+with exactly the one mapping `grafana 127.0.0.1:3000->3000/tcp`. It renders only and starts
+nothing. Neither reads the secret's content; G5 checks the file.
+
 ### G5. The secret's properties
 
 - **Command:** the guide's read-only block under
@@ -4953,6 +5071,13 @@ not edited (§5). A wrong `.env` is fixed by rewriting it (C2).
   `deploy:<group>, mode 700` for the directory.
 - **STOP** on any `STOP` line, another owner or mode, or fewer than 32 bytes.
 - **Next allowed action:** fix the file or the directory under C2, then run G5 again.
+- **G5's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G5: PASS`**. The
+  guide's block, as `deploy`, verbatim, printed `ok: a non-empty regular file, not admin`; then
+  `regular file, <n> bytes, deploy:deploy, mode 644`, with `n` at least 32, and
+  `deploy:deploy, mode 700` for the directory. The exact size is not recorded: §7.5 writes no
+  newline, so it is the password's length. This is the first of §7.5's four pieces of evidence
+  that A works; G7's outcome gives the second, and V1, V3 and V6 the other two, after the start
+  (§7.5).
 
 ### G6. U8: no untrusted users or services
 
@@ -5872,6 +5997,11 @@ done
 - **Next allowed action:** none in S6. The mapping belongs to the provider's LXC configuration, and
   remapping to Docker's; either needs a separate decision.
 - **What it does not show:** that the processes run as these IDs. V11 shows that after the start.
+- **G7's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G7: PASS`**. Each
+  map has one range, `0 100000 65536`: IDs 0 to 65535 inside the LXC map to 100000 to 165535
+  outside it. Every listed ID printed `mapped`: the UIDs 472, 473, 10001 and 65534, and the GIDs
+  0, 473, 10001, 65534 and 988, the socket group. No `NOT MAPPED`. G7's other condition, G12
+  without `name=userns`, holds (G12's outcome, below).
 
 ### G8. U10: modes after the extraction
 
@@ -5896,6 +6026,19 @@ find . ! -user deploy -print
 - **STOP** on any listed entry.
 - **Next allowed action:** extract the archive again under `umask 022` (C2). Never `chmod` a tracked
   file by hand.
+- **G8's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G8: PASS`**, the
+  operator's evaluation, with the reading of `REVISION` below:
+  - **the listing:** 23 entries, every one `deploy:deploy`. The directories, `.` included, are
+    `drwxr-xr-x`; the configuration files `-rw-r--r--`; the script `-rwxr-xr-x`;
+    `observability/secrets` `drwx------`, and the secret `-rw-r--r--`; `observability/.env`
+    `-rw-r--r--`;
+  - **both check lists:** empty;
+  - **`REVISION`:** `-rw-rw-r--`. G8's expectation names no mode for it, and neither check list
+    covers it: the first lists only paths under `observability/`, and the file is `deploy`'s. So no
+    STOP condition applies, and the operator evaluated G8 as PASS with this reading. The mode
+    follows from `deploy`'s umask, `0002` (P10): the guide's extraction block sets `umask 022` only
+    in the subshell that runs `tar`, and writes `REVISION` outside it [inference]. No container
+    reads `REVISION`. G8's criteria are unchanged.
 
 ### G9. U12: public IPv6 and the firewall
 
@@ -5960,8 +6103,9 @@ find . ! -user deploy -print
     it; the deviation is not, by itself, a reason to run P8 again or to change G9's criteria;
   - **what it authorizes:** nothing. It gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
     G9's PASS meets step 3's condition on G9 ahead of step 3's place; step 3 is not reached. C5
-    still needs G1 to G5, G7, G8, G10 and G12 passed, none of which has run, and step 3 needs C2
-    and S6.2 (§4.1). S6.2 has not started: no file has been created or changed on the VPS for it
+    still needs G1 to G5, G7, G8, G10 and G12 passed, none of which has run (their state at
+    revision 36; they passed in revision 40, in their sections), and step 3 needs C2 and S6.2
+    (§4.1). S6.2 has not started: no file has been created or changed on the VPS for it
     (its state at revision 36; the operator carried out S6.2 in revision 39, §7).
 - **Next allowed action:** on PASS, the next gate; otherwise D7, decided in revision 35: the
   firewall fixed first, in a separate change outside S6, then P8 again and G9 again, and C5 only
@@ -5982,6 +6126,10 @@ d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d" && echo "available MiB: 
 - **STOP** below the threshold.
 - **Next allowed action:** a separate decision about what may be removed, or about a different
   threshold. Nothing is removed to make space within S6.
+- **G10's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G10: PASS`**.
+  Docker's root directory is on an ext4 file system mounted at `/`, 45G in size and 7 % used, and
+  the block printed `available MiB: 40171`, above D3's 10240. The device's name is not recorded
+  (§5).
 
 ### G11. Timing, freeze, self-test and the running pre-start sampler
 
@@ -6057,6 +6205,12 @@ done
 - **STOP** on any other value. S6 does not adapt its checks to another driver.
 - **Next allowed action:** a separate design for that configuration. Changing Docker's cgroup
   driver is a daemon change that affects the application, and is not part of S6.
+- **G12's outcome, 2026-11-22** [VPS, USER-REPORTED], recorded in revision 40: **`G12: PASS`**. Six
+  `ok` lines: `cgroup=2/systemd memlimit=true swaplimit=true pidslimit=true`; no user-namespace
+  remapping, with the security options `["name=seccomp,profile=builtin","name=cgroupns"]`; and
+  `postgres-nimuairy`, `backend-nimuairy`, `frontend-nimuairy` and `cloudflared-nimuairy`, each in
+  a `docker-<id>.scope` with `Delegate=yes OOMPolicy=continue`, as S4.4.4 read them. The scopes'
+  IDs are not recorded.
 
 ### G13. Resources before the pull (G13a) and before the first `up` (G13b)
 
@@ -7385,19 +7539,22 @@ firewall first, needed a correction of the firewall in a separate change, outsid
 contract did not authorize. The operator made it on 2026-11-22; P8 ran again, and the operator
 evaluated G9 as PASS by its existing criteria (revision 36; §8, G9). P8's runs for it deviated
 from §4's rule for read-only checks; on 2026-11-22 the operator accepted the deviation as
-historical, which is no consent and no item of this checklist (§4). G9 is part of S6.3's first
-item below, which stays open: G1 to G5, G7, G8, G10 and G12 have not run. On 2026-11-22 the
-operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1), and then carried out
-§7.1 and S6.2, without a `STOP` (revision 39; §7, the delivery record), which meets the condition
-of S6.2's item below: the archive from a verified commit, extracted, `REVISION` written, and
-`.env` and the secret created, with no password in the reviewed outputs, after the operator had
-closed terminal logging and screen sharing. Its box stays unticked until the close-out. It is no
-gate's outcome: G1 to G5, G7, G8, G10 and G12, G4, G5 and G8 among them, have not run, and
-S6.3's item stays open. The stack has not been started: for S6 no image has been pulled and no
+historical, which is no consent and no item of this checklist (§4). On 2026-11-22 the operator
+gave C2, for S6.2 within §7.2 to §7.5 only (revision 38; §4.1), and then carried out §7.1 and
+S6.2, without a `STOP` (revision 39; §7, the delivery record), which meets the condition of
+S6.2's item below: the archive from a verified commit, extracted, `REVISION` written, and `.env`
+and the secret created, with no password in the reviewed outputs, after the operator had closed
+terminal logging and screen sharing. Its box stays unticked until the close-out. G1 to G5, G7,
+G8, G10 and G12 then ran, and the operator evaluated each as PASS (revision 40; §8). With G9's
+PASS, that meets the condition of S6.3's first sub-item below, "G1 to G5, G7 to G10 and G12 PASS,
+recorded, before C5": each is recorded, and C5 is not given. Its box stays unticked until the
+close-out, and S6.3's item stays open: C5, G11, the repeat of G1 to G3 and G13a are still to
+come. The stack has not been started: for S6 no image has been pulled and no
 `docker compose up` has run. P9's PASS, G9's PASS, the verdicts and the accepted exceptions stand
 as recorded; they are steps toward the items below, not items of this checklist. Apart from G6's,
-the first item's and S6.2's, no item below is met yet, so every other one is still open. No box
-below is ticked before the close-out, which updates the acceptance checklist (§12).
+the first item's, S6.2's and S6.3's first sub-item's, no item below is met yet, so every other
+one is still open. No box below is ticked before the close-out, which updates the acceptance
+checklist (§12).
 
 - [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
