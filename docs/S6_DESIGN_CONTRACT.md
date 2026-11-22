@@ -307,6 +307,26 @@ not started.**
     done. No file has been created or changed on the VPS for S6.2, and for S6 no image has been
     pulled and no `docker compose up` has run. No gate's state changes: G1 to G5, G7, G8, G10 and
     G12 have not run, G11 and G13 come after C5, and G6's and G9's outcomes stand as recorded;
+  - **§4's requirement on S6.1, confirmed** [USER-REPORTED]: on 2026-11-22, after the review of
+    this revision's draft (PR #145), the operator explicitly confirmed that §4's requirement for C2
+    "S6.1 recorded with no open STOP outside G6's exception register" is met. It is the operator's
+    confirmation, on the existing records; neither the preflight nor G6 ran again for it. Its
+    basis:
+    - the preflight record (§6): `ok` for P1 to P6 and P8 (revision 30), P9's PASS (revision 26),
+      and `ok` for both of P10's rows (revision 31); P7 is G6's;
+    - every finding that G6, without its register, classifies as STOP is an entry of G6's
+      exception register (§8): E1 and E2, from P7b; E7, from P7c's second run; E13, the
+      `systemd-journal` group's password field, from the operator's supplementary read-only
+      script; and E14, `/etc/crontab`, from the operator's package check and comparison of
+      2026-11-19. Each stays an accepted exception, unresolved. The register's other entries are
+      INCONCLUSIVE under G6 without it, E8 to E12 and E15 STOP if the operator considers their
+      origin unknown, and are excepted too;
+    - G6: PASS WITH RECORDED EXCEPTIONS (revision 31), and D1 and D2 decided (revision 33): §4's
+      two other requirements for C2;
+    - **what it is not:** a conclusion about §17's S6.1 item, "the preflight record complete",
+      about which §17 still draws none. It changes neither C1's record, not confirmed, nor revision
+      32's decision on step 1, and neither G6's outcome nor its register. Revision 33's "C2's other
+      requirements are not assessed here" stays as that revision's state;
   - **what it leaves as it is:** C1's record, revision 32's decision on step 1, D1 to D7, G6, its
     outcome, E1 to E15, G9's PASS, and the operator's acceptance of P8's procedural deviation (§4).
 
@@ -1245,15 +1265,17 @@ Revisions:
     readings (§6); G9's criteria and its PASS; D1 to D7; the operator's acceptance of P8's
     procedural deviation (§4); the entries of this history, which are not annotated. This revision
     gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
-- **38** (2026-11-22), the operator's consent C2 [USER-REPORTED]. No reading, verdict, gate
-  criterion, threshold, decision, procedure or command changes, no entry of the exception register
-  changes, and no exception is added:
+- **38** (2026-11-22), the operator's consent C2, and the operator's confirmation of its
+  requirement on S6.1 [USER-REPORTED]. No reading, verdict, gate criterion, threshold, decision,
+  procedure or command changes, no entry of the exception register changes, and no exception is
+  added:
   - **C2:** on 2026-11-22 the operator explicitly gave C2, in these words, translated: "I give
     consent C2 to carry out S6.2 in accordance with the current S6 Design Contract, within the
     scope of §7.2–7.5." The record rests on that statement;
-  - **its scope:** §7.2 to §7.5 of this contract, and nothing else: the directory, the archive with
-    its copy, hand-over, check and extraction, `observability/.env` and the Grafana secret. This
-    revision changes none of their procedures (§7);
+  - **its scope:** §7.2 to §7.5 of this contract, and nothing else: the directory; the archive, its
+    copy, first to `root`'s home as D2 (b) gives it, then its hand-over to `deploy`'s home, its
+    check and its extraction, in the order that §7.3 gives; `observability/.env`; and the Grafana
+    secret. This revision changes none of their procedures (§7);
   - **§7.1, apart from it:** the commit and its local check are outside the consent's scope, and
     §4's requirements for C2 do not include them, so giving C2 does not carry them out. §7.1 stays
     a separate step, before S6.2's first operation on the VPS (§7);
@@ -1263,7 +1285,18 @@ Revisions:
   - **given, not carried out:** S6.2 has not started, and no step of §7.1 to §7.5 is recorded as
     done. No gate's state changes: G1 to G5, G7, G8, G10 and G12 have not run, and G6's and G9's
     outcomes stand as recorded;
-  - **the status, §4.1, §7 and §17** record it;
+  - **§4's requirement on S6.1:** on 2026-11-22, after the review of this revision's draft (PR
+    #145), the operator explicitly confirmed that "S6.1 recorded with no open STOP outside G6's
+    exception register" is met, on the existing records, with nothing run again. Its basis: `ok`
+    for P1 to P6 and P8, P9's PASS and `ok` for both of P10's rows (§6); every finding that G6,
+    without its register, classifies as STOP is a register entry: E1 and E2 from P7b, E7 from
+    P7c's second run, E13 from the operator's supplementary read-only script, and E14 from the
+    operator's package check and comparison of 2026-11-19, each accepted and unresolved (§8); and
+    §4's two other requirements, G6's outcome (revision 31) and D1 and D2 (revision 33). It
+    concludes nothing about §17's S6.1 item, and changes nothing of C1's record, G6's outcome or
+    its register. Revision 33's entry, under which C2's other requirements are not assessed, stays
+    as written;
+  - **the status, §4.1, §7 and §17** record the consent, and the status the confirmation;
   - **the passages that give C2 as not given:** the status's sentences of revisions 32 and 36, §4's
     paragraph of revision 36, §4.1's paragraphs of revisions 32 to 36, and the preflight record's
     part of revision 36 (§6) keep their wording, each with a note of revision 38. The notes on
