@@ -1,11 +1,12 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 33). S6.1, the read-only preflight, has started:
+**Status, 2026-11-22: draft for review (revision 34). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
-operator has decided D1, A, and D2, (b) (revision 33). C2 is not authorized, and S6.2 is not
-authorized and has not started. The deployment of the observability stack has not started.**
+operator has decided D1, A, and D2, (b) (revision 33), and D3, as proposed, and D4, Freeze
+(revision 34). C2 is not authorized, and S6.2 is not authorized and has not started; C5 is not
+given. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -198,7 +199,31 @@ authorized and has not started. The deployment of the observability stack has no
     requirement that §4 gives it, and so do C5, C3a, C3b and C4. They change neither C1's record
     nor revision 32's decision on step 1, and nothing of G6, its outcome or E1 to E15.
 
-  D3 to D7 (§13.3) are open.
+  D3 to D7 (§13.3) are open (their state at revision 33; the operator decided D3 and D4 in
+  revision 34, below).
+- **D3 and D4 are decided** [USER-REPORTED] (revision 34). On 2026-11-22 the operator explicitly
+  accepted D3 as proposed and selected D4's freeze (§13.3):
+  - **D3 = as proposed:** every part of §13.3's "D3 in parts", with no alternative value, among
+    them R, 1088 MiB, 25 % of the visible T; A, 1200 MiB; R-g's 2064 and 2288 MiB; and G10's
+    10 GiB. They are accepted criteria, not readings: nothing yet shows that the VPS meets them.
+    T stays unverified, and so do LXCFS's `MemAvailable` and the kernel-memory estimate (G13,
+    §10.3, §14). Accepting them shows no safety of the whole load (§10.4). G10's, G13's and R4's
+    values and logic are unchanged;
+  - **D4 = Freeze:** no `release.yml` run from the start of the pre-start sampler (G11) to the end
+    of the window of §10.3; #103 to #108 stay unmerged until S6 closes; no other manual operation
+    on the application in that time; the window's conditions of G11 and §10.3 (R2, M2) stay. It
+    asks no one to leave a production failure unhandled. An operation that changes the
+    application's state in that time breaks the freeze, and the measurement then running can no
+    longer be treated as attributable. The existing rules apply where their conditions are met;
+    the contract does not define a recovery procedure for every possible operation that breaks
+    the freeze. D4 adds no procedure and no exception to the freeze;
+  - **what they are not:** permission to carry out the measurement. They give no C2 and no C5;
+    C5 still needs §4.1's step 3, which needs C2 and S6.2. They authorize no VPS operation; C2,
+    C5, C3a, C3b and C4 each stay a separate consent, with every requirement that §4 gives it.
+    They change neither C1's record nor revision 32's decision on step 1, nor D1 and D2, and
+    nothing of G6, its outcome or E1 to E15.
+
+  D5 to D7 (§13.3) are open.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -963,6 +988,61 @@ Revisions:
     of every consent (§4). This revision gives no consent of §4: not C1, C2, C5, C3a, C3b or C4.
     C2 is not authorized, S6.2 is not authorized and has not started, and no VPS operation is
     authorized.
+- **34** (2026-11-22), the operator's decisions D3 and D4 [USER-REPORTED], taken after reviewing
+  their consequences. No procedure, criterion, threshold or command changes, no entry of the
+  exception register changes, and no exception is added:
+  - **D3 = as proposed:** on 2026-11-22 the operator explicitly accepts every part of §13.3's
+    "D3 in parts" as proposed, with no alternative value: the reserve R, 25 % of the visible T,
+    1088 MiB; G13's allowance A, 1200 MiB; R-g, the root's `anon + shmem + kernel + sock` at most
+    2064 MiB and its `MemAvailable` at least 2288 MiB; R-f, `full` 0 and `some` at most 0.1 % of
+    the time covered; G13's pre-start window, at least 30 min, with the coverage rule; G13b, the
+    same conditions on the longer log, each a STOP, plus R-p; R-p, `full` 0 and `some` at most
+    0.1 % of the pull's duration; C3b's freshness, the `up` within 15 min of G13b's reading; R-e,
+    each application container's working set and `pids.current` at most half its limits; the
+    coverage rule, at least 24 h (window) or 30 min (G13), at most 12 s between samples on average,
+    no gap over 30 s, no `INVALID` or rejected line, read while the sampler runs; the window, at
+    least 24 h with one 03:30 backup; M4, M5 and the STOP and revisit values as in R4; and G10's
+    threshold, 10 GiB free. G10, G13 and R4 keep their values and their logic; only their marking
+    as proposed changes (§8, §10.3, §13.3);
+  - **what D3 is:** accepted criteria by which G10, G13a, G13b and R4 judge their readings. It is
+    no reading, and no claim that the VPS meets them: none has been evaluated under them. T stays
+    unverified, and so do LXCFS's `MemAvailable` and the kernel-memory estimate; A rests on local
+    runs, and the first start's peak is unmeasured (G13, §10.3, §14, §15). Accepting the
+    thresholds shows no safety of the whole load; what S6 does not establish stays as §10.4
+    gives it;
+  - **D4 = Freeze:** on 2026-11-22 the operator explicitly selects the freeze: no `release.yml` run
+    from the start of the pre-start sampler (G11) to the end of the window of §10.3; #103 to #108
+    stay unmerged until S6 closes (§2.2); no other manual operation on the application in that
+    time (G11); and the window's conditions of no release, no manual restart and no recreate stay
+    as G11 and §10.3 give them (R2, M2). Its rationale is §13.3's: the measurements stay
+    attributable, and the deployed images are those CI verified at `ff0139a`; after S6, the
+    guide's update sequence takes one image at a time;
+  - **what D4 is not:** a requirement to leave a production failure unhandled [USER-REPORTED]. An
+    operation that changes the application's state in that time breaks the freeze, and the
+    measurement then running can no longer be treated as attributable. This settles only the
+    measurement's standing, not what is done next. The existing rules apply where their
+    conditions are met, among them G13's R-a, R-c and R-d before the start, and in the window
+    §10.3's R2, under which a reboot, a daemon restart or a recreate ends the window, the event is
+    recorded and a new window starts, and R4's M2; the contract does not define a recovery
+    procedure for every possible operation that breaks the freeze. D4 adds no procedure, no
+    emergency rule and no exception to the freeze;
+  - **what the decisions are:** decisions about the measurement's criteria and conditions, not
+    permission to carry it out. §4's requirement for C5 that D3 and D4 be decided now holds, ahead
+    of §4.1's step 4; the order and each step's needs are unchanged. C5 still needs G1 to G10 and
+    G12 passed, with G9 resolved by D7 where G9 asks for it (step 3), and step 3 needs C2 and S6.2
+    (step 2): none of them has run;
+  - **the status, §2.2, §4.1, G10, G11 and G13 (§8), §10.3, §13.2, §13.3 and §17** record the
+    decisions. §13.3's heading now names D1 to D4 as decided and D5 to D7 as open;
+  - **the passages that call D3 or D4 open or proposed:** the status's sentence of revision 33 and
+    §2.2's sentence keep their wording, each with a note that revision 34 decides them. The
+    entries of this history, revision 33's included, and G6's review record (§8), which gives D1 to
+    D7's state at G6's outcome, are not annotated: each gives its own revision's state;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 and D2
+    (revision 33); G6's criteria, its outcome and E1 to E15; P9's PASS and its scope; the
+    preflight record (§6); D5 to D7, open; the requirements and the order of every consent (§4,
+    §4.1); every VPS procedure and command. This revision gives no consent of §4: not C1, C2, C5,
+    C3a, C3b or C4. C2 is not authorized, S6.2 is not authorized and has not started, C5 is not
+    given, and no VPS operation is authorized.
 
 ## 1. Purpose and scope
 
@@ -1021,7 +1101,8 @@ marks a conclusion that nothing has shown directly.
   runtime` and `prod-check verify`.
 - Open Dependabot PRs bump four of the stack's images and the application's tunnel:
   #104 Tempo 3.1.1, #105 Alloy v1.21.2, #107 Prometheus v3.15.1, #108 Loki 3.7.9, #103 cloudflared
-  2026.10.3. None is merged. D4 (§13.3) proposes holding them until S6 closes.
+  2026.10.3. None is merged. D4 (§13.3) proposes holding them until S6 closes (the operator
+  decided D4 in revision 34: Freeze).
 - No S6 contract or plan existed before this one.
 
 ### 2.3 VPS facts measured earlier
@@ -1177,6 +1258,12 @@ separate, with the requirements that §4 gives it.
 D2, (b) (§13.3): the first part of step 2. C2 is not given, and the delivery and the host
 configuration (S6.2) are not authorized and have not started. C2 is still given separately, with
 the requirements that §4 gives it.
+
+**D3 and D4 in this S6** (revision 34) [USER-REPORTED]. On 2026-11-22, while step 2 waits for C2,
+the operator decided D3, as proposed, and D4, Freeze (§13.3). Step 4's condition that D3 and D4 be
+decided is met ahead of its place; step 4 is not reached, and the order and each step's needs are
+unchanged. C5 still needs step 3, and is given separately, with the requirements that §4 gives it.
+The decisions give no C2 and no C5.
 
 ## 5. Conventions
 
@@ -5298,7 +5385,7 @@ find . ! -user deploy -print
 d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d" && echo "available MiB: $(df -B1M --output=avail "$d" | tail -n 1)"
 ```
 
-- **Expected:** at least 10240 MiB available (proposed threshold, D3).
+- **Expected:** at least 10240 MiB available (D3's threshold, accepted in revision 34).
 - **Why 10 GiB:** the stack's images took about 3.2 GB locally [LOCAL, 2026-11-02]; on top of that
   come the volumes, the container logs without rotation, and the old images each update leaves
   ([Budget, Risks](VPS_RESOURCE_BUDGET.md#risks)).
@@ -5328,8 +5415,9 @@ d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d" && echo "available MiB: 
 - **Timing:** the pull starts at least 30 min after the pre-start sampler (G13a), and the first
   `up` when the operator can watch the VPS for at least an hour. Neither falls within 03:00–04:00
   of the VPS's time zone (P1), the window of the daily backup.
-- **Release freeze (D4):** no `release.yml` run from the start of the pre-start sampler to the end
-  of the sampling window of §10.3. No other manual operation on the application in that time.
+- **Release freeze (D4 = Freeze, revision 34):** no `release.yml` run from the start of the
+  pre-start sampler to the end of the sampling window of §10.3. No other manual operation on the
+  application in that time.
 - **STOP** if a release is running or planned in that time, if the self-test fails, or if the
   wrapper does not print `PASS`.
 - **Next allowed action:**
@@ -5408,7 +5496,8 @@ about it. So G13a decides the pull, and G13b decides the `up` on samples that in
 - **for G13b only, R-p:** the pull's own memory stall, from the readings that S6.4's pull block
   takes right before and right after the pull.
 
-**PASS needs every condition**, for G13a and again for G13b. The thresholds are proposed (D3).
+**PASS needs every condition**, for G13a and again for G13b. The thresholds are D3's, accepted as
+proposed (revision 34): criteria, not facts about the VPS.
 
 | # | Condition | G13a not met | G13b not met |
 |---|---|---|---|
@@ -5843,8 +5932,9 @@ env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES -u SHELLOPTS -u BASH_ENV bash
   ([Container limits](VPS_RESOURCE_BUDGET.md#container-limits)).
 - **What must fit** is the simultaneous peak `H + P + O + K + R`
   ([Budget model](VPS_RESOURCE_BUDGET.md#budget-model)).
-- **The proposed reserve** R is 20–25 % of T, 870–1088 MiB, which leaves 3264–3482 MiB for
-  `H + P + O + K` [ESTIMATE]. The reserve is a recommendation that still needs confirmation (D3).
+- **The reserve** R: the budget's recommendation is 20–25 % of T, 870–1088 MiB, which leaves
+  3264–3482 MiB for `H + P + O + K` [ESTIMATE]. For S6, D3 sets R at 25 %, 1088 MiB, the upper
+  end, because T is unverified (revision 34).
 - **T itself is an inference.** If the effective outer limit is lower, neither the combined fit nor
   OOM safety is guaranteed ([S4.4 §9](S4.4_DESIGN_CONTRACT.md#9-memory-budget)).
 - **The application's side is measured**: about 35 h with its limits, without the Java agent
@@ -6407,7 +6497,7 @@ window=lxc-root,prometheus,loki,tempo,alloy,docker-socket-proxy,grafana,postgres
   valid samples (`refaults +n`, `major faults +n`). A steady rise is the budget's sign that K does
   not fit.
 
-**R4, evaluation (proposed criteria, D3).**
+**R4, evaluation (D3's criteria, accepted in revision 34).**
 
 **Coverage comes first.** R3's wrapper must print `PASS`: `COVERAGE PASS` for exactly the eleven
 entities of `$window`, with the sampler running before and after the readout. Otherwise the
@@ -6549,30 +6639,33 @@ Accepted together with this contract:
 - the preflight P1 to P10, its helpers and its record (§6);
 - the commit rule of §7.1, the directory of §7.2, the hand-over of §7.3, and the creation blocks of
   §7.4 and §7.5;
-- the gates G1 to G12, G13a and G13b (§8), with G13's thresholds as D3 decides them;
+- the gates G1 to G12, G13a and G13b (§8), with G13's thresholds as D3 decided them (revision 34);
 - the startup steps (§9), with the pull's stall readings;
 - the checklist V1 to V16 and the single production check run (§10.1, §10.2);
 - the resource procedure R0 to R4 (§10.3): the fail-closed sampler, the readout with its expected
-  entity sets, its self-test and its wrapper, the coverage rule, and the criteria as D3 decides
-  them;
+  entity sets, its self-test and its wrapper, the coverage rule, and the criteria as D3 decided
+  them (revision 34);
 - the recovery table (§11) and the close-out (§12).
 
-### 13.3 Open: decisions for the operator
+### 13.3 Decisions for the operator: D1 to D4 decided, D5 to D7 open
 
 D1 and D2 are decided: on 2026-11-22 the operator explicitly selected D1's A and D2's (b)
-(revision 33). Their rows keep their question, options and rationale. D3 to D7 are open.
+(revision 33). D3 and D4 are decided: on 2026-11-22 the operator explicitly accepted every part of
+D3 as proposed, and selected D4's freeze (revision 34). Their rows keep their question, options and
+rationale. D5 to D7 are open.
 
 | # | Question | Options | Recommendation |
 |---|---|---|---|
 | D1 | The Grafana secret's owner and mode | A: 0644, `deploy`, in a 0700 `deploy` directory. B: 0400, UID 472 | **Decided: A**, the operator's explicit selection of 2026-11-22 (revision 33), with the password rule of §7.5: 32 or more letters and digits. The recommendation was **A** (§7.5): no root, the production check runs as `deploy`, and B protects nothing further on this host |
 | D2 | The SSH account that copies the archive and opens the tunnels | (a) `deploy` with a key of its own for the operator, without `restrict`: a new `authorized_keys` entry, itself a VPS change. (b) The operator's existing administrative account: `scp` to it, then §7.3's hand-over; the tunnel through it. (c) A new tunnel-only account whose key allows only `port-forwarding` to `127.0.0.1:3000`: least privilege, but a new account, and the Alloy UI tunnel would need a wider `permitopen` | **Decided: (b) for S6**, the operator's explicit selection of 2026-11-22 (revision 33), with the existing administrative SSH account `root`: the archive is first copied to `root`, §7.3's hand-over transfers it to `deploy`, and the SSH tunnels use `root` and the selected existing key. It rests on P9's PASS, which applies only to `root`, the selected existing key and the session context that §6 records; no new account or `authorized_keys` entry is introduced. The recommendation was **(b) for S6**, if P9 shows that it may forward: it needs no new account or key. Whether to add (c) for routine Grafana access later is a separate decision. The key the deploy workflow uses keeps its restrictions in every option |
-| D3 | The measurement procedure and its thresholds, before and after the start | The parts below | **As proposed**, part by part below |
-| D4 | Releases and image updates during S6 | Freeze: no `release.yml` from the start of the pre-start sampler (G11) to the end of the window; #103 to #108 stay unmerged until S6 closes. Or no freeze | **Freeze.** The measurements stay attributable, and the deployed images are those CI verified at `ff0139a`. After S6, the guide's update sequence takes one image at a time |
+| D3 | The measurement procedure and its thresholds, before and after the start | The parts below | **Decided: as proposed**, every part below, the operator's explicit acceptance of 2026-11-22 (revision 34), with no alternative value. The values are criteria, not measurements. The recommendation was **as proposed**, part by part below |
+| D4 | Releases and image updates during S6 | Freeze: no `release.yml` from the start of the pre-start sampler (G11) to the end of the window; #103 to #108 stay unmerged until S6 closes. Or no freeze | **Decided: Freeze**, the operator's explicit selection of 2026-11-22 (revision 34): no `release.yml` from the start of the pre-start sampler (G11) to the end of the window, #103 to #108 unmerged until S6 closes, and G11's rule of no other manual operation on the application in that time. The recommendation was **Freeze.** The measurements stay attributable, and the deployed images are those CI verified at `ff0139a`. After S6, the guide's update sequence takes one image at a time |
 | D5 | Docker's JSON log rotation | Record only in S6. Or configure rotation: daemon-wide in `daemon.json`, which needs a daemon restart, affects the application and applies only to containers created afterwards [S, Docker's logging documentation, not re-read for this contract]; or per service with Compose's `logging`, a repository change that the limits check's allowlist would have to admit for the overlay | **Record only in S6** (V14, R3). Decide afterwards from the measured growth, in a separate change |
 | D6 | Whether a restart picks up a configuration file that an extraction replaced | Test it in S6 with a re-extraction and a restart. Or at the first real update | **At the first update that changes a configuration file:** after `restart prometheus`, `docker exec prometheus wget -qO- http://localhost:9090/api/v1/status/config` must show the new content. S6 delivers fresh files and replaces none; until then the guide's restart instruction stays, and its item stays open |
 | D7 | U12, if G9 is not a PASS | Go ahead with the gap recorded. Or fix the firewall first, in a separate change | **Decide from P8's facts.** The stack adds no IPv6 listener in either case |
 
-**D3 in parts.** Each value is a proposal; none is a measured fact about the VPS.
+**D3 in parts.** The operator accepted every part as proposed, with no alternative value (revision
+34). Each value is an accepted criterion; none is a measured fact about the VPS.
 
 | Part | Proposed | Alternatives | Why the proposal |
 |---|---|---|---|
@@ -6692,12 +6785,13 @@ WITH RECORDED EXCEPTIONS on 2026-11-22 (revision 31; §8, G6's review record), w
 condition of G6's item below. C1 is not confirmed (the status at the top). The operator's decision
 of 2026-11-22 treats §4.1's step 1 as resolved for sequencing (revision 32; §4.1); it is no C1,
 and no item of this checklist. This checklist draws no conclusion about S6.1's item. The operator
-decided D1 and D2 on 2026-11-22 (revision 33), a step toward the first item below, which also
-needs D3 and D4 decided, D7 if G9 asks for it, and D5 and D6 recorded. The deployment of the
-observability stack has not started. P9's PASS, the verdicts and the accepted exceptions stand as
-recorded; they are steps toward the items below, not items of this checklist. Apart from G6's, no
-item below is met yet, so every other one is still open. No box below is ticked before the
-close-out, which updates the acceptance checklist (§12).
+decided D1 and D2 (revision 33) and D3 and D4 (revision 34) on 2026-11-22, which meets the first
+item's "D1 to D4 decided"; the item also needs D7 if G9 asks for it, and D5 and D6 recorded, so it
+stays open, and its box unticked. The deployment of the observability stack has not started. P9's
+PASS, the verdicts and the accepted exceptions stand as recorded; they are steps toward the items
+below, not items of this checklist. Apart from G6's, no item below is met yet, so every other one
+is still open. No box below is ticked before the close-out, which updates the acceptance checklist
+(§12).
 
 - [ ] D1 to D4 decided; D7 if G9 asks for it; D5 and D6 recorded.
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
