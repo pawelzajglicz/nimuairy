@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-21: draft for review (revision 28). S6.1, the read-only preflight, has started:
+**Status, 2026-11-21: draft for review (revision 29). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. The deployment of the observability stack has not started.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
@@ -21,10 +21,15 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
   last line and P8's UFW line; and P5 and P6 ran as `deploy`, the second time as written
   (revision 25). P9 ran as root, inside the operator's SSH session, and the operator accepted it
   as PASS for that session's context, the account `root` and the selected existing key, as
-  reported on 2026-11-21 (revision 26; §6). In that session, root also ran P10's `deploy` block
-  (revision 27) and, as the operator confirms, P10's admin block. Its one `MISSING:` line,
-  `grep`'s, is the issue resolved on 2026-11-19, a shell alias, as the operator identifies it;
-  `grep` exists (revision 28; §6).
+  reported on 2026-11-21 (revision 26; §6). In that session, as the operator reported, root also
+  ran P10's `deploy` block (revision 27), at a time that is not established (revision 29), and,
+  as the operator confirms, P10's admin block. Its one `MISSING:` line, `grep`'s, is the issue
+  resolved on 2026-11-19, a shell alias, as the operator identifies it; `grep` exists (revision
+  28; §6). The operator's read-only report of the VPS's logs, of 2026-11-21, dates `sudo` calls
+  consistent with these runs and places them in their SSH logins, mostly as inference; it shows
+  `sudo` calls consistent with P9's block and with P10's admin loop in one login, `pts/4`, and
+  entries that no recorded run accounts for. It gives no reading or verdict, and fills no field
+  that the record marks as not recorded (revision 29; §6).
 - **How far P7's review has come** [VPS, USER-REPORTED]. A block that has run is not yet a block
   whose review is complete. The listings stay with the operator (P7); these are the review's
   conclusions, not G6's:
@@ -53,7 +58,9 @@ P1 to P10 have run on the VPS. The deployment of the observability stack has not
     Not attributed: `syslog`'s membership of `adm`. A read-only investigation of 2026-11-20 found
     the installed `rsyslog` package's mechanism for it, but no evidence that this mechanism created
     it (revision 24). Its origin stays unresolved. On 2026-11-21 the operator accepted its risk as
-    E15 of the exception register, pending Mikrus's answer (revision 26);
+    E15 of the exception register, pending Mikrus's answer (revision 26). The log report dates
+    the investigation's searches that went through `sudo`, and records the limits of the logs
+    searched; it adds no evidence of the origin, and E15 is unchanged (revision 29);
   - **P7b: run twice and reviewed; findings are open.** Its first run, of 2026-11-17, printed no
     `UNREAD:` and no `STOP`. The job `app-backup` was recognized as the application's backup,
     `nimuairy-backup` ([README, Database backups](../README.md#database-backups)). `pkg_file` gave
@@ -704,6 +711,62 @@ Revisions:
     the record's verdicts, dates and other missing fields; the `grep` line adds no gap of its own.
     E1 to E15, D2, which is open, and the order of §4.1 are unchanged. The run authorizes no VPS
     operation and gives no consent (§4); C2 is not authorized, and S6.2 has not started.
+- **29** (2026-11-21), the operator's read-only report of the VPS's logs, collected at 17:43:07
+  UTC that day [VPS, USER-REPORTED]. No procedure and no criterion changes, no entry of the
+  exception register changes, no exception is added, and no row of the preflight record changes
+  its `ok / STOP`:
+  - **the report:** the journal's entries of logins, `su` sessions and `sudo` calls, from
+    2026-11-17 22:56:01 UTC on; wtmp's logins since 2026-10-02; and the state of `auth.log`,
+    btmp and `auditd`. It shows the commands that `sudo` logged, with their account and terminal,
+    not their output, and no command run without `sudo`; so it is no complete history of the
+    commands run on the VPS. It dates commands and places them in logins, and gives no reading,
+    review or verdict. No host, address or fingerprint is recorded (§5);
+  - **the logins:** on 2026-11-19, one root login, on `pts/3`, from 15:55:18 to 23:48:14 UTC,
+    which holds every entry that the extract has of that day; on 2026-11-20, two, each on
+    `pts/3`; on 2026-11-21, two that are open at once, on `pts/3` from 14:45:43 and on `pts/4`
+    from 15:34:58 UTC;
+  - **what it dates, as inference** from the `sudo` calls that each block makes, in its order: on
+    2026-11-19, P7a's two runs, P7b's run, `sudo` calls consistent with root's loop of P10's
+    admin runs, revision 22's four package checks, P8's UFW line in revision 22's run, at
+    21:36:48, and P7c's run; on 2026-11-21, P9's `sudo` calls for `root`, in two sequences, and a
+    `sudo` call consistent with revision 28's admin loop, at 16:47:54, both in the login on
+    `pts/4`, which agrees with the operator's confirmation that the admin block ran in P9's
+    session. **Directly,** by their entries: B4, P8's UFW line, as root at 14:49:15 UTC on
+    2026-11-21, on `pts/3`; and `deploy`'s refused UFW line at 23:21:39 UTC on 2026-11-19, in
+    revision 23's `su - deploy` session. The `su - deploy` session of 15:04:26 UTC on 2026-11-21
+    fits the second run of P5 and P6 in time only (§6, the preflight record);
+  - **not reconciled** (§6): P9's `sudo` calls for `deploy` on 2026-11-19, where the record has no
+    run of P9's block; one login on 2026-11-19, where the record names several sessions, and
+    places P7a's run of that day in another session than P10's checks; entries that no recorded
+    run accounts for, among them three `sudo` calls consistent with P10's admin loop on
+    2026-11-19 and two sequences of P7a's calls on 2026-11-21; and root's UFW reading of revision
+    23, which has no `sudo` entry. Each is recorded as read, for the operator, and none changes a
+    record of an earlier revision;
+  - **revision 27's time** [USER-REPORTED]: the operator now considers the 15:04:28 reported for
+    P10's `deploy` block probably incorrect, and its correct time is not established. Revision
+    27's entry stays as written; its part of the preflight record keeps its text and gains this
+    note (§6). The extract shows no command of that block, so it neither dates the run nor
+    places it in a login; the `su - deploy` session that began at 15:04:26 in the login on
+    `pts/3` shows no command that ran in it, and is no evidence of the block. That the block ran
+    in P9's SSH session rests on revision 27's report alone (§6, the preflight record);
+  - **`syslog` in `adm`:** the investigation's searches that went through `sudo` ran as root on
+    2026-11-19 from 16:16:11 and on 2026-11-20 from 22:41:32 to 22:41:50 UTC, each after
+    `deploy`'s refused attempts. The report adds no evidence of the membership's origin (§8, G6's
+    review record);
+  - **the logs' limits:** at the collection, `auditd` inactive, and neither
+    `/var/log/audit/audit.log` nor `ausearch` found, so the report holds no audit evidence; it
+    does not show whether auditing ran earlier. A command run at root's prompt without `sudo`
+    leaves no `sudo` entry. The journal's oldest entry, at the collection, is of 2026-11-15, so
+    it shows nothing of 2026-11-14, and the report's extraction holds nothing before 2026-11-17
+    22:56; `auth.log`'s section of the report is empty, and its command is not shown; btmp is
+    empty. That these sources hold no entry of an event does not show that the event did not
+    happen;
+  - **the status, the preflight record (§6) and G6's review record (§8)** record these. The
+    fields that the record marks as not recorded, P9's time among them, stay so;
+  - **unchanged:** every `ok / STOP` of the record; P9's PASS and its scope; P10, not complete;
+    E1 to E15, E15 excepted, accepted and unresolved, pending Mikrus's answer; D1 to D7, open;
+    G6, with no outcome. The report authorizes no VPS operation and gives no consent (§4); C2 is
+    not authorized, and S6.2 has not started.
 
 ## 1. Purpose and scope
 
@@ -3029,7 +3092,7 @@ for t in atq at; do command -v "$t" >/dev/null || echo "absent: $t, which is opt
 | P10 | `awk` implementation and version | Recorded; the self-test of §10.3 decides | | |
 | P10 | The tools of P7, P9 and §7.3, as the admin account and as root | No `MISSING:`, no `UNREAD:` | | |
 
-### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27 and 28)
+### Preflight record, S6.1 (revisions 18, 19, 22, 23, 25, 26, 27, 28 and 29)
 
 **Reported by the operator** [VPS, USER-REPORTED]. The operator ran P1 to P6 and P8 in S6.1 and
 reviewed them; their dates and the account they ran as are not recorded. P10 ran on 2026-11-19
@@ -3039,7 +3102,10 @@ block (revision 23), both below the table. On 2026-11-21, P4, P5 and P6 ran agai
 and P6 twice, and the budget block's last line and P8's UFW line as root (revision 25), below.
 P9's block ran as root, in the operator's SSH session, as the operator reported on 2026-11-21
 (revision 26), and P10's `deploy` block (revision 27) and its admin block (revision 28) as root
-in that session, all below. These are not the earlier readings of §2.3, which stay context only.
+in that session, all below. Revision 29 records what an extract of the VPS's journal, and wtmp,
+show of the logins and `sudo` calls of 2026-11-19 to 2026-11-21, below: the times and logins of
+commands, mostly as inference, and no reading or verdict. These are not the earlier readings of
+§2.3, which stay context only.
 "Not recorded" marks a field missing from the evidence given, not a block that did not run. The
 operator's `ok` or `STOP` is recorded for no row of the record's fact tables but P9's, whose
 verdict the operator gave (revision 26): their `ok / STOP` column says so row by row, and no
@@ -3059,9 +3125,9 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
 | P5 | Stack volumes, networks, containers; the directory | None of the stack's volumes, networks, project, containers or images; `/var/nimuairy-observability` does not exist | — | Not recorded |
 | P6 | Listeners on the stack's ports | None; SSH is the only listener | — | Not recorded |
 | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist. UFW active: deny incoming, allow outgoing, deny routed; the SSH port allowed over IPv4 and IPv6 | `IPV6=` in `/etc/default/ufw`; `disable_ipv6`; P8's own IPv6 listener listing. The run of revision 22 records them (below) | Not recorded |
-| P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time. P10's admin block ran in the same session, as the operator confirms (revision 28, below); revision 27's run there is P10's `deploy` block | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
+| P9 | Forwarding for the D2 account(s) | P9's block for `root`, in the operator's SSH session (revision 26, below): `allowtcpforwarding yes`, `disableforwarding no`, `permitopen any`, `permitlisten any`; the selected existing key without a restriction that blocks forwarding; one `Include`, of `/etc/ssh/sshd_config.d/*.conf`, and no `Match` or `Include` line in that directory. Earlier partial readings, below | The run's date and time. The journal holds two sequences of `sudo` calls consistent with its block, for `root`, on 2026-11-21, from 15:37:31 and 15:38:01 UTC, in the login on `pts/4`, and does not show which gave the output (revision 29, below). P10's admin block ran in the same session, as the operator confirms (revision 28, below); revision 27's run there is P10's `deploy` block | PASS, the operator's verdict, reported on 2026-11-21: `root` may forward to `127.0.0.1:3000` with the selected key, in that session's context (below) |
 | P10 | `deploy`, environment, tools, sudo; `awk` | 2026-11-19, as `deploy` (below): uid 1000; groups `deploy`, `users`, `docker` (988); home `/home/deploy`, shell `/bin/bash`; bash 5.2.21; umask `0002`; the engine answers, 29.8.2; none of the variables set; `/var` `root:root` and `/var/nimuairy` `deploy:deploy`, both 755; `/var/run/docker.sock` `660 root:docker`; `bash`, `docker`, `curl`, `timeout`, `od`, `ss`, `jq`, `sha256sum`, `tar` and `diff` present; `awk` is `/usr/bin/gawk`, GNU Awk 5.2.1, API 3.2; no passwordless sudo | The time. Revision 27's run of this block, as root, reads root's values, not `deploy`'s (below) | Not recorded |
-| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session, and for P9's, revision 28's run in its session, with `MISSING: grep, as this account` (below) | Not recorded |
+| P10 | The tools of P7, P9 and §7.3 | 2026-11-19, as root, in the session that then ran P7b again (below): no `MISSING:`, no `UNREAD:`; `at` and `atq` absent, which is optional | The time. For P7a's and P7c's runs, see revision 22's session, and for P9's, revision 28's run in its session, with `MISSING: grep, as this account` (below). The journal holds `sudo` calls consistent with root's loop of these runs, whose times are inference (revision 29, below) | Not recorded |
 
 - **P9's partial readings** [USER-REPORTED]. They are not P9's block:
   - **2026-11-19, with the operator's own commands:**
@@ -3134,7 +3200,7 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
   | P4 | Memory, CPU, PIDs, disk, `memory.stat` fields, event counters | **`memory.stat`:** no `kernel` field. Of its parts, `kernel_stack`, `pagetables`, `percpu`, `slab_reclaimable` and `slab_unreclaimable` are present and `vmalloc` is not; every other field that §10.3's sampler needs is present. **Controllers:** `cpuset cpu io memory hugetlb pids rdma misc`; cgroup2 mounted at `/sys/fs/cgroup`. **Root counters:** `memory.events` and `memory.events.local` all 0; `pids.events` `max 0`. **Root pressure:** CPU `some` avg10/60/300 6.82, 4.34, 3.12 and `full` 3.37, 2.07, 1.39; memory `some` and `full` averages 0.00, totals 11596147 and 8855907 µs. **The backend's cgroup:** its `cpu.*`, `memory.*` and `pids.*` files, among them `memory.oom.group`; no `memory.peak` or `pids.peak` | The block of `VPS_RESOURCE_BUDGET.md` that P4 runs first: not in the output given; revision 23's run, as `deploy`, holds it (below). A verdict on any of P4's items | Not recorded |
   | P5 | Stack volumes, networks, containers; the directory | `none_of` printed five `ok` lines; none of the stack images present; `/var/nimuairy-observability`: `No such file or directory` | — | Not recorded |
   | P6 | Listeners on the stack's ports | `none_of` printed `ok`; the only listener is SSH, on the IPv4 and IPv6 wildcard addresses | — | Not recorded |
-  | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist; `disable_ipv6` 0; `IPV6=yes`. UFW active, logging `low`: deny incoming, allow outgoing, deny routed; the SSH port allowed from anywhere over IPv4 and IPv6, by one rule for any protocol and one for TCP. The only IPv6 listener is SSH | The time of P8's commands. Revision 25's run gives UFW's state a time (below) | Not recorded |
+  | P8 | Global IPv6, UFW, IPv6 listeners | A global IPv6 address and a default IPv6 route exist; `disable_ipv6` 0; `IPV6=yes`. UFW active, logging `low`: deny incoming, allow outgoing, deny routed; the SSH port allowed from anywhere over IPv4 and IPv6, by one rule for any protocol and one for TCP. The only IPv6 listener is SSH | The time of P8's commands. Revision 25's run gives UFW's state a time (below). The journal holds root's `sudo ufw status verbose` at 21:36:48 UTC, as inference this run's (revision 29, below) | Not recorded |
 
   - **Without a `kernel` field,** §10.3 computes kernel memory as the sum of the parts present,
     here without `vmalloc`, and marks it [ESTIMATE] (§10.3).
@@ -3397,7 +3463,12 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
   - **the time:** the operator reports 15:04:28, without a zone. The block prints no time, so its
     output does not give one. Revision 25 records the same time, 15:04:28 UTC, as the `date -u` at
     the start of the second run of P5 and P6, which ran as `deploy`, through `su - deploy` from a
-    root shell, until 15:05:21 UTC (above). The two are not reconciled here;
+    root shell, until 15:05:21 UTC (above). The two are not reconciled here. **Revision 29:** the
+    operator now considers the reported 15:04:28 probably incorrect [USER-REPORTED]. The run's
+    correct time is not established, so none is recorded, and none is taken from revision 25's
+    `date -u` or from the VPS's logs. Those logs show no command of this block, so they place it
+    in no login; that it ran in P9's SSH session rests on the operator's report above alone
+    (revision 29's part, below);
   - **the readings,** and what running as root leaves of each:
 
     | Reading | Read | What it shows, run as root |
@@ -3510,6 +3581,138 @@ reading counts as `ok` until the operator records it. P7 is G6's (§8, G6's revi
     and neither reads the other's values. P10's expectations for `deploy` stay with the run as
     `deploy` of 2026-11-19 (above);
   - **no verdict:** both P10 rows keep `Not recorded` as their `ok / STOP`, and P10 is not complete;
+  - **what it authorizes:** nothing: no consent of §4, C2 included.
+- **The VPS's logs, 2026-11-19 to 2026-11-21** (revision 29) [VPS, USER-REPORTED]. A read-only
+  report that the operator collected as root at 17:43:07 UTC on 2026-11-21 and supplied, for the
+  window from 2026-11-14 00:00 to 2026-11-22 00:00 UTC. Its section 2 holds the journal's lines of
+  `sshd`, `sudo` and `su` and of the login sessions; section 4 is `last`, from wtmp; sections 1,
+  5, 6 and 9 give the state of the log sources, and section 3, `auth.log`'s, is empty. Section 2
+  is an extract, the journal's lines that its filter selected. It shows the commands that `sudo`
+  logged as run or refused, with their account, terminal and text, and when a login or a `su`
+  session began and ended. A command run without `sudo`, such as one at root's prompt, is not in
+  it, so the extract is no complete history of the commands run on the VPS; and no source in the
+  report holds a command's output. So the report dates commands and places them in logins. It
+  gives no reading, review or verdict, and a command it shows is not thereby a block's run as
+  written. The host's name, the client addresses and the keys' fingerprints that it shows are not
+  recorded (§5):
+  - **the sources, as the report shows them:**
+
+    | Source | At the collection | What it can show here |
+    |---|---|---|
+    | The journal (sections 2 and 9) | One boot listed; its oldest entry of 2026-11-15 03:30:02 UTC. Section 2's first line is of 2026-11-17 22:56:01 | From that line on: the logins, `su` sessions and `sudo` commands that section 2's filter selected. A command run at root's prompt without `sudo` leaves no `sudo` entry. Nothing before section 2's first line, and nothing of 2026-11-14. Why section 2 holds no line of 2026-11-15 to 2026-11-17 22:56, when wtmp records logins then, is not shown |
+    | `/var/log/auth.log` (sections 1 and 3) | Present, 1026048 bytes, last written at 17:42:50 UTC; no `/var/log/auth.log.1`. Compressed rotations were not checked | Nothing: section 3 printed no line, and the report does not show its command. An empty section is no evidence that the file holds no authentication event |
+    | wtmp (sections 1 and 4) | Logins since 2026-10-02 22:52:17 UTC | Logins with a terminal, their ends, and the reboots; no command, and no `su` session |
+    | btmp (sections 1 and 5) | Empty | No failed login recorded; no evidence that none was attempted |
+    | `auditd` (sections 1 and 6) | Inactive; `/var/log/audit/audit.log` not found; `ausearch` not found | No audit evidence: the report holds no audit record, of a command or of a write to a file. Whether auditing ran before the collection, or audit records exist elsewhere, is not shown |
+
+    The script at the head of the report is garbled in the operator's paste, and shows the
+    commands of sections 0 to 2 only. So the commands of sections 3 to 9 are not shown, and their
+    output is read as printed;
+  - **the logins,** each as root, from `sshd`'s acceptance to the session's end; wtmp gives the
+    same terminals, and the same times within a second. Later logins reuse a terminal's name, so
+    `pts/3` names another login on each day; on 2026-11-21, `pts/3` and `pts/4` are two logins,
+    open at once:
+
+    | Login, UTC | Terminal | Its end |
+    |---|---|---|
+    | 2026-11-19 15:55:18 | `pts/3` | 23:48:14: `sshd`'s timeout, `client not responding` |
+    | 2026-11-20 06:12:02 | `pts/3` | 13:48:01, the same timeout. No `sudo` or `su` entry of the extract in between |
+    | 2026-11-20 22:07:20 | `pts/3` | 23:29:45, the same timeout |
+    | 2026-11-21 14:45:43 | `pts/3` | Open at the collection |
+    | 2026-11-21 15:34:58 | `pts/4` | Open at the collection |
+
+    Each `sudo` entry of the extract names the terminal of one of these logins. A `su` entry names
+    none; where only one login was open, the `su` session is placed in it [inference];
+  - **2026-11-19, the login on `pts/3`,** which holds every entry that the extract has of that
+    day. A sequence below "fits" a run of the record when its `sudo` calls are those that the
+    block makes, in the block's order, at a time that the record allows. That is an inference: the
+    journal shows neither the block's other commands nor its output:
+
+    | UTC | The journal's entries | Fits | What it adds |
+    |---|---|---|---|
+    | 15:57:15 to 15:57:23 | P7a's `sudo` calls: `sshd -T`; the paths of NSS's sources; the sudo rules; `/etc/gshadow` through P7a's `awk`; `passwd -S -a`; `sshd -T -C` and the authorized-keys files of each account | P7a's run of 2026-11-19 (revision 17) | Its time: before every `sudo` call consistent with P10's admin loop that day (below) |
+    | 16:18:40; 16:20:17; 17:07:17 | P9's `sudo` calls: at 16:20:17 and 17:07:17 for `deploy`, with `deploy`'s authorized-keys files; at 16:18:40 without `sshd -T -C` and without those files | No record. P9's block is recorded once, for `root`, on 2026-11-21 (revision 26); this day has P9's partial readings, by the operator's own commands (above) | Not reconciled (below) |
+    | 16:24:39; 16:59:22 to 16:59:50; 17:09:43 | `grep` for `Match` and `Include` lines; `nl -ba` of `/etc/ssh/sshd_config` and of `60-cloudimg-settings.conf`; `sshd -t`, at 16:59:50 | P9's partial readings of 2026-11-19 (above) | The times of these reads, `sshd -t`'s among them |
+    | 16:22:16, 16:25:38, 16:34:43, 16:37:10; 16:59:16, 18:53:20, 21:43:25 | Seven `sudo` calls consistent with root's loop of P10's admin block, each one `sh -c` with the loop's text: the first four laid out over several lines, the last three in this section's one-line text | 16:59:16: the second run, whose `date -u` read 16:59; 18:53:20: the latest run of revision 19; 21:43:25: revision 22's. The first run, whose output reached the agent at 16:26, fits one of the two calls before 16:26 | Seven such calls, where the record names four runs of the block. The journal does not show that each call belongs to a complete run of the block, nor any output: the block's first loop, as this account, makes no `sudo` call |
+    | 18:54:21 to 18:54:26 | P7b's `sudo` calls: the cron files and directories, `run-parts --test`, `dpkg --verify` of their packages, the user crontabs | P7b's run of 2026-11-19 (revision 19) | Its time: a minute after the admin-loop call of 18:53:20 |
+    | 19:48:40 to 19:48:53 | A shorter sequence of P7b's calls, then one more `dpkg --verify` of `cron-daemon-common` | No record | Not reconciled (below) |
+    | 21:36:48 | `sudo ufw status verbose`, as root | P8's UFW line in revision 22's run, whose `date -u` read 21:35:11 | Its time: the only root UFW entry of the extract after 21:35:11 that day |
+    | 21:40:07 to 21:40:08 | `dpkg --verify` of `docker-ce`, and three times of `systemd` | `pkg_file` on revision 22's four unit files | Their time |
+    | 21:44:26 to 21:45:52 | P7a's calls, as at 15:57:15; then P7c's: `dpkg --verify` of the units' packages, the lingering users, root's user manager, `ss -Hltunp` | P7a and P7c after P10's checks (revision 22) | Their times, after the admin-loop call of 21:43:25 |
+    | 23:21:39 | `sudo ufw status verbose`, as `deploy`: refused, `user NOT in sudoers` | P8's UFW line in revision 23's run. It is in the `su - deploy` session of 23:18:57 to 23:25:38, which holds P1's `date -u` of 23:19:40 | Its time, and that `sudo` refused it, as revision 23 says |
+    | 23:25:41 | `du` of the container logs, as root, 3 s after that `su` session ended | The budget block's last line, as root, in revision 23's run | Its time |
+
+    - **the rest of that day's entries:** eight `su - deploy` sessions, between 16:11:11 and
+      23:25:38. The journal shows when each began and ended, not what ran in it, so it does not
+      show which of them held P10's `deploy` block of revisions 19 and 22. In them, `sudo`
+      refused `deploy` each time, `user NOT in sudoers`: `du` of the container logs at 16:12:12
+      and 16:12:23, the maintainer-script search at 16:15:56 (§8, G6's review record), the admin
+      block's root loop at 18:52:09, and the UFW line at 23:21:39. That agrees with P10's
+      reading, no passwordless sudo, and with §5, which gives these lines to the *admin*
+      account. As root, outside the table: `du` of the container logs at 16:16:49,
+      `ufw status verbose` at 16:17:41, which no record names, and the reads of dpkg's log (§8,
+      G6's review record);
+    - **one login:** wtmp and the journal show one login that day, and every `sudo` entry that the
+      extract has of the day names its terminal. The record's sessions of that day, such as the
+      admin block's run "in a session whose `date -u` read 16:59 UTC", "the root session that
+      then ran P7b again" and revision 22's "one SSH session", are parts of this login, or shells
+      within it, which the journal does not show. Revision 19 places P7a's run of 2026-11-19 in
+      another session than P10's admin runs; in the journal it is an earlier part of the same
+      login, before every `sudo` call consistent with the admin loop. Not reconciled (below);
+  - **2026-11-20:** the extract holds no `sudo` or `su` entry of the login of 06:12:02. The login
+    of 22:07:20 holds two `du` of the container logs that `sudo` refused as `deploy`, at 22:08:31
+    and 22:08:47, and the investigation of `syslog`'s membership of `adm`, as far as it went
+    through `sudo` (§8, G6's review record). No entry of that day fits a run of P1 to P10;
+  - **2026-11-21, two logins:** revision 25's `sudo` entries are in the login on `pts/3`, and its
+    `su` sessions as inference; P9's `sudo` calls and the one consistent with P10's admin loop
+    are in the login on `pts/4`:
+
+    | UTC | Login | The journal's entries | Fits | What it adds |
+    |---|---|---|---|---|
+    | 14:46:02 to 14:46:32; 14:46:36 | `pts/3` [inference] | A `su - deploy` session; then `du` of the container logs, as root | No record | Not reconciled (below) |
+    | 14:47:02 to 14:49:03 | `pts/3` [inference] | A `su - deploy` session | B1, 14:47:06 to 14:47:10, and B3, 14:47:16 | That both ran in this one session |
+    | 14:49:10 | `pts/3` | `du` of the container logs, as root | B2 | Its login; its time, as revision 25 records it |
+    | 14:49:15 | `pts/3` | `sudo ufw status verbose`, as root | B4, P8's UFW line | A direct confirmation: the entry gives B4's time, account and login |
+    | 15:04:26 | `pts/3` [inference] | A `su - deploy` session; no entry of its end up to the collection | The second run of P5 and P6, 15:04:28 to 15:05:21 | Consistent in time only: the journal shows neither what ran in the session nor when it ended. It is no evidence of revision 27's run of P10's `deploy` block (below) |
+    | 15:37:31 to 15:37:32; 15:38:01 to 15:38:02 | `pts/4` | P9's `sudo` calls for `root`: the first sequence without the calls of `nss_sources` and `keys_of`, the second with them, root's authorized-keys files among them | P9's run (revision 26) | That P9 ran in the login of 15:34:58 [inference]. Which sequence gave the output that the operator accepted is not shown, so P9's time stays not recorded |
+    | 15:46:25 | `pts/4` | `cat /etc/ssh/sshd_config.d/60-cloudimg-settings.conf`, as root | P9's record of that file (revision 26) | That root read the file in P9's login |
+    | 15:48:45 to 15:48:52; 15:49:37 to 15:49:44 | `pts/4` | P7a's calls, twice | No record: no revision records P7a on 2026-11-21 | Not reconciled (below) |
+    | 16:47:54 | `pts/4` | A `sudo` call consistent with root's loop of P10's admin block, in this section's one-line text | Revision 28's run | Its time [inference]: the only such entry of the extract that day. The journal does not show that the block ran complete, nor its output, which revision 28 records from the operator. It is in P9's login, which agrees with the operator's confirmation that the block ran in P9's session; the record rests on that confirmation, not on the journal |
+    | 17:36:41 to 17:36:50; 17:37:14 to 17:42:50 | Not shown | Two `su - deploy` sessions | No record | Not reconciled (below) |
+
+  - **not reconciled,** each recorded as read, for the operator; none changes a record above:
+    - **P9's calls on 2026-11-19:** two sequences of them for `deploy`, and one without
+      `sshd -T -C`, where the record has no run of P9's block that day, but the operator's own
+      commands and "an earlier reading, whose date and account are not recorded" (above). Whether
+      either sequence gave that reading is not shown;
+    - **the sessions of 2026-11-19:** one login, where the record names several sessions, and
+      places P7a's run of that day in another session than P10's checks (above);
+    - **entries that no recorded run accounts for:** on 2026-11-19, three `sudo` calls
+      consistent with the admin block's root loop beyond the four runs of the block that the
+      record names, and a second, shorter sequence of P7b's calls; on 2026-11-21, the
+      `su - deploy` session and root's `du` of 14:46, P7a's two sequences of calls on `pts/4`,
+      and the two `su - deploy` sessions after 17:36. Their output is not in the evidence, and
+      none of them is reviewed;
+    - **root's UFW reading in revision 23's run:** the extract holds no root `sudo ufw` entry after
+      `deploy`'s refusal at 23:21:39. A run at root's prompt without `sudo` would leave none, so
+      that reading's time stays not recorded;
+  - **revision 27's time, now considered unreliable by the operator** [USER-REPORTED]: revision 27
+    recorded the operator's report of 15:04:28, without a zone, for P10's `deploy` block, run as
+    root in P9's session (above). Read as UTC, that time preceded the login on `pts/4`, where P9's
+    `sudo` calls are, which began at 15:34:58. After reviewing this record, the operator considers
+    the reported time probably incorrect; the correct time is not established, and none is
+    recorded.
+    The extract shows no command of that block, so it neither dates the run nor places it in a
+    login: the record does not place it in the login on `pts/4`, nor in the one on `pts/3`. The
+    `su - deploy` session that began at 15:04:26, in the login on `pts/3` (the table above),
+    shows no command that ran in it, and is no evidence of the block, which revision 27 records as
+    run as root, not through `su`. That the block ran in P9's SSH session rests on revision 27's
+    report alone. Revision 27's history entry stays as written, and its part above keeps its
+    text, with this note added to its time bullet;
+  - **what it adds:** the times and logins of commands, as inference where the tables say so,
+    next to the record's fields. The fields that the record marks as not recorded stay so, P9's
+    time among them. No row's `ok / STOP` changes; P9's PASS and its scope, P10, which is not
+    complete, and E1 to E15 are unchanged;
   - **what it authorizes:** nothing: no consent of §4, C2 included.
 
 ## 7. S6.2 — Delivering the files and host configuration
@@ -4143,7 +4346,8 @@ operator's decision on E2's scope. Revision 21 adds the operator's comparison of
 its package, and E14. Revision 22 adds P3's container list of 2026-11-19, and P7a's and P7c's runs
 after P10's checks, with the package checks of four unit files. Revision 24 adds the operator's
 acceptance of the review of P7a's latest run, and the investigation of `syslog`'s membership of
-`adm`. Revision 26 adds the operator's acceptance of that membership's risk, as E15.
+`adm`. Revision 26 adds the operator's acceptance of that membership's risk, as E15. Revision 29
+adds what the VPS's logs show of that investigation.
 
 **The accounts with UID 0, and NSS's sources:**
 - the accounts with UID 0: `root` only;
@@ -4550,6 +4754,61 @@ its exit statuses, is not part of it, apart from the two comparisons of the back
   E15; record G6, which still has no outcome (below); authorize C2 or any other VPS operation, or
   give a consent (§4). No change to the membership is requested or authorized.
 
+**`syslog` in `adm`: what the VPS's logs show of the investigation** [VPS, USER-REPORTED],
+recorded in revision 29, from the operator's read-only log report of 2026-11-21 (§6, the
+preflight record). Its journal extract shows the commands that `sudo` logged as run or refused, and
+the logins and `su` sessions, not their output; a command run without `sudo` is not in it:
+- **2026-11-19,** in the login on `pts/3`: the installed packages' maintainer scripts, searched
+  for `adduser`, `addgroup`, `usermod` or `gpasswd` together with `syslog` or `adm`. `sudo` refused
+  the search as `deploy` at 16:15:56 UTC, and ran it as root at 16:16:11. dpkg's log and its
+  rotations were read as root for `install`, `upgrade` and `configure` events at 16:16:22 and
+  16:17:15. Revision 24 records dpkg's log "as read on 2026-11-19", and the maintainer scripts'
+  result under the investigation of 2026-11-20, without a time. Whether that result rests on this
+  search, or on another without `sudo`, is not shown;
+- **2026-11-20,** in the login of 22:07:20 on `pts/3`: as `deploy`, after `su - deploy` at
+  22:07:28, `sudo` refused three `journalctl` commands and the search of `auth.log`, from 22:40:34
+  to 22:40:48, `user NOT in sudoers`; the session ended at 22:40:53. Then, as root through `sudo`:
+  - **22:41:32:** the members field of `adm` in `/etc/gshadow` and `/etc/gshadow-`, and revision
+    24's comparison of their fields 1, 3 and 4. The commands' text shows that neither prints a
+    password field (§5);
+  - **22:41:44:** the journal's disk usage; the whole journal, where any filter on it ran outside
+    `sudo` and is not shown; the journal's entries of the commands `gpasswd`, `usermod`,
+    `useradd` and `groupadd` and of the identifier `adduser`; and `auth.log`, with
+    `auth.log.1.gz` to `auth.log.4.gz`, for those tools' lines and for `sudo` commands of
+    `gpasswd`, `usermod`, `adduser`, `addgroup`, `vigr` or `vipw`;
+  - **22:41:50:** root's and `deploy`'s `.bash_history`, for `usermod`, `gpasswd`, `adduser`,
+    `addgroup` or `vigr`.
+
+  These date the searches whose results revision 24 summarizes. The results are that summary,
+  which the log report neither repeats nor extends. Revision 24's other checks, of the script,
+  its hash, `sysusers.d`, `base-passwd`, `cloud-init`'s logs and `/etc/group-`, have no `sudo`
+  entry in the extract, so when they ran is not shown. The extract holds no `sudo` or `su` entry
+  of that day's login of 06:12:02;
+- **the limits of these searches and of the report:**
+  - at the report's collection, `auditd` was inactive, and neither `/var/log/audit/audit.log` nor
+    `ausearch` was found. So the report holds no audit record of a command, or of a write to
+    `/etc/group` or `/etc/gshadow`, and gives no audit evidence that could attribute the
+    membership. It does not show whether auditing ran before the collection, or whether audit
+    records exist elsewhere;
+  - `sudo` records only what it runs. The operator logs in as root, so a command run at root's
+    prompt without `sudo` leaves no `sudo` entry, and a shell's history holds only what that shell
+    saved;
+  - the journal's oldest entry was of 2026-11-15 03:30:02 UTC at the report's collection; revision
+    24 records 2026-11-14 for the investigation's reading. The report does not show why they
+    differ, and neither date is a fixed start. The report's section 2 holds no line before
+    2026-11-17 22:56:01 (§6);
+  - the report's section of `auth.log` is empty, and its command is not shown, so it says nothing
+    of what the file holds. wtmp records logins since 2026-10-02 22:52:17 UTC, not commands; btmp
+    is empty;
+  - none of these sources reaches back to the two `configure` runs of 2026-08-24 and 2026-10-01.
+    That a source holds no entry of the membership's addition or of a change does not show that
+    none happened in its window;
+- **for E15:** the report adds no evidence of the membership's origin. It attributes the
+  membership to no one, and dates neither its creation nor a change. E15 stays as revision 26
+  records it: excepted, accepted by the operator on 2026-11-21, unresolved, pending Mikrus's
+  answer. Its scope, its revisit and the rest of the register are unchanged, and G6 still has no
+  outcome (below).
+
 **What G6 still lacks, outside the register.** G6 has no outcome. PASS WITH RECORDED EXCEPTIONS
 needs every requirement outside the register met, and the evidence above does not show that.
 Accepting E15 (revision 26) does not change this: it excepts one finding, and records no outcome
@@ -4558,8 +4817,10 @@ of G6.
    run and been reviewed, and ran again on 2026-11-19 (§6, the preflight record), but:
    - **the preflight record:** it lacks the operator's `ok` or `STOP` for every row but P9's, the
      dates of P1 to P6's and P8's earlier runs, and the fields that it marks as not recorded,
-     among them P9's time. Revision 25's runs of 2026-11-21 give P4's budget block, its last line
-     and root's UFW reading their times, and run P5's and P6's checks as written, as `deploy`, with
+     among them P9's time. Revision 29's log report dates commands of several runs, mostly as
+     inference, and fills none of these as reported (§6, the preflight record). Revision 25's
+     runs of 2026-11-21 give P4's budget block, its last line and root's UFW reading their times,
+     and run P5's and P6's checks as written, as `deploy`, with
      `none_of` defined in that shell. Revision 23's run records `deploy`'s Docker context, client
      and Compose, which revision 22 listed here.
 
@@ -4581,7 +4842,8 @@ of G6.
 2. **P7a's own output:** `syslog`'s membership of `adm`, whose attribution revision 25 listed here,
    is E15 (revision 26, above). The investigation of 2026-11-20 (revision 24, above) found the
    installed `rsyslog` script's mechanism for it, but no evidence that this mechanism created it,
-   or when or how it was made; it stays not attributed and unresolved. Revision 17 records the rest
+   or when or how it was made; it stays not attributed and unresolved. Revision 29's log report
+   adds no evidence of its origin (above). Revision 17 records the rest
    that revision 15 listed: no `UNREAD:` line, no `REVIEW:` line, no `absent:` line that needs
    `userdb_none`, and the operator's confirmation of the accounts with a login shell and their
    usable passwords. P7a's run after P10's checks (revision 22) shows the same markers. The
