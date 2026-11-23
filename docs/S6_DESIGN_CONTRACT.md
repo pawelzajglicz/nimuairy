@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-23: draft for review (revision 41). S6.1, the read-only preflight, has started:
+**Status, 2026-11-23: draft for review (revision 42). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -17,9 +17,12 @@ so §4.1's step 3 is complete (revision 40). On 2026-11-22 the operator gave C5;
 readout were saved, and the readout's self-test passed on the VPS. On 2026-11-23 a reading of R0's
 blocks found `memory.swap.max` `max` in the four application containers, where R1 expects 0, and
 the operator paused §4.1's step 5 before the pre-start sampler, for a fix of the swap limit in a
-separate change outside S6 (revision 41). C3a, C3b and C4 are not given. The pre-start sampler
-has not started, so D4's freeze has not begun. The stack's files are on the VPS, but the stack
-has not been started: for S6 no image has been pulled and no `docker compose up` has run.**
+separate change outside S6 (revision 41). The same day the operator applied that fix, a systemd
+drop-in, with its own consent; its verification passed, the four read 0 again without a restart,
+and the operator decided to resume step 5 (revision 42). C3a, C3b and C4 are not given. The
+pre-start sampler has not started, so D4's freeze has not begun. The stack's files are on the
+VPS, but the stack has not been started: for S6 no image has been pulled and no
+`docker compose up` has run.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -413,14 +416,16 @@ has not been started: for S6 no image has been pulled and no `docker compose up`
     (`MemorySwapMax=infinity`), and nothing is in swap. What reset the value, and when, is not
     known. A local experiment, with the operator's consent, showed systemd 259 writing `max` over a
     direct 0 at a reload or re-execution, and a drop-in holding 0 [LOCAL]. For the VPS's systemd
-    255 that mechanism is a hypothesis [inference];
+    255 that mechanism is a hypothesis [inference] (its state at revision 41; revision 42, below,
+    shows its reload behaviour on the VPS);
   - **a deviation from §5:** the self-test and R0's blocks ran from base64 copies checked by
     SHA-256, in a non-interactive `bash -c`, not in §5's interactive shell. On 2026-11-23 the
     operator explicitly accepted it, for these runs only; the acceptance is no consent;
   - **the pause:** the operator paused step 5 before the pre-start sampler. The proposed fix, a
     systemd drop-in for every container scope, is tested locally only, and is neither applied nor
-    verified on the VPS. It is a separate change outside S6, with its own consent, before the
-    pre-start sampler (D4)
+    verified on the VPS (its state at revision 41; the operator applied it, and its verification
+    passed, in revision 42, below). It is a separate change outside S6, with its own consent,
+    before the pre-start sampler (D4)
     ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver)).
     After it, R0 runs again when the pre-start sampler starts, as §10.3 gives;
   - **what it is not:** no gate's outcome, and no consent beyond C5. G11 has not run, and this
@@ -429,6 +434,34 @@ has not been started: for S6 no image has been pulled and no `docker compose up`
     or threshold, R1's expected values included, and nothing of C1's record, revision 32's
     decision on step 1, D1 to D7, G6, its outcome, E1 to E15, the gates' outcomes, S6.2's record,
     or the operator's acceptances of P8's and the copy's deviations.
+- **The swap limit's fix, applied; step 5 to resume** [VPS, USER-REPORTED] (revision 42). On
+  2026-11-23, after revision 41's merge, the operator explicitly consented to the fix, in these
+  words, translated: "I consent to applying the drop-in according to VPS_RESOURCE_BUDGET.md,
+  Apply." The record is §10's [Sampling record](#sampling-record-revision-41):
+  - **the consent:** for the budget's apply block only, a host change outside S6. It is no consent
+    of §4, and gives no C3a, C3b or C4;
+  - **the runs,** in the SSH session that R0's blocks used, opened to continue step 5 under C5:
+    as `deploy`, the budget's verification block with one more read-only line, the containers'
+    `StartedAt` and `RestartCount`; as `root`, the apply block; as `deploy`, the same reads again;
+  - **the result:**
+    - the apply block printed its `ok` line;
+    - in each of the four application containers, `memory.swap.max` `max` and
+      `MemorySwapMax=infinity` before, and 0 and `MemorySwapMax=0` after, with the drop-in in
+      `DropInPaths=`;
+    - `StartedAt` and `RestartCount` were unchanged, `restarts=0`;
+  - **what it shows** [VPS]:
+    - runc's transient drop-ins for the scopes hold no swap limit;
+    - the reload changed `max` to 0, so systemd 255 writes the value it holds at a reload;
+    - a reload or re-execution before the fix most likely wrote `max` [inference]. What did it,
+      and when, stays unknown;
+  - **not yet shown:** a new container's scope with the drop-in, which R1 reads for the stack,
+    and 0 after a later reload, which R0's later readings and R1 read;
+  - **the decision:** on 2026-11-23 the operator decided to resume step 5 after this revision: R0
+    at the pre-start sampler's start, the sampler, then G11 (§4.1);
+  - **what it is not:** no gate's outcome and no consent of §4. The pre-start sampler has not
+    started, so D4's freeze has not begun. C3a, C3b and C4 are not given. It changes no criterion
+    or threshold, R1's expected values included, and nothing of revision 41's record apart from
+    the notes on its passages.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1500,6 +1533,35 @@ Revisions:
     (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command of this
     contract. This revision records C5, which the operator gave; it gives no consent itself, and
     records no further consent as given: not C1, C3a, C3b or C4.
+- **42** (2026-11-23), the swap limit's fix, applied and verified outside S6, and step 5 to
+  resume [VPS, USER-REPORTED]. No gate criterion, threshold, decision, procedure or command of this
+  contract changes, no entry of the exception register changes, and no exception is added:
+  - **the consent:** after revision 41's merge, the operator explicitly consented, in these words,
+    translated: "I consent to applying the drop-in according to VPS_RESOURCE_BUDGET.md, Apply."
+    It covers that block only, a host change outside S6, and is no consent of §4;
+  - **the runs:** the budget's verification block before and after its apply block, with one more
+    read-only line for `StartedAt` and `RestartCount`, in the SSH session that R0's blocks used;
+  - **the result:** the apply block's `ok` line; in the four application containers
+    `memory.swap.max` 0 and `MemorySwapMax=0` after, where they read `max` and `infinity` before,
+    with the drop-in in `DropInPaths=`; no container restarted;
+  - **what it shows:** runc's transient drop-ins hold no swap limit, and systemd 255 writes the
+    value it holds at a reload [VPS]. A reload or re-execution before the fix most likely wrote
+    `max` [inference]; what did it, and when, stays unknown;
+  - **the decision:** the operator decided to resume step 5 after this revision;
+  - **the status, §4.1, §5, §10.3, §10's sampling record and §17** record it, and
+    VPS_RESOURCE_BUDGET.md, S4.4 and OBSERVABILITY.md give the fix as applied and verified. The
+    passages of revision 41 that gave the fix as proposed, or the mechanism on the VPS as not
+    shown, keep their wording, each with a note of revision 42: the status's bullet of revision
+    41 (twice), and the sampling record's "What follows" and "The pause". §4.1's paragraph of
+    revision 41 gets a note too. §17's introduction is rewritten for the current state. The
+    entries of this history are not annotated;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7;
+    G6's criteria, its outcome and E1 to E15; every gate's criteria, thresholds and outcomes; R1's
+    expected values; the preflight record (§6), the delivery record (§7) and revision 41's
+    readings; the operator's acceptances of deviations; the requirements and the order of every
+    consent (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command of
+    this contract. This revision gives no consent itself, and records no consent of §4 as given
+    beyond C5: not C1, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1794,10 +1856,19 @@ explicitly gave C5 (the status), so step 4 is complete. Step 5 has begun: the sa
 readout are saved, the self-test passed, and R0's blocks were read once, on 2026-11-23, without
 the pre-start sampler's start (§10, the sampling record). That reading found `memory.swap.max`
 `max` in the four application containers, where R1 expects 0, and the operator paused step 5
-there, before the pre-start sampler, for a fix outside S6 (the status). Step 5 is not complete:
-R0's reading at the sampler's start and the pre-start sampler are still to come, and G11 (step 6)
-has not run. The order and each step's needs are unchanged. C5 gives no C3a, C3b or C4: each is
-still given separately, with the requirements that §4 gives it.
+there, before the pre-start sampler, for a fix outside S6 (the status; the fix was applied and
+verified in revision 42, below). Step 5 is not complete: R0's reading at the sampler's start and
+the pre-start sampler are still to come, and G11 (step 6) has not run. The order and each step's
+needs are unchanged. C5 gives no C3a, C3b or C4: each is still given separately, with the
+requirements that §4 gives it.
+
+**The swap limit's fix and step 5 in this S6** (revision 42) [VPS, USER-REPORTED]. On 2026-11-23
+the operator applied the fix outside S6, with its own consent, and its verification passed: the
+four application containers read `memory.swap.max` 0 again, without a restart (the status; §10,
+the sampling record). The operator decided to resume step 5. Its next parts are R0's reading at
+the pre-start sampler's start and the sampler itself; G11 (step 6) follows. Step 5 is not
+complete. The order and each step's needs are unchanged, and the fix's consent gives no C3a, C3b
+or C4.
 
 ## 5. Conventions
 
@@ -1859,7 +1930,9 @@ still given separately, with the requirements that §4 gives it.
   blocks, with G4's optional `prod-check static`, ran on the VPS, once each, on 2026-11-22, after
   S6.2 (revision 40; §8). Under C5, §10.3's two save blocks, the readout's twice, and its
   self-test, once, ran on the VPS on 2026-11-22, and R0's blocks once on 2026-11-23 (revision 41;
-  §10, the sampling record).
+  §10, the sampling record). Outside S6, the budget's swap-limit verification block ran on the VPS
+  twice on 2026-11-23, before and after its apply block, which ran once (revision 42; §10, the
+  sampling record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -6783,7 +6856,8 @@ sampler starts (§4.1, step 5), again for G13a, and again for G13b. R-c compares
 **R0 in this S6** (revision 41) [VPS, USER-REPORTED]. R0's blocks were read once, on 2026-11-23,
 without the pre-start sampler's start, and found `memory.swap.max` `max` in the four application
 containers (§10, the sampling record). That reading is not R0's reading at the sampler's start,
-which is still to come.
+which is still to come. After the fix (revision 42), its four `memory.swap.max` lines are
+expected to read 0, as R1 gives.
 
 **R1, after the start (V13).** **VPS, read-only.** A.3's loop, extended to all ten containers, with
 the expected values and a comparison:
@@ -7487,7 +7561,7 @@ met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (
 - **What follows** [inference]:
   - systemd applying the scopes' settings again, which hold no swap limit, would explain the
     reading. It is reproduced on systemd 259 only; that systemd 255 does so on the VPS is not
-    shown;
+    shown (its state at revision 41; revision 42, below, shows its reload behaviour on the VPS);
   - what did it on the VPS, and when, is not established. If a reload or a re-execution did it,
     that came before 2026-11-17 22:55, since the journal shows none after.
 - **The deviation from §5:**
@@ -7500,8 +7574,9 @@ met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (
 - **The pause:**
   - after the finding, the operator paused step 5 before the pre-start sampler;
   - **the proposed fix**, a systemd drop-in for every container scope, is tested locally only, and
-    is neither applied nor verified on the VPS. It is a separate change outside S6, with its own
-    consent
+    is neither applied nor verified on the VPS (its state at revision 41; the operator applied it,
+    and its verification passed, in revision 42, below). It is a separate change outside S6, with
+    its own consent
     ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver)). It
     comes before the pre-start sampler, whose start begins D4's freeze;
   - **after it,** R0 runs again when the pre-start sampler starts (§10.3). Its `memory.swap.max`
@@ -7512,6 +7587,44 @@ met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (
   - R0 has no expected value apart from R-c, so no criterion of this contract decides the
     reading: the pause is the operator's decision;
   - R1's expected values are unchanged.
+
+**Revision 42: the fix, applied and verified** [VPS, USER-REPORTED].
+- **The consent:** on 2026-11-23, after revision 41's merge (PR #150, 06:28:34 UTC), the operator
+  explicitly consented, in these words, translated: "I consent to applying the drop-in according
+  to VPS_RESOURCE_BUDGET.md, Apply." It covers the budget's apply block only, a host change
+  outside S6. It is no consent of §4.
+- **The session:** the one that R0's blocks used, opened to continue step 5 under C5. Its reads
+  are the budget's, outside S6's blocks. No time is recorded.
+- **Before**, as `deploy`, read-only:
+  - the budget's verification block: in each of the four application containers `swap.max=max`
+    and `MemorySwapMax=infinity`;
+  - `DropInPaths=` listed only runc's transient drop-ins in `/run/systemd/transient/`:
+    `50-DeviceAllow.conf`, `50-DevicePolicy.conf`, `50-MemoryMax.conf` and `50-TasksMax.conf`;
+  - one more line, `docker inspect`'s `StartedAt` and `RestartCount`: the four started on
+    2026-11-12, between 21:17:09 and 21:18:31 UTC, `restarts=0`.
+- **The apply block**, as `root`: its one `ok:` line, for
+  `/etc/systemd/system/docker-.scope.d/50-no-swap.conf`: written, 755 and 644 `root:root`, and
+  systemd reloaded.
+- **After**, as `deploy`, the same reads:
+  - in each of the four `swap.max=0` and `MemorySwapMax=0`;
+  - `DropInPaths=` listed runc's four drop-ins, then
+    `/etc/systemd/system/docker-.scope.d/50-no-swap.conf`;
+  - `StartedAt` and `RestartCount` as before.
+- **Against the budget's expectation:** met in each of the four. `DropInPaths=` names the file,
+  after runc's own drop-ins, which the expectation did not name before this revision.
+- **What it shows** [VPS]:
+  - runc gives systemd the scopes' device, memory and PID settings as transient drop-ins, and no
+    swap limit;
+  - the reload changed `max` to 0, the value the drop-in gave systemd. So systemd 255 writes the
+    value it holds at a reload, as systemd 259 did locally;
+  - a reload or re-execution before the fix most likely wrote `max` [inference]. What did it, and
+    when, stays unknown.
+- **Not yet shown:**
+  - a new container's scope with the drop-in, which R1 reads for the six stack containers;
+  - 0 after a later reload, which R0's later readings, G13's and R1 read again.
+- **The decision:** the operator decided to resume step 5 after this revision. R0 runs at the
+  pre-start sampler's start, as §10.3 gives, and its `memory.swap.max` lines are expected to read
+  0, as R1 gives.
 
 ## 11. S6.6 — Recovery and STOP conditions
 
@@ -7754,9 +7867,11 @@ PASS, that meets the condition of S6.3's first sub-item below, "G1 to G5, G7 to 
 recorded, before C5": each was recorded before C5. Its box stays unticked until the close-out. On
 2026-11-22 the operator gave C5, and the readout's self-test printed `ok` three times on the VPS
 (revision 41; §10, the sampling record): two parts of S6.3's second sub-item. Its other two, the
-pre-start sampler running and then G11 PASS, are not met: the operator paused step 5 before the
-sampler, for a fix of the swap limit outside S6. So that sub-item, and S6.3's item, stay open:
-the pre-start sampler, G11, the repeat of G1 to G3 and G13a are still to come. The stack has not
+pre-start sampler running and then G11 PASS, are not met. The operator paused step 5 before the
+sampler, for a fix of the swap limit outside S6. The same day the operator applied that fix, its
+verification passed, and the operator decided to resume step 5 (revision 42). So that sub-item,
+and S6.3's item, stay open: the pre-start sampler, G11, the repeat of G1 to G3 and G13a are
+still to come. The stack has not
 been started: for S6 no image has been pulled and no `docker compose up` has run. P9's PASS, G9's
 PASS, the verdicts and the accepted exceptions stand as recorded; they are steps toward the items
 below, not items of this checklist. Apart from G6's, the first item's, S6.2's and S6.3's first
