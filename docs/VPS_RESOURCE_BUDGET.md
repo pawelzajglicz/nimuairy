@@ -384,7 +384,9 @@ The gap between them is what the reserve has to cover.
 ## Container limits
 
 S4.4 gives every container:
-- a memory limit without swap (`memswap_limit` = `mem_limit`);
+- a memory limit without swap (`memswap_limit` = `mem_limit`). On the VPS the swap limit did not
+  last; a systemd drop-in is the proposed fix, tested locally only, not yet applied on the VPS
+  ([No swap under systemd's cgroup driver](#no-swap-under-systemds-cgroup-driver));
 - a PID limit;
 - for the six stack services, `oom_score_adj: 500`.
 
@@ -592,6 +594,128 @@ The design, its rules and the backend's measurement method are in
   about 120 GiB [inference]. Without the container limit, nothing keeps the backend's heap below the
   VPS's memory.
 
+### No swap under systemd's cgroup driver
+
+**The rule:** `memswap_limit` = `mem_limit`, so no container may swap
+([S4.4 §7](S4.4_DESIGN_CONTRACT.md#7-swap-reservations-and-cpu-h5-h6-h7)). runc turns it into
+`memory.swap.max` 0 when it creates the container.
+
+**On the VPS the 0 did not last** [VPS]:
+- S4.4's checks read 0 in the four app containers on 2026-11-12, after their limits were applied
+  ([S4.4 §10.4](S4.4_DESIGN_CONTRACT.md#104-vps-the-operator-runs-these-read-only)).
+- On 2026-11-23, S6's R0 blocks read `max` in the same four containers, which had been neither
+  restarted nor recreated. Their `memory.max` and `pids.max` still equalled their limits.
+- systemd holds each container scope's memory and PID limits (`MemoryMax`, `TasksMax`), but no
+  swap limit: `MemorySwapMax=infinity`. So the 0 was written outside systemd [inference].
+- Nothing was in swap: `memory.swap.current` 0 in the four and at the visible root, and their
+  `memory.swap.events` 0.
+
+**Reproduced locally** [LOCAL, systemd 259, a scope of the user manager, not Docker's]:
+- When systemd applied the scope's settings again, at `daemon-reload` or `daemon-reexec`, it wrote
+  the value it holds, `max`, over a 0 written directly into the cgroup.
+- Restarting or starting another unit in the same slice did not reset it, apart from one start
+  right after a reload.
+- A drop-in that gives the scope `MemorySwapMax=0` set 0 at the next reload and held it through
+  reloads, re-executions and restarts of other units. A new scope had 0 from the start.
+
+**On the VPS, a hypothesis** [inference]:
+- **The likely cause:** systemd 255, the system manager, did the same to the scopes that runc
+  creates. That fits the VPS's readings, but was not observed there. The local runs differ in
+  systemd's version, the manager and the scopes' creator.
+- **What reset the value, and when, is not known** [VPS]. The journal reaches back only to
+  2026-11-17 and shows no reload or re-execution since. On 2026-11-14 an unattended upgrade of
+  glibc made needrestart restart twelve services, `containerd` among them, and that log shows
+  neither a reload nor a re-execution
+  ([S6, the sampling record](S6_DESIGN_CONTRACT.md#sampling-record-revision-41)).
+
+**What it means:**
+- **Until the fix is verified, a container may swap if the host provides swap**, which is not
+  visible from the guest ([Outstanding verification](#outstanding-verification)). This budget
+  does not count on swap.
+- **A new container's 0** is expected at its creation, as on 2026-11-12. If the hypothesis holds,
+  it lasts only until the next reload or re-execution [inference].
+
+**The proposed fix: a drop-in for every container scope.**
+- **What it does:** for a unit name with dashes, systemd also reads the drop-in directories of
+  the name's prefixes up to each dash (systemd.unit(5)). So `docker-.scope.d` would apply to
+  every `docker-<id>.scope`.
+- **Scope:** every container of the engine. Every container on this VPS has `memswap_limit` =
+  `mem_limit`, so the drop-in changes no intended limit. A container that is meant to swap would
+  need it revisited.
+- **Status, 2026-11-23: proposed, tested locally only** (systemd 259, above). It has been neither
+  applied nor verified on the VPS. The finding stays open until the verification block below
+  passes there.
+- **When:** a host change outside S6, with its own consent. It is made before S6's pre-start
+  sampler or after S6's window, never inside it (the S6 contract's D4).
+- **A rebuilt VPS** needs it again.
+
+Apply. **VPS, as root, changes the host configuration.** Each step is checked. A failed step prints
+`STOP` and runs no later step, so systemd is reloaded only after the file and its modes are right:
+
+```bash
+d=/etc/systemd/system/docker-.scope.d
+f=$d/50-no-swap.conf
+mode() { stat -c '%a %U:%G' "$1" 2>&1; }
+if [ -e "$d" ]; then
+  echo "STOP: $d exists; nothing changed"; ls -la "$d"
+elif ! install -d -m 0755 "$d"; then
+  echo "STOP: cannot create $d; nothing reloaded"
+elif ! printf '[Scope]\nMemorySwapMax=0\n' >"$f"; then
+  echo "STOP: cannot write $f; nothing reloaded"
+elif ! chmod 0644 "$f"; then
+  echo "STOP: cannot set the mode of $f; nothing reloaded"
+elif ! printf '[Scope]\nMemorySwapMax=0\n' | cmp -s - "$f"; then
+  echo "STOP: $f does not hold exactly the two lines; nothing reloaded"
+elif [ "$(mode "$d")" != '755 root:root' ] || [ "$(mode "$f")" != '644 root:root' ]; then
+  echo "STOP: $d is $(mode "$d"), $f is $(mode "$f"); nothing reloaded"
+elif ! systemctl daemon-reload; then
+  echo "STOP: daemon-reload failed"
+else
+  echo "ok: $f written, 755 and 644 root:root, and systemd reloaded"
+fi
+```
+
+- **After a `STOP`:** what the block created stays, for review, and is removed with the roll back
+  below before any second attempt. The first branch changes nothing.
+- **What the reload does:** it restarts no unit, so no container restarts (systemctl(1)). By the
+  local result it applies the scopes' settings again. On 2026-11-23 the app containers' other
+  limits read as systemd holds them, so it is expected to change only `memory.swap.max`
+  [inference].
+
+Verify. **VPS, read-only, as `deploy`:**
+
+```bash
+for c in $(docker ps --format '{{.Names}}'); do
+  pid=$(docker inspect -f '{{.State.Pid}}' "$c")
+  p=$(sed -n 's/^0:://p' "/proc/$pid/cgroup")
+  u=${p##*/}
+  s=$(cat "/sys/fs/cgroup$p/memory.swap.max" 2>&1)
+  printf '%-22s swap.max=%-4s %s\n' "$c" "$s" "$(systemctl show -p MemorySwapMax "$u")"
+  printf '%-22s %s\n' '' "$(systemctl show -p DropInPaths "$u")"
+done
+```
+
+- **Expected for every container:** `swap.max=0`, `MemorySwapMax=0`, and `DropInPaths=` naming
+  `/etc/systemd/system/docker-.scope.d/50-no-swap.conf`.
+- **Anything else:** the drop-in does not apply on the VPS's systemd. Report it, and roll back.
+
+Roll back. **VPS, as root, changes the host configuration:**
+
+```bash
+d=/etc/systemd/system/docker-.scope.d
+if rm -f "$d/50-no-swap.conf" && { [ ! -d "$d" ] || rmdir "$d"; } && systemctl daemon-reload; then
+  echo "ok: the drop-in removed and systemd reloaded"
+else
+  echo "STOP: the roll back did not finish"; ls -la "$d" 2>&1
+fi
+```
+
+- It removes only this file and the directory, and `rmdir` refuses a directory that holds
+  anything else.
+- It is not for the apply block's first `STOP`, which found a directory that the block did not
+  create.
+- By the local result, the reload then writes `max` again, the state of 2026-11-23 [inference].
+
 ## Conclusions
 
 - The VPS was upgraded [USER-REPORTED] and now shows 4.25 GiB of RAM [VPS]. Use this configuration
@@ -680,6 +804,7 @@ They show the CPU count, the memory limit, the heap and the GC that a JVM starti
 | CPU count and quota after the upgrade | Read after the upgrade [VPS]: one CPU, no CFS quota at the visible root | Done |
 | The `memory.stat` fields the VPS kernel provides (the filtered output had no `kernel`) | `cat /sys/fs/cgroup/memory.stat` | Before kernel memory is computed for H, P and O |
 | Swap on the host side, behind the virtual `/proc/swaps` entry | Not visible from the guest | Open; this budget does not count on swap |
+| `memory.swap.max` 0 lasting in every container | The proposed fix's verification block ([No swap under systemd's cgroup driver](#no-swap-under-systemds-cgroup-driver)) | Open (2026-11-23): `max` in the four app containers. The fix is tested locally only, and is neither applied nor verified on the VPS; it is planned before S6's pre-start sampler |
 | The backend JVM's heap and GC on the VPS | The optional JVM check, or the backend's JVM metrics after S7 | Before the app's limits: done, a diagnostic JVM without a limit. After their rollout (S4.4.4): done, a diagnostic JVM in the limited container ([Backend measurement, JVM sizing](#backend-measurement)). Open: after S7 |
 | H | The LXC's and every container's `anon + shmem + kernel + sock`, read at the same moment | Optional follow-up; not required before S4.4 |
 | The backup and apt peaks | The same values sampled over 24 h, across the 03:30 backup and the apt windows | Optional follow-up; until then [UNKNOWN] |

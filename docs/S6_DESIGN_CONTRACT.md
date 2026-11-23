@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-22: draft for review (revision 40). S6.1, the read-only preflight, has started:
+**Status, 2026-11-23: draft for review (revision 41). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -13,9 +13,13 @@ operator accepted that deviation as historical, and the acceptance gives no cons
 36). On 2026-11-22 the operator gave C2, for S6.2 within §7.2 to §7.5 only (revision 38), and
 then carried out §7.1, locally, and S6.2, §7.2 to §7.5, on the VPS, without a `STOP` (revision
 39). G1 to G5, G7, G8, G10 and G12 then ran, read-only, and the operator evaluated each as PASS,
-so §4.1's step 3 is complete (revision 40). C5, C3a, C3b and C4 are not given. The stack's files
-are on the VPS, but the stack has not been started: for S6 no image has been pulled and no
-`docker compose up` has run.**
+so §4.1's step 3 is complete (revision 40). On 2026-11-22 the operator gave C5; the sampler and the
+readout were saved, and the readout's self-test passed on the VPS. On 2026-11-23 a reading of R0's
+blocks found `memory.swap.max` `max` in the four application containers, where R1 expects 0, and
+the operator paused §4.1's step 5 before the pre-start sampler, for a fix of the swap limit in a
+separate change outside S6 (revision 41). C3a, C3b and C4 are not given. The pre-start sampler
+has not started, so D4's freeze has not begun. The stack's files are on the VPS, but the stack
+has not been started: for S6 no image has been pulled and no `docker compose up` has run.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -357,10 +361,11 @@ are on the VPS, but the stack has not been started: for S6 no image has been pul
     command nor §7.3 (§7);
   - **what it is not:** no gate's outcome. G1 to G5, G7, G8, G10 and G12 have not run (their state
     at revision 39; they passed in revision 40, below), and the properties that G4, G5 and G8 read
-    are not concluded from this record. It gives no consent: C5, C3a, C3b and C4 are not given. For
-    S6 no image has been pulled and no `docker compose up` has run. It changes nothing of C1's
-    record, revision 32's decision on step 1, D1 to D7, G6, its outcome, E1 to E15, G9's PASS, or
-    the operator's acceptance of P8's procedural deviation (§4).
+    are not concluded from this record. It gives no consent: C5, C3a, C3b and C4 are not given
+    (C5's state at revision 39; the operator gave C5 in revision 41, below). For S6 no image has
+    been pulled and no `docker compose up` has run. It changes nothing of C1's record, revision
+    32's decision on step 1, D1 to D7, G6, its outcome, E1 to E15, G9's PASS, or the operator's
+    acceptance of P8's procedural deviation (§4).
 - **Step 3's gates: PASS** [VPS, USER-REPORTED] (revision 40). On 2026-11-22, after S6.2, G1 to
   G5, G7, G8, G10 and G12 ran as `deploy`, read-only, in the SSH session that S6.2 used, opened
   under C2, as §4's rule for read-only checks allows. Each block's output was reviewed, and the
@@ -384,11 +389,46 @@ are on the VPS, but the stack has not been started: for S6 no image has been pul
   - **what it means for the order:** with G6 (revision 31) and G9 (revision 36), every gate of
     §4.1's step 3 has passed, so step 3 is complete (§4.1). G1 to G3 run again immediately before
     the pull (§8's rules);
-  - **what it is not:** no consent. C5 is not given, and neither are C3a, C3b or C4. No file was
-    changed for the gates, no image has been pulled and no `docker compose up` has run. It changes
-    no criterion or threshold, and nothing of C1's record, revision 32's decision on step 1, D1 to
-    D7, G6, its outcome, E1 to E15, G9's PASS, S6.2's record, or the operator's acceptances of
-    P8's and the copy's deviations.
+  - **what it is not:** no consent. C5 is not given (its state at revision 40; the operator gave
+    C5 in revision 41, below), and neither are C3a, C3b or C4. No file was changed for the gates,
+    no image has been pulled and no `docker compose up` has run. It changes no criterion or
+    threshold, and nothing of C1's record, revision 32's decision on step 1, D1 to D7, G6, its
+    outcome, E1 to E15, G9's PASS, S6.2's record, or the operator's acceptances of P8's and the
+    copy's deviations.
+- **C5 and step 5, so far** [VPS, USER-REPORTED] (revision 41). On 2026-11-22, after revision 40,
+  the operator explicitly gave C5 (§4.1). §10.3's setup then began as `deploy`, in the SSH session
+  that S6.2 used, opened under C2. On 2026-11-23 it went on in a new SSH session, which the
+  operator opened to continue step 5 under C5. Each block's output was reviewed before the next
+  step (§5). The record is §10's [Sampling record](#sampling-record-revision-41):
+  - **saved:** `~/s6-sampler.sh` and `~/s6-readout.awk`, each with the SHA-256 of the contract's
+    block. The readout's first save, pasted as a heredoc, had another SHA-256: the terminal broke
+    its long lines [inference]. It was saved again from a base64 copy of the block, and its SHA-256
+    then matched;
+  - **the self-test:** `ok` three times, in one run;
+  - **R0's blocks,** read once, on 2026-11-23: R-b's, R-c's and R-d's readings as expected, but
+    `memory.swap.max` `max` in each of the four application containers, where R1 expects 0. S4.4's
+    checks read 0 there on 2026-11-12, and the containers have been neither restarted nor
+    recreated since;
+  - **the diagnosis,** read-only: systemd holds no swap limit for the four scopes
+    (`MemorySwapMax=infinity`), and nothing is in swap. What reset the value, and when, is not
+    known. A local experiment, with the operator's consent, showed systemd 259 writing `max` over a
+    direct 0 at a reload or re-execution, and a drop-in holding 0 [LOCAL]. For the VPS's systemd
+    255 that mechanism is a hypothesis [inference];
+  - **a deviation from §5:** the self-test and R0's blocks ran from base64 copies checked by
+    SHA-256, in a non-interactive `bash -c`, not in §5's interactive shell. On 2026-11-23 the
+    operator explicitly accepted it, for these runs only; the acceptance is no consent;
+  - **the pause:** the operator paused step 5 before the pre-start sampler. The proposed fix, a
+    systemd drop-in for every container scope, is tested locally only, and is neither applied nor
+    verified on the VPS. It is a separate change outside S6, with its own consent, before the
+    pre-start sampler (D4)
+    ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver)).
+    After it, R0 runs again when the pre-start sampler starts, as §10.3 gives;
+  - **what it is not:** no gate's outcome, and no consent beyond C5. G11 has not run, and this
+    reading of R0's blocks is not R0's reading at the sampler's start. C3a, C3b and C4 are not
+    given, no image has been pulled and no `docker compose up` has run. It changes no criterion
+    or threshold, R1's expected values included, and nothing of C1's record, revision 32's
+    decision on step 1, D1 to D7, G6, its outcome, E1 to E15, the gates' outcomes, S6.2's record,
+    or the operator's acceptances of P8's and the copy's deviations.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1428,6 +1468,38 @@ Revisions:
     (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command. This
     revision records the gates' outcomes, which the operator gave; it gives no consent itself,
     and records no further consent as given: not C1, C5, C3a, C3b or C4.
+- **41** (2026-11-23), C5, step 5's setup, a finding at R0's blocks, and a pause [VPS,
+  USER-REPORTED; LOCAL]. No gate criterion, threshold, decision, procedure or command changes, no
+  entry of the exception register changes, and no exception is added:
+  - **C5:** on 2026-11-22, after revision 40, the operator explicitly gave C5, in these words,
+    translated: "I give consent C5." Its requirements in §4 were met, so step 4 is complete;
+  - **step 5, so far:** the sampler and the readout saved with the SHA-256 of the contract's
+    blocks, the readout at its second save; the self-test `ok` three times; R0's blocks read
+    once, on 2026-11-23, in a new SSH session, which the operator opened to continue step 5 under
+    C5. The pre-start sampler has not started;
+  - **the finding:** `memory.swap.max` `max` in the four application containers, where R1 expects
+    0 and S4.4 read 0 on 2026-11-12. Read-only diagnostics and a local experiment, with the
+    operator's consent, point to systemd applying the scopes' settings again, which hold no swap
+    limit, as the likely cause: reproduced on systemd 259 [LOCAL], a hypothesis for the VPS's
+    systemd 255 [inference]. R0 has no expected value apart from R-c, which its readings meet;
+    R1's expected values are unchanged;
+  - **the delivery:** the self-test and R0's blocks ran from base64 copies checked by SHA-256, in
+    a non-interactive `bash -c`: a deviation from §5's interactive shell, which the operator
+    accepted for these runs only;
+  - **the pause:** the operator paused step 5 before the pre-start sampler, for a proposed fix
+    outside S6, a systemd drop-in tested locally only and neither applied nor verified on the VPS,
+    which VPS_RESOURCE_BUDGET.md describes, with notes in S4.4;
+  - **the status, §4.1, §5, §10.3, §10's new sampling record and §17** record it. The passages
+    that gave C5 as not given keep their wording, each with a note of revision 41: the status's
+    bullets of revisions 39 and 40, and §4.1's paragraph of revision 40. §17's introduction is
+    rewritten for the current state. The entries of this history are not annotated;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7;
+    G6's criteria, its outcome and E1 to E15; every gate's criteria, thresholds and outcomes; R1's
+    expected values; the preflight record (§6) and the delivery record (§7); the operator's
+    acceptances of P8's and the copy's deviations; the requirements and the order of every consent
+    (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command of this
+    contract. This revision records C5, which the operator gave; it gives no consent itself, and
+    records no further consent as given: not C1, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1710,11 +1782,22 @@ each is given separately, with the requirements that §4 gives it.
 **Step 3 in this S6** (revision 40) [VPS, USER-REPORTED]. On 2026-11-22 G1 to G5, G7, G8, G10 and
 G12 ran, read-only, and the operator evaluated each as PASS by its criteria (the status; §8). With
 G6's outcome (revision 31) and G9's PASS (revision 36), every gate of step 3 has passed, so step 3
-is complete. Step 4 is next: D3 and D4 are decided (revision 34), and C5 is not given. C5's row in
-§4 names G1 to G10 and G12 passed, G9 included, and D3 and D4 decided; each of these now has its
-record. C5 is still given separately, by the operator, with the requirements that §4 gives it.
-The order and each step's needs are unchanged, and G1 to G3 run again, with G13a, immediately
-before the pull (step 7). The gates' outcomes give no C5, C3a, C3b or C4.
+is complete. Step 4 is next: D3 and D4 are decided (revision 34), and C5 is not given (its state
+at revision 40; the operator gave C5 in revision 41, below). C5's row in §4 names G1 to G10 and
+G12 passed, G9 included, and D3 and D4 decided; each of these now has its record. C5 is still
+given separately, by the operator, with the requirements that §4 gives it. The order and each
+step's needs are unchanged, and G1 to G3 run again, with G13a, immediately before the pull (step
+7). The gates' outcomes give no C5, C3a, C3b or C4.
+
+**C5 and step 5 in this S6** (revision 41) [VPS, USER-REPORTED]. On 2026-11-22 the operator
+explicitly gave C5 (the status), so step 4 is complete. Step 5 has begun: the sampler and the
+readout are saved, the self-test passed, and R0's blocks were read once, on 2026-11-23, without
+the pre-start sampler's start (§10, the sampling record). That reading found `memory.swap.max`
+`max` in the four application containers, where R1 expects 0, and the operator paused step 5
+there, before the pre-start sampler, for a fix outside S6 (the status). Step 5 is not complete:
+R0's reading at the sampler's start and the pre-start sampler are still to come, and G11 (step 6)
+has not run. The order and each step's needs are unchanged. C5 gives no C3a, C3b or C4: each is
+still given separately, with the requirements that §4 gives it.
 
 ## 5. Conventions
 
@@ -1774,7 +1857,9 @@ before the pull (step 7). The gates' outcomes give no C5, C3a, C3b or C4.
   blocks, with the guide's check, extraction and stale-file blocks, on the VPS, once each, on
   2026-11-22, in S6.2 (revision 39; §7, the delivery record). G1 to G5, G7, G8, G10 and G12's
   blocks, with G4's optional `prod-check static`, ran on the VPS, once each, on 2026-11-22, after
-  S6.2 (revision 40; §8).
+  S6.2 (revision 40; §8). Under C5, §10.3's two save blocks, the readout's twice, and its
+  self-test, once, ran on the VPS on 2026-11-22, and R0's blocks once on 2026-11-23 (revision 41;
+  §10, the sampling record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -6695,6 +6780,11 @@ env -u GRAFANA_AUTH -u OBSERVABILITY_COMPOSE_FILES -u SHELLOPTS -u BASH_ENV bash
 loop below with only its four application lines, and its root lines. Run it when the pre-start
 sampler starts (§4.1, step 5), again for G13a, and again for G13b. R-c compares every reading.
 
+**R0 in this S6** (revision 41) [VPS, USER-REPORTED]. R0's blocks were read once, on 2026-11-23,
+without the pre-start sampler's start, and found `memory.swap.max` `max` in the four application
+containers (§10, the sampling record). That reading is not R0's reading at the sampler's start,
+which is still to come.
+
 **R1, after the start (V13).** **VPS, read-only.** A.3's loop, extended to all ten containers, with
 the expected values and a comparison:
 
@@ -7309,6 +7399,120 @@ A revisit is a repository change with its own review. S6 changes no limit.
   two samples**.
 - **Persistence across a recreate on the VPS**, which the first update shows.
 
+### Sampling record (revision 41)
+
+[VPS, USER-REPORTED] On 2026-11-22, after revision 40, the operator explicitly gave C5, in these
+words, translated: "I give consent C5." Its scope is C5's row in §4. Its requirements there were
+met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (revision 34).
+- **The sessions:**
+  - §10.3's setup began as `deploy`, in the SSH session that S6.2 used, opened under C2;
+  - on 2026-11-23 the operator opened a new SSH session, as the operator confirms to continue
+    step 5 under C5, and read R0's blocks there as `deploy`, after `su - deploy`.
+- **Review and time:** each block's output was sent for review before the next step (§5). No time
+  is recorded apart from the VPS's `date -u` in R0's blocks.
+- **Before the saves**, read-only, outside §10.3's blocks:
+  - neither `~/s6-sampler.sh` nor `~/s6-readout.awk` existed;
+  - `logind`'s `KillUserProcesses` read `b false`, so a background process outlives its SSH
+    session [inference from the setting].
+- **The saves**, each pasted as a heredoc:
+  - **`~/s6-sampler.sh`:** SHA-256
+    `7431fef62fce2b57652fb386e92020af8d1d3e69b481c542ed47a6efb0033bba`, the contract's block's;
+  - **`~/s6-readout.awk`, first save:** another SHA-256, and the block's 7126 bytes in 137 lines
+    instead of 129. The terminal had turned eight characters into line breaks while pasting
+    [inference: eight of the block's lines are longer than 126 characters];
+  - **`~/s6-readout.awk`, second save:** from a base64 copy of the block, decoded on the VPS, over
+    the first. Its SHA-256 was then
+    `58c73a5dfccf56522b3f81749bad774bd2a0684d5f4d387e97df7c3124797c07`, the contract's block's.
+- **The self-test** (§10.3), read-only, once:
+  - run from a base64 copy of the block, whose SHA-256 was checked against the block's,
+    `86bb71d8c0d53ac9f467f64517d2597c6bdf5f0f29843eb32b80ad6a25a607d3`, before it ran;
+  - it printed `self-test pass: ok`, `self-test fail: ok` and `self-test set: ok`, as expected,
+    on the VPS's GNU Awk 5.2.1 (P10).
+- **R0's blocks** (§10.3), read-only, once, on 2026-11-23, as `deploy`:
+  - **what ran:** P4's blocks, then R1's loop with its four application lines and its root lines,
+    from one base64 copy. Its SHA-256,
+    `dd6953ccc091c04b6ec2bb51341634b62bc981d8b4a2d182b9faa1a1f8a3a96d`, was checked before it
+    ran. The budget block's last line, which P4 makes optional and which needs `sudo`, did not
+    run;
+  - **the time:** `date -u` read 05:04:03 UTC, and 05:04:07 UTC before R1's loop;
+  - **R-b's readings:** `MemTotal` 4456448 kB, and the root's `memory.max` and `memory.high` `max`;
+  - **R-c's readings:** every `oom` and `oom_kill` 0 in `memory.events` and
+    `memory.events.local`, at the root and in the four containers, and `pids.events` `max 0`
+    everywhere;
+  - **R-d's readings, as far as R0 has them:** the four running, `restarts=0`, `oomkilled=false`,
+    started on 2026-11-12 between 21:17:09 and 21:18:31 UTC;
+  - **others:**
+    - `MemAvailable` 3869376 kB;
+    - the root's `memory.current` 913784832 and `pids.current` 165;
+    - `nr_throttled` 0;
+    - no `memory.peak`, and no `kernel` field in `memory.stat`, as recorded before (§2.3).
+
+    `df`'s device name is not recorded (§5);
+  - **R1's loop:** every line `ok` for the four containers, apart from `memory.swap.max`, which
+    read `max (expected 0)` in each.
+- **The diagnosis**, read-only, outside §10.3's blocks, in the session of 2026-11-23:
+  - **as `deploy`:**
+    - the decoded copy's SHA-256 confirmed as R0's;
+    - in each of the four scopes: `memory.swap.max` and `memory.swap.high` `max`,
+      `memory.swap.current` 0, `memory.swap.events` `high 0 max 0 fail 0`. systemd's `MemoryMax`
+      and `TasksMax` equal the limits, but `MemorySwapMax=infinity`;
+    - at the root: `memory.swap.max` `max`, `memory.swap.current` 0, `memory.swap.events` 0, and
+      `memory.stat`'s `swapcached` 0;
+    - `journalctl` showed `deploy` no system messages, which says nothing;
+    - apt's history listed unattended upgrades on 2026-11-14, 2026-11-18, 2026-11-19 and
+      2026-11-22, after S4.4's reading;
+  - **as `root`:**
+    - the journal's oldest entry of PID 1 is from 2026-11-17 22:55:19, and none since mentions a
+      reload or a re-execution;
+    - apt's entries of those four days upgraded glibc (`libc6`, `libc-bin`, `locales`,
+      2.39-0ubuntu8.9 to 8.12), `needrestart`, `libgstreamer1.0-0` and `python3-jwt`;
+    - unattended-upgrades' dpkg log of 2026-11-14, 06:03:38 to 06:04:03: needrestart restarted
+      twelve services, `containerd.service` and `systemd-journald.service` among them. It
+      deferred `docker.service`, `dbus`, `systemd-logind` and `apt-daily-upgrade`, and reported
+      no container to restart. The log shows neither a reload nor a re-execution.
+- **The local experiment** [LOCAL]:
+  - **the setting:** systemd 259 (Ubuntu 26.04 in WSL), the user manager. The operator consented
+    on 2026-11-23. It changed only local state, and was undone afterwards;
+  - **the subject:** a scope with `MemoryMax` as a property, and a 0 written directly into its
+    `memory.swap.max`, as runc writes it [inference];
+  - **without a drop-in:** `daemon-reload` and `daemon-reexec` each wrote `max` over the 0, and so
+    did one start of another unit right after a reload. Six other starts and restarts of units in
+    the same slice, after a direct 0 and without a reload before them, did not;
+  - **with a drop-in** `[Scope]` `MemorySwapMax=0` in the prefix directory `s6swap-.scope.d`:
+    - a reload set 0 on the running scope, and `MemorySwapMax=0`;
+    - 0 held through a restart of another unit, a re-execution and a reload;
+    - a new scope had 0 from its start;
+  - **what it is not:** the VPS. There, systemd is 255, the manager is the system's, and runc
+    creates the scopes.
+- **What follows** [inference]:
+  - systemd applying the scopes' settings again, which hold no swap limit, would explain the
+    reading. It is reproduced on systemd 259 only; that systemd 255 does so on the VPS is not
+    shown;
+  - what did it on the VPS, and when, is not established. If a reload or a re-execution did it,
+    that came before 2026-11-17 22:55, since the journal shows none after.
+- **The deviation from §5:**
+  - **what differs:** §5 gives an interactive Bash. The self-test and R0's blocks ran in a
+    non-interactive `bash -c`, from base64 copies, so that no long line could break while pasting;
+  - **why the blocks are unchanged:** the SHA-256 checks show that they ran as written. Neither
+    block depends on an interactive shell [inference];
+  - **the acceptance:** on 2026-11-23 the operator explicitly accepted the deviation, for these
+    runs only. The acceptance is no consent and changes no block.
+- **The pause:**
+  - after the finding, the operator paused step 5 before the pre-start sampler;
+  - **the proposed fix**, a systemd drop-in for every container scope, is tested locally only, and
+    is neither applied nor verified on the VPS. It is a separate change outside S6, with its own
+    consent
+    ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver)). It
+    comes before the pre-start sampler, whose start begins D4's freeze;
+  - **after it,** R0 runs again when the pre-start sampler starts (§10.3). Its `memory.swap.max`
+    lines are expected to read 0, as R1 gives.
+- **What it is not:**
+  - this reading of R0's blocks is not R0's reading at the sampler's start, which G11 needs;
+  - no gate has run under C5, and the pre-start sampler has not started;
+  - R0 has no expected value apart from R-c, so no criterion of this contract decides the
+    reading: the pause is the operator's decision;
+  - R1's expected values are unchanged.
+
 ## 11. S6.6 — Recovery and STOP conditions
 
 **Rules:**
@@ -7547,14 +7751,17 @@ and the secret created, with no password in the reviewed outputs, after the oper
 terminal logging and screen sharing. Its box stays unticked until the close-out. G1 to G5, G7,
 G8, G10 and G12 then ran, and the operator evaluated each as PASS (revision 40; §8). With G9's
 PASS, that meets the condition of S6.3's first sub-item below, "G1 to G5, G7 to G10 and G12 PASS,
-recorded, before C5": each is recorded, and C5 is not given. Its box stays unticked until the
-close-out, and S6.3's item stays open: C5, G11, the repeat of G1 to G3 and G13a are still to
-come. The stack has not been started: for S6 no image has been pulled and no
-`docker compose up` has run. P9's PASS, G9's PASS, the verdicts and the accepted exceptions stand
-as recorded; they are steps toward the items below, not items of this checklist. Apart from G6's,
-the first item's, S6.2's and S6.3's first sub-item's, no item below is met yet, so every other
-one is still open. No box below is ticked before the close-out, which updates the acceptance
-checklist (§12).
+recorded, before C5": each was recorded before C5. Its box stays unticked until the close-out. On
+2026-11-22 the operator gave C5, and the readout's self-test printed `ok` three times on the VPS
+(revision 41; §10, the sampling record): two parts of S6.3's second sub-item. Its other two, the
+pre-start sampler running and then G11 PASS, are not met: the operator paused step 5 before the
+sampler, for a fix of the swap limit outside S6. So that sub-item, and S6.3's item, stay open:
+the pre-start sampler, G11, the repeat of G1 to G3 and G13a are still to come. The stack has not
+been started: for S6 no image has been pulled and no `docker compose up` has run. P9's PASS, G9's
+PASS, the verdicts and the accepted exceptions stand as recorded; they are steps toward the items
+below, not items of this checklist. Apart from G6's, the first item's, S6.2's and S6.3's first
+sub-item's, no item below is met yet, so every other one is still open. No box below is ticked
+before the close-out, which updates the acceptance checklist (§12).
 
 - [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
