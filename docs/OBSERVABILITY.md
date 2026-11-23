@@ -750,7 +750,11 @@ To find out why logs are missing:
 `observability/compose.prod.yaml` is the stack's production overlay. It gives each of the six
 services:
 
-- a memory limit (`mem_limit`), with `memswap_limit` equal to it, so the service uses no swap;
+- a memory limit (`mem_limit`), with `memswap_limit` equal to it, so the configuration allows no
+  swap. On the VPS the resulting `memory.swap.max` 0 did not last in the app's containers
+  (2026-11-23). A proposed systemd drop-in is to keep it. It is neither applied nor verified on the
+  VPS yet, so the state there needs checking again after it
+  ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver));
 - a PID limit (`pids_limit`);
 - `oom_score_adj: 500`.
 
