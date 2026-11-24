@@ -1,6 +1,6 @@
 # S6 Design Contract — First production deployment of the observability stack
 
-**Status, 2026-11-23: draft for review (revision 42). S6.1, the read-only preflight, has started:
+**Status, 2026-11-23: draft for review (revision 43). S6.1, the read-only preflight, has started:
 P1 to P10 have run on the VPS. G6 is recorded as PASS WITH RECORDED EXCEPTIONS (revision 31). By
 the operator's explicit decision on C1's historical nonconformity, §4.1's step 1 is treated as
 resolved for sequencing, and the order may go on to step 2; no C1 is granted (revision 32). The
@@ -19,10 +19,11 @@ blocks found `memory.swap.max` `max` in the four application containers, where R
 the operator paused §4.1's step 5 before the pre-start sampler, for a fix of the swap limit in a
 separate change outside S6 (revision 41). The same day the operator applied that fix, a systemd
 drop-in, with its own consent; its verification passed, the four read 0 again without a restart,
-and the operator decided to resume step 5 (revision 42). C3a, C3b and C4 are not given. The
-pre-start sampler has not started, so D4's freeze has not begun. The stack's files are on the
-VPS, but the stack has not been started: for S6 no image has been pulled and no
-`docker compose up` has run.**
+and the operator decided to resume step 5 (revision 42). R0 was then read, and the pre-start
+sampler started at 07:12:43 UTC, which began D4's freeze. G11 passed, and so did G1 to G3 again,
+but G13a's first attempt was INCONCLUSIVE, on R-f, so no image was pulled; the sampler runs on for
+diagnosis (revision 43). C3a, C3b and C4 are not given. The stack's files are on the VPS, but the
+stack has not been started: for S6 no image has been pulled and no `docker compose up` has run.**
 - S6 is the first start of the six-service stack on the VPS. S7, which connects the application to
   the stack, is a separate stage with its own design and approval.
 - **This contract authorizes no VPS operation.** Every operation it describes needs the operator's
@@ -428,8 +429,9 @@ VPS, but the stack has not been started: for S6 no image has been pulled and no
     before the pre-start sampler (D4)
     ([VPS_RESOURCE_BUDGET.md](VPS_RESOURCE_BUDGET.md#no-swap-under-systemds-cgroup-driver)).
     After it, R0 runs again when the pre-start sampler starts, as §10.3 gives;
-  - **what it is not:** no gate's outcome, and no consent beyond C5. G11 has not run, and this
-    reading of R0's blocks is not R0's reading at the sampler's start. C3a, C3b and C4 are not
+  - **what it is not:** no gate's outcome, and no consent beyond C5. G11 has not run (its state at
+    revision 41; it passed in revision 43, below), and this reading of R0's blocks is not R0's
+    reading at the sampler's start. C3a, C3b and C4 are not
     given, no image has been pulled and no `docker compose up` has run. It changes no criterion
     or threshold, R1's expected values included, and nothing of C1's record, revision 32's
     decision on step 1, D1 to D7, G6, its outcome, E1 to E15, the gates' outcomes, S6.2's record,
@@ -459,9 +461,43 @@ VPS, but the stack has not been started: for S6 no image has been pulled and no
   - **the decision:** on 2026-11-23 the operator decided to resume step 5 after this revision: R0
     at the pre-start sampler's start, the sampler, then G11 (§4.1);
   - **what it is not:** no gate's outcome and no consent of §4. The pre-start sampler has not
-    started, so D4's freeze has not begun. C3a, C3b and C4 are not given. It changes no criterion
-    or threshold, R1's expected values included, and nothing of revision 41's record apart from
-    the notes on its passages.
+    started, so D4's freeze has not begun (their state at revision 42; the sampler started, and
+    the freeze began, in revision 43, below). C3a, C3b and C4 are not given. It changes no
+    criterion or threshold, R1's expected values included, and nothing of revision 41's record
+    apart from the notes on its passages.
+- **R0, the pre-start sampler, G11, and G13a's first attempt** [VPS, USER-REPORTED] (revision 43).
+  On 2026-11-23, after revision 42's merge, in the SSH session opened to continue step 5 under C5,
+  as `deploy`. The record is §10's [Sampling record](#sampling-record-revision-41):
+  - **R0 at the sampler's start,** 07:10:33 UTC: every line of R1's loop `ok`, `memory.swap.max`
+    0 included, and every event counter 0;
+  - **the pre-start sampler:** started right after, PID 817823, its log
+    `~/s6-sample-20261123T071243Z.log` from 07:12:43 UTC. D4's freeze began then;
+  - **G11:** no release run in progress, as read with `gh run list`, and none planned, as the
+    operator states; the time outside 03:00 to 04:00; R0 recorded; the self-test `ok` three
+    times; the readout wrapper's `PASS`. The operator evaluated G11 as PASS;
+  - **two more samplers, by mistake:** the start block ran twice more, at 07:20:49 and 07:49:34
+    UTC, the second in place of R0's blocks. The operator stopped both duplicates, PIDs 820235 and
+    828776, by `kill`, with the decision in these words, translated: "I stop the duplicates
+    820235 and 828776". Their logs stay as they are, and only 817823 runs;
+  - **the repeat of G1 to G3, at 07:49 UTC:** six `ok` lines. The operator evaluated each as PASS;
+  - **G13a's first attempt, at 07:49 UTC,** on 37 min of samples:
+    - met: R-a, R-d (P3's two commands), R-e and R-g;
+    - not read: R-b and R-c, since R0's blocks did not run then;
+    - **not met: R-f**, with a `full` stall of 136048 µs, where R-f requires 0.
+
+    The operator evaluated G13a as INCONCLUSIVE, on R-f's first miss, so no pull (§8, G13);
+  - **R0 again, at 08:52:00 UTC:** as expected, every line `ok`. It is recorded separately, not as
+    G13a's reading;
+  - **the stall's timeline,** read-only, from the sampler's log:
+    - episodes of up to about 105 ms, and increments of 0.1 to 0.7 ms about every 5 min;
+    - no 30 min without an increase between 07:12:43 and 08:52:09 UTC;
+  - **the operator's decisions:**
+    - no immediate repeat of G13a; first the sampler's timeline is read for at least 30 min
+      without an increase;
+    - the sampler 817823 runs on for several hours, overnight too, for diagnosis only, under C5;
+  - **what it is not:** no consent of §4 beyond C5, and no change of R-f's threshold (D3). C3a,
+    C3b and C4 are not given, no image has been pulled and no `docker compose up` has run. D4's
+    freeze goes on.
 
 **Base:** `master` at `4877a75b4c9985752d16bdd9150658498fac5686`
 
@@ -1562,6 +1598,42 @@ Revisions:
     consent (§4, §4.1), and §4's rule for read-only checks; every VPS procedure and command of
     this contract. This revision gives no consent itself, and records no consent of §4 as given
     beyond C5: not C1, C3a, C3b or C4.
+- **43** (2026-11-23), R0, the pre-start sampler, G11 PASS, G1 to G3 PASS again, and G13a's first
+  attempt INCONCLUSIVE [VPS, USER-REPORTED; CI]. No gate criterion, threshold, decision,
+  procedure or command changes, no entry of the exception register changes, and no exception is
+  added:
+  - **the runs,** under C5, as `deploy`, in the SSH session opened to continue step 5 under C5.
+    The contract's blocks ran from base64 copies checked by SHA-256, with `eval` in the
+    interactive shell that §5 gives;
+  - **R0 and the sampler:** R0's blocks at 07:10:33 UTC, every line `ok`, `memory.swap.max` 0
+    included; the pre-start sampler started right after, PID 817823, log from 07:12:43 UTC. D4's
+    freeze began then;
+  - **G11:** PASS, the operator's evaluation, on the local `gh run list`, the operator's statement
+    that no release is planned, the VPS's `date`, R0, the self-test, and the readout wrapper's
+    `PASS`;
+  - **duplicates:** the start block ran twice more by mistake, at 07:20:49 and 07:49:34 UTC. By
+    the operator's decision both were stopped, and their logs stay as they are;
+  - **G1 to G3, repeated:** PASS, the operator's evaluation;
+  - **G13a's first attempt:** INCONCLUSIVE, the operator's evaluation, on R-f's first miss: a
+    `full` stall of 136048 µs over 37 min, where R-f requires 0. R-a, R-d, R-e and R-g were met.
+    R-b and R-c were not read then, since R0's blocks did not run; R0 at 08:52:00 UTC is recorded
+    separately. No pull;
+  - **the stall's timeline,** read-only outside the contract's blocks: increments throughout,
+    with no 30 min without one between 07:12:43 and 08:52:09 UTC;
+  - **the operator's decisions:** no immediate repeat of G13a; the timeline is read first; the
+    sampler runs on, overnight too, for diagnosis only, under C5;
+  - **the status, §4.1, §5, §8 (G1 to G3, G11, G13), §10.3, §10's sampling record and §17**
+    record it. The passages that gave the sampler as not started, G11 as not run, or R0's reading
+    at the sampler's start as still to come, keep their wording, each with a note of revision 43:
+    the status's bullets of revisions 41 and 42, §4.1's paragraphs of revisions 41 and 42, §10.3's
+    "R0 in this S6", and the sampling record's "What it is not". §17's introduction is rewritten
+    for the current state. The entries of this history are not annotated;
+  - **unchanged:** C1's historical nonconformity and revision 32's decision on step 1; D1 to D7,
+    R-f's threshold included; G6's criteria, its outcome and E1 to E15; every gate's criteria and
+    thresholds; R1's expected values; the earlier records; the operator's acceptances of
+    deviations; the requirements and the order of every consent (§4, §4.1), and §4's rule for
+    read-only checks; every VPS procedure and command of this contract. This revision gives no
+    consent itself, and records no consent of §4 as given beyond C5: not C1, C3a, C3b or C4.
 
 ## 1. Purpose and scope
 
@@ -1858,17 +1930,27 @@ the pre-start sampler's start (§10, the sampling record). That reading found `m
 `max` in the four application containers, where R1 expects 0, and the operator paused step 5
 there, before the pre-start sampler, for a fix outside S6 (the status; the fix was applied and
 verified in revision 42, below). Step 5 is not complete: R0's reading at the sampler's start and
-the pre-start sampler are still to come, and G11 (step 6) has not run. The order and each step's
-needs are unchanged. C5 gives no C3a, C3b or C4: each is still given separately, with the
-requirements that §4 gives it.
+the pre-start sampler are still to come, and G11 (step 6) has not run (their state at revision
+41; revision 43, below). The order and each step's needs are unchanged. C5 gives no C3a, C3b or
+C4: each is still given separately, with the requirements that §4 gives it.
 
 **The swap limit's fix and step 5 in this S6** (revision 42) [VPS, USER-REPORTED]. On 2026-11-23
 the operator applied the fix outside S6, with its own consent, and its verification passed: the
 four application containers read `memory.swap.max` 0 again, without a restart (the status; §10,
 the sampling record). The operator decided to resume step 5. Its next parts are R0's reading at
 the pre-start sampler's start and the sampler itself; G11 (step 6) follows. Step 5 is not
-complete. The order and each step's needs are unchanged, and the fix's consent gives no C3a, C3b
-or C4.
+complete (its state at revision 42; revision 43, below). The order and each step's needs are
+unchanged, and the fix's consent gives no C3a, C3b or C4.
+
+**Steps 5 and 6, and step 7's first attempt, in this S6** (revision 43) [VPS, USER-REPORTED]. On
+2026-11-23 R0's blocks ran at 07:10:33 UTC and the pre-start sampler started at 07:12:43 UTC, so
+step 5 is complete. G11 passed, so step 6 is complete (§8, G11). After at least 30 min of
+sampling, G1 to G3 passed again and G13a's first attempt was INCONCLUSIVE, on R-f (§8, G13), so
+step 7 has not passed. The order stops there, and C3a is not reached; INCONCLUSIVE blocks it like
+a STOP (G13). G13 gives the next allowed action: measure again at another time, and a second miss
+of R-f is a STOP. The operator decided to read the sampler's timeline first, with the sampler
+running on for diagnosis under C5 (the status; §10, the sampling record). G1 to G3 run again
+with the next attempt, immediately before a pull. The order and each step's needs are unchanged.
 
 ## 5. Conventions
 
@@ -1932,7 +2014,11 @@ or C4.
   self-test, once, ran on the VPS on 2026-11-22, and R0's blocks once on 2026-11-23 (revision 41;
   §10, the sampling record). Outside S6, the budget's swap-limit verification block ran on the VPS
   twice on 2026-11-23, before and after its apply block, which ran once (revision 42; §10, the
-  sampling record).
+  sampling record). Then, under C5, on 2026-11-23: R0's blocks twice, at 07:10 and 08:52 UTC;
+  the sampler's start block three times, twice by mistake; the readout wrapper, and the readout
+  for G11 and for G13a; G1 to G3's and P3's blocks once. Outside the contract's blocks: `pgrep`
+  and `jobs`, read-only; the two duplicates' stop by `kill`; and the stall's timeline, read-only
+  (revision 43; §10, the sampling record).
   Each block passes `bash -n` once its placeholders are filled in. The sampler, the
   readout and a few helpers also ran against simulated input, locally (§10.3); P7a and P9
   against the real `getent`, and P7a to P7c and P10 against fixture files, a fixture dpkg
@@ -5113,6 +5199,10 @@ G1 to G3 run again immediately before the pull (the rules above).
   defined in that shell, printed `ok:   volumes named nimuairy-observability*: none` and
   `ok:   volumes of the project nimuairy-observability: none`. No volume was listed, so none was
   inspected. G1 runs again before the pull (§8's rules).
+- **G1 repeated, 2026-11-23** [VPS, USER-REPORTED], recorded in revision 43: **`G1: PASS`**, the
+  operator's evaluation. The same two lines printed the same `ok` lines, at 07:49 UTC, with
+  G13a's first attempt (§10, the sampling record). That attempt was INCONCLUSIVE, so G1 runs again
+  with the next one, immediately before a pull.
 
 ### G2. Networks and container names
 
@@ -5128,6 +5218,9 @@ G1 to G3 run again immediately before the pull (the rules above).
   third to fifth `none_of` lines printed `ok` for networks named `nimuairy-observability*`, for
   containers with the stack's names, and for containers of the project `nimuairy-observability`.
   G2 runs again before the pull.
+- **G2 repeated, 2026-11-23** [VPS, USER-REPORTED], recorded in revision 43: **`G2: PASS`**. The
+  same three lines printed `ok`, at 07:49 UTC, with G13a's first attempt. G2 runs again with the
+  next one.
 
 ### G3. Host ports
 
@@ -5144,6 +5237,9 @@ G1 to G3 run again immediately before the pull (the rules above).
   `ok:   TCP listeners on 3000, 9090, 3100, 3200, 4317, 4318 or 12345: none`. P6's first line, the
   full `ss -Hltn` listing, did not run: G3's command is the `none_of` line. G3 runs again before
   the pull.
+- **G3 repeated, 2026-11-23** [VPS, USER-REPORTED], recorded in revision 43: **`G3: PASS`**. The
+  same line printed `ok`, at 07:49 UTC, with G13a's first attempt. G3 runs again with the next
+  one.
 
 ### G4. The production render
 
@@ -6322,6 +6418,21 @@ d=$(docker info -f '{{.DockerRootDir}}') && df -hT "$d" && echo "available MiB: 
   - **a failed self-test:** the VPS's awk does not run the readout as tested. No readout result
     counts, and the readout's compatibility is a repository question (§11);
   - **a sampler that does not pass:** find the cause (§11), start a new sampler, and run G11 again.
+- **G11's outcome, 2026-11-23** [VPS, USER-REPORTED; CI], recorded in revision 43: **`G11: PASS`**,
+  the operator's evaluation by the criteria above:
+  - **no release:** `gh run list --workflow release.yml --limit 5`, read by the agent at 07:14:04
+    UTC, lists the last run on 2026-10-19 and none in progress [CI]. The operator states that no
+    release is planned until the window ends;
+  - **the time:** the VPS's `date` read 07:15:50 UTC;
+  - **R0:** read at 07:10:33 UTC, right before the sampler's start;
+  - **the self-test:** `ok` three times, on 2026-11-22;
+  - **the sampler:** PID 817823, log `~/s6-sample-20261123T071243Z.log`. The wrapper, with 60 s,
+    printed `COVERAGE PASS` for 22 samples of the root and the four application containers, from
+    07:12:43 to 07:16:13 UTC, largest gap 10 s, and
+    `PASS: COVERAGE PASS on a snapshot of 36960 bytes, and the sampler 817823 still runs`.
+
+  Two more samplers, started by mistake after G11, were stopped by the operator's decision (§10,
+  the sampling record). 817823 is still the pre-start sampler, so G11 is not run again.
 
 ### G12. Docker engine and cgroup preconditions
 
@@ -6460,6 +6571,25 @@ proposed (revision 34): criteria, not facts about the VPS.
   or accept a new G13b over 30 min without a pull.
 - **STOP, in either:** no pull or no first start. The finding goes to a review of the budget (D3) or
   of the application's state, in a separate step.
+
+**G13a's first attempt, 2026-11-23** [VPS, USER-REPORTED], recorded in revision 43:
+**`G13a: INCONCLUSIVE`**, the operator's evaluation, on R-f's first miss. The readout,
+`s6_readout ~/s6-sample-20261123T071243Z.log 817823 1800 "$pre"`, ran at 07:49 UTC over 223
+samples from 07:12:43 to 07:49:49 UTC (§10, the sampling record):
+- **R-a:** met:
+  `PASS: COVERAGE PASS on a snapshot of 372884 bytes, and the sampler 817823 still runs`;
+- **R-b and R-c:** not read with this attempt. R0's blocks did not run then; the start block ran
+  in their place. R0 at 08:52:00 UTC read both as expected, recorded separately;
+- **R-d:** met. P3's two commands: the four running, postgres and backend `healthy`,
+  `restarts=0` as at P3, `oomkilled=false`;
+- **R-e:** met. Highest working sets 361.4, 60.8, 4.3 and 20.1 MiB, and highest `pids.current`
+  44, 24, 2 and 7, for the backend, postgres, the frontend and cloudflared;
+- **R-f: not met.** The root stalled `full` for 136048 µs over the samples, where R-f requires 0;
+  `some` for 144499 µs, 0.006 %, within its 0.1 %;
+- **R-g:** met. Highest `anon + shmem + kernel + sock` 611.9 MiB, lowest `MemAvailable`
+  3757.7 MiB.
+
+No pull follows, and C3a is not reached. A second G13a that misses R-f again is a STOP.
 
 ## 9. S6.4 — First startup
 
@@ -6856,8 +6986,14 @@ sampler starts (§4.1, step 5), again for G13a, and again for G13b. R-c compares
 **R0 in this S6** (revision 41) [VPS, USER-REPORTED]. R0's blocks were read once, on 2026-11-23,
 without the pre-start sampler's start, and found `memory.swap.max` `max` in the four application
 containers (§10, the sampling record). That reading is not R0's reading at the sampler's start,
-which is still to come. After the fix (revision 42), its four `memory.swap.max` lines are
-expected to read 0, as R1 gives.
+which is still to come (its state at revision 41; it was read in revision 43, below). After the
+fix (revision 42), its four `memory.swap.max` lines are expected to read 0, as R1 gives.
+
+**R0 at the sampler's start, and again** (revision 43) [VPS, USER-REPORTED]. R0's blocks ran at
+07:10:33 UTC on 2026-11-23, right before the pre-start sampler's start at 07:12:43 UTC. Every
+line of R1's loop read `ok`, `memory.swap.max` 0 included, and every event counter 0. They did
+not run with G13a's first attempt at 07:49 UTC. They ran again, separately, at 08:52:00 UTC, with
+the same result (§10, the sampling record).
 
 **R1, after the start (V13).** **VPS, read-only.** A.3's loop, extended to all ten containers, with
 the expected values and a comparison:
@@ -7583,7 +7719,8 @@ met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (
     lines are expected to read 0, as R1 gives.
 - **What it is not:**
   - this reading of R0's blocks is not R0's reading at the sampler's start, which G11 needs;
-  - no gate has run under C5, and the pre-start sampler has not started;
+  - no gate has run under C5, and the pre-start sampler has not started (their state at revision
+    41; revision 43, below);
   - R0 has no expected value apart from R-c, so no criterion of this contract decides the
     reading: the pause is the operator's decision;
   - R1's expected values are unchanged.
@@ -7625,6 +7762,82 @@ met: G1 to G10 and G12 passed (revisions 31, 36 and 40), and D3 and D4 decided (
 - **The decision:** the operator decided to resume step 5 after this revision. R0 runs at the
   pre-start sampler's start, as §10.3 gives, and its `memory.swap.max` lines are expected to read
   0, as R1 gives.
+
+**Revision 43: R0, the pre-start sampler, G11 and G13a's first attempt** [VPS, USER-REPORTED].
+- **The session:** the one opened on 2026-11-23 to continue step 5 under C5, as `deploy`.
+- **The delivery:**
+  - each of the contract's blocks below ran from a base64 copy;
+  - each copy's SHA-256 was checked against the block's before it ran;
+  - each ran with `eval` in the interactive shell, as §5 gives, not with `bash -c`;
+  - the SHA-256s: R0's blocks `dd6953cc…`, the sampler's start `e8639a09…`, the readout wrapper
+    `73690952…`, G1 to G3's blocks `f55c1fa1…`, P3's block `def9014d…`.
+- **R0 at the sampler's start**, 07:10:33 UTC, and 07:10:37 UTC before R1's loop:
+  - `MemTotal` 4456448 kB; the root's `memory.max` and `memory.high` `max`;
+  - every `oom` and `oom_kill` 0 at the root and in the four containers; `pids.events` `max 0`;
+  - the four started on 2026-11-12, `restarts=0`, `oomkilled=false`;
+  - every line of R1's loop `ok`, `memory.swap.max` 0 in each;
+  - `MemAvailable` 3866808 kB; the root's `memory.current` 1068244992;
+  - the decoded copy's SHA-256 read afterwards from the shell, `R0 got=dd6953cc…`: R0's.
+- **The pre-start sampler:**
+  - started right after R0, as PID 817823, writing `~/s6-sample-20261123T071243Z.log`;
+  - its first sample is from 07:12:43 UTC. D4's freeze began then;
+  - `~/s6-sampler-pre.out` read `nohup: ignoring input`, then the sampler's own line naming the
+    log. §10.3 says that the first line names it; here, `nohup`'s notice came first.
+- **G11:** PASS, the operator's evaluation (§8, G11).
+- **Two more samplers, started by mistake:**
+  - the start block ran twice more in that shell: at 07:20:49 UTC, by its log's name, how is not
+    shown, and at 07:49:34 UTC, in place of R0's blocks in G13a's package;
+  - PIDs 820235 and 828776. Each overwrote `~/s6-sampler-pre.out`;
+  - `pgrep -af s6-sampler.sh` and `jobs -l` listed the three samplers;
+  - the operator stopped 828776 with `kill`, after `running` had confirmed it. Then the operator
+    gave the decision for both, in these words, translated: "I stop the duplicates 820235 and
+    828776", and stopped 820235 the same way;
+  - their logs end with `# s6-sampler stopped at` 08:25:00 and 08:46:32 UTC. They stay as they
+    are. Afterwards `pgrep` listed 817823 only.
+- **The repeat of G1 to G3 and G13a's first attempt,** from 07:49:02 UTC by `date`:
+  - **G1 to G3:** six `ok` lines. The operator evaluated each as PASS (§8, G1 to G3);
+  - **P3's two commands:** the four `Up 10 days`, postgres and backend `healthy`, `restarts=0`,
+    `oomkilled=false`, and `mem` and `pids` as their limits;
+  - **R0's blocks did not run then;** the start block ran in their place, as above;
+  - **the readout**, with 1800 s:
+    - **the root:** 223 samples from 07:12:43 to 07:49:49 UTC, largest gap 11 s. Highest working
+      set 839.8 MiB, highest `anon + shmem + kernel + sock` 611.9 MiB, highest `pids.current`
+      178, refaults +1052, major faults +124. Lowest `MemAvailable` 3757.7 MiB. Memory pressure
+      `avg10` up to 0.13 for `some` and for `full`; stalled over the samples `some` 144499 µs
+      (0.006 %) and `full` 136048 µs;
+    - **the four containers:** highest working sets 60.8, 361.4, 4.3 and 20.1 MiB, and highest
+      `pids.current` 24, 44, 2 and 7, for postgres, the backend, the frontend and cloudflared;
+    - **coverage:** `COVERAGE PASS`, then
+      `PASS: COVERAGE PASS on a snapshot of 372884 bytes, and the sampler 817823 still runs`;
+  - **G13a:** INCONCLUSIVE, the operator's evaluation, on R-f's first miss (§8, G13).
+- **R0 again**, at 08:52:00 UTC, separately and not as G13a's reading:
+  - `MemTotal` and the root's limits as before; every event counter 0;
+  - every line of R1's loop `ok`, `memory.swap.max` 0 in each;
+  - `MemAvailable` 3864180 kB.
+- **When the stall grew**, read-only, outside the contract's blocks. `awk` listed each sample at
+  which the root's `memory_full_total` rose, in each of the three logs:
+  - **episodes:** 07:27:35 UTC, +13 ms; 07:32:56 to 07:33:46, about 105 ms in all; 08:00:10 to
+    08:00:30, about 24 ms; 08:40:37, +6 ms;
+  - **small increments:** of 0.1 to 0.7 ms, about every 5 min; the rhythm is an inference;
+  - **across the logs:** the same increments, at the same times within the logs' offsets;
+  - **no quiet 30 min:** between 07:12:43 and 08:52:09 UTC, no 30 min passed without an increase.
+    The longest stretch without one was about 13 min 43 s, from 08:25:54 to 08:39:37;
+  - **earlier:** the preflight record shows the root's `full` total unchanged from 21:35:11 to
+    23:19:40 UTC on 2026-11-19 (§6);
+  - **the cause** is not shown. The stack does not run. Whether the stall comes from the host's
+    reclaim or from a job in the LXC is not shown either.
+- **The operator's decisions** (2026-11-23):
+  - no immediate repeat of G13a. The sampler's timeline is read first, for at least 30 min
+    without an increase;
+  - the sampler 817823 runs on, in the operator's words, translated: "Sampler PID 817823 may run
+    on for several hours, overnight too, for diagnostic purposes only, under the existing consent
+    C5".
+- **What it is not:**
+  - no pull, and no C3a, C3b or C4;
+  - D4's freeze goes on;
+  - R-f's threshold (D3) is unchanged;
+  - how the next attempt measures is not decided here. A readout of this log would always include
+    the stall above [inference].
 
 ## 11. S6.6 — Recovery and STOP conditions
 
@@ -7866,17 +8079,17 @@ G8, G10 and G12 then ran, and the operator evaluated each as PASS (revision 40; 
 PASS, that meets the condition of S6.3's first sub-item below, "G1 to G5, G7 to G10 and G12 PASS,
 recorded, before C5": each was recorded before C5. Its box stays unticked until the close-out. On
 2026-11-22 the operator gave C5, and the readout's self-test printed `ok` three times on the VPS
-(revision 41; §10, the sampling record): two parts of S6.3's second sub-item. Its other two, the
-pre-start sampler running and then G11 PASS, are not met. The operator paused step 5 before the
-sampler, for a fix of the swap limit outside S6. The same day the operator applied that fix, its
-verification passed, and the operator decided to resume step 5 (revision 42). So that sub-item,
-and S6.3's item, stay open: the pre-start sampler, G11, the repeat of G1 to G3 and G13a are
-still to come. The stack has not
-been started: for S6 no image has been pulled and no `docker compose up` has run. P9's PASS, G9's
-PASS, the verdicts and the accepted exceptions stand as recorded; they are steps toward the items
-below, not items of this checklist. Apart from G6's, the first item's, S6.2's and S6.3's first
-sub-item's, no item below is met yet, so every other one is still open. No box below is ticked
-before the close-out, which updates the acceptance checklist (§12).
+(revision 41; §10, the sampling record). After a fix of the swap limit outside S6 (revision 42),
+the pre-start sampler started on 2026-11-23, and the operator evaluated G11 as PASS (revision 43;
+§8, G11). That meets the condition of S6.3's second sub-item below, "C5; the readout's self-test
+`ok` three times on the VPS; the pre-start sampler running; then G11 PASS". Its box stays
+unticked until the close-out. S6.3's third sub-item is not met: G1 to G3 passed again, but G13a's
+first attempt was INCONCLUSIVE, on R-f (revision 43; §8, G13). So S6.3's item stays open. The
+stack has not been started: for S6 no image has been pulled and no `docker compose up` has run.
+P9's PASS, G9's PASS, the verdicts and the accepted exceptions stand as recorded; they are steps
+toward the items below, not items of this checklist. Apart from G6's, the first item's, S6.2's,
+and S6.3's first and second sub-items', no item below is met yet, so every other one is still
+open. No box below is ticked before the close-out, which updates the acceptance checklist (§12).
 
 - [ ] D1 to D7 decided (§13.3).
 - [ ] S6.1: the preflight record complete, without an open STOP outside G6's exception register.
